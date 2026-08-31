@@ -1,0 +1,97 @@
+\section{Method}
+\label{sec:method}
+
+All three changes are implemented as switchable seams in \texttt{online\_method/cal\_tda.py},
+whose \texttt{CalTDA} class subclasses upstream TDA's runner class. With every flag off, \texttt{CalTDA} reduces
+exactly to upstream TDA -- same caches, same per-dataset $\alpha/\beta$ hyperparameters, same
+additive combination -- which is the equivalence this project treats as a correctness
+invariant (verified at the unit-test level in \texttt{tests/test\_cal\_tda\_runner.py} and, at the
+level of a full run, by the \texttt{none} row of the ablation in Table~\ref{tab:ablation}).
+
+\subsection{Contribution 1: margin-based cache admission}
+
+Upstream TDA offers every test sample to its positive cache; entropy is used only as an
+eviction key for samples already in the cache, not as an admission gate. This project replaces
+unconditional admission with a decisive-prediction gate. Given the logit vector $z$ for a
+sample, let $z_{(1)}$ and $z_{(2)}$ be its two largest entries. The \emph{margin} is
+\begin{equation}
+    m = z_{(1)} - z_{(2)},
+\end{equation}
+and a sample is admitted to the positive cache only when $m$ exceeds a fixed global threshold
+(\texttt{margin\_threshold} $= 1.0$). Rationale: entropy conflates ``the model is decisive''
+with ``the model is decisive about a class it has seen a lot of evidence for''; the top-1/top-2
+gap is a more direct decisiveness signal and does not require normalizing by the number of
+classes.
+
+\subsection{Contribution 2: probabilistic fusion}
+
+Upstream TDA finalizes a prediction as $z_{\text{clip}} + \alpha \, z_{\text{cache}}$, a sum of
+raw logits, and only then applies a softmax. This project instead fuses in probability space:
+given the CLIP logits $z_{\text{clip}}$ and the cache logits $z_{\text{cache}}$, and a fusion
+weight $w \in [0, 1]$,
+\begin{equation}
+    p = (1 - w)\, \sigma(z_{\text{clip}}) + w\, \sigma(z_{\text{cache}}), \label{eq:fusion}
+\end{equation}
+where $\sigma(\cdot)$ is the softmax. Every run in this report uses $w = 0.5$. A convex
+combination of two distributions is bounded by
+the more confident of its two inputs, so two sources that happen to agree cannot combine into
+a confidence neither source had -- exactly the guarantee additive logit-summing lacks, since
+summing before the softmax lets confident-and-agreeing logits amplify each other.
+
+\subsection{Contribution 3: leave-one-out temperature scaling}
+
+Standard temperature scaling fits a scalar $T$ against a labeled validation set. No labels are
+available here, so $T$ is instead chosen to match a label-free accuracy proxy computed from the
+method's own positive cache. Let the cache hold $M$ feature vectors together with the class
+each was cached under (the class the method itself predicted for that image, not a ground-truth
+label). For each cached item $i$, find its nearest neighbour among the other $M-1$ cached items
+by cosine similarity and check whether the neighbour's pseudo-label agrees with item $i$'s own.
+The leave-one-out accuracy estimate is the fraction that agree:
+\begin{equation}
+    \hat{a} = \frac{1}{M} \sum_{i=1}^{M} \mathbf{1}\!\left[ y_{\mathrm{nn}(i)} = y_i \right],
+\end{equation}
+where $\mathrm{nn}(i)$ is item $i$'s leave-one-out nearest neighbour and $y$ denotes the
+cache's pseudo-labels. A well-calibrated classifier's mean top-1 confidence should equal its
+accuracy, so the temperature is chosen to make the two match: writing $\bar{c}(T)$ for the mean
+top-1 softmax confidence over the run's score history after dividing logits by $T$,
+\begin{equation}
+    T^{\star} = \argmin_{T} \left| \bar{c}(T) - \hat{a} \right|,
+\end{equation}
+found by grid search rather than a closed form. The search grid is deliberately
+\emph{smoothing-only}: its floor is $T = 1.0$ (the identity), so no candidate can sharpen a
+prediction, only soften it. This is a design constraint, not an oversight. Margin admission
+selectively caches high-margin, likely-correct samples, which biases $\hat{a}$ upward relative
+to the model's true accuracy on the full test stream. An unconstrained search would respond to
+that inflated target by sharpening predictions, making overconfidence worse rather than better.
+Setting the grid's floor at $T = 1.0$ means the search can only push confidence down or
+leave it alone,
+never manufacture more of it. (This rationale is the reason the floor is kept, not the reason
+it was first added: an initial single-dataset run without it showed exactly the failure mode
+described above, sharpening predictions and worsening ECE. The mechanism holds
+regardless of which reason came first.) Temperature scaling is a
+monotonic rescaling of the logits, so applying it never changes a prediction, only its reported
+confidence.
+
+% The \allowbreak after each \_ is load-bearing, not decoration: TeX will not
+% hyphenate inside \texttt, so these three identifiers form one unbreakable box
+% and the line overruns the right margin by ~83pt -- text physically off the
+% page. \allowbreak adds a legal break point without printing a hyphen.
+All three contributions are independently switchable. Each reads a boolean config flag
+(\texttt{use\_\allowbreak margin\_\allowbreak admission},
+\texttt{use\_\allowbreak prob\_\allowbreak fusion},
+\texttt{use\_\allowbreak loo\_\allowbreak temperature}), so all eight on/off combinations are
+runnable from configuration alone, which is the space Section~\ref{sec:results}'s ablation
+sweeps.
+
+\subsection{Code and attribution}
+
+This project is a fork of \texttt{TomSheng21/tta-vlm}~\cite{tta-vlm-repo}, which supplies the
+evaluation framework used throughout: the CLIP wrapper, the dataset loaders, the entry points,
+and the \texttt{tda} and \texttt{clipzs} baselines every number in this report is compared
+against. The cache-update and cache-logit machinery that \texttt{cal\_tda} inherits and reuses
+unmodified originates in \texttt{kdiaaa/tda}~\cite{tda-repo} (MIT-licensed) as ported into that
+fork. Our own contribution is \texttt{online\_method/cal\_tda.py} and the calibration,
+temperature-search, evaluation, analysis, and reporting code around it. The full source --
+including the scripts that regenerate every number, table, and figure in this report from the
+raw run records -- is at
+\url{https://github.com/macwave12/deep_project_calibration_aware_tta}.

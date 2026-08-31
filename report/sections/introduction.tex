@@ -1,0 +1,45 @@
+\section{Introduction}
+
+CLIP's zero-shot accuracy is strong on natural-image classification but collapses on
+out-of-di\-stri\-bution domains: the benchmark that motivates this project reports 23.7\% on
+EuroSAT and 15.7\% on Aircraft~\cite{sheng2025illusion}. Our own zero-shot measurements
+(Table~\ref{tab:main}) are higher -- 42.06\% and 23.85\% -- because we evaluate the CoOp test
+splits with a \texttt{ViT-B/16} backbone rather than that paper's exact setup; the collapse
+relative to in-distribution accuracy is the point, and it reproduces. Test-time adaptation (TTA) methods
+close much of this gap without any labels or backpropagation. TDA~\cite{karmanov2024tda}, in
+particular, keeps a small cache of features from test images the model is confident about and
+reuses that cache to refine later predictions -- a forward-pass-only method with no training
+loop.
+
+Accuracy, however, is not the only axis that matters for a system meant to be trusted. A
+model that is right 80\% of the time but reports 95\% confidence on every prediction is
+\emph{worse} to deploy than one that is honest about its 80\%, because a downstream user or
+pipeline has no way to tell a confident-and-correct prediction from a confident-and-wrong one.
+This is exactly the failure mode \citet{sheng2025illusion} document in TDA: its cache rewards
+confident predictions with more confidence regardless of correctness, so accuracy gains arrive
+bundled with a calibration loss (average ECE rising 5.70\% $\rightarrow$ 9.21\% across their
+benchmark).
+
+This project asks whether that calibration gap can be closed without retraining and without
+labels, by changing three seams of TDA's cache loop:
+
+\begin{enumerate}
+    \item \textbf{Margin-based cache admission.} Admit a test sample to the cache by the gap
+        between its top-1 and top-2 class scores, instead of by prediction entropy, so the
+        cache does not accumulate merely \emph{loud} predictions.
+    \item \textbf{Probabilistic fusion.} Combine CLIP's and the cache's evidence as a convex
+        mixture of probability distributions, instead of adding raw logits, so agreement
+        between the two sources cannot manufacture confidence that neither source had on its
+        own.
+    \item \textbf{Leave-one-out (LOO) temperature scaling.} Estimate the cache's own accuracy
+        without ground truth, via leave-one-out nearest-neighbour agreement among cached
+        items, and pick a softmax temperature that makes the model's mean confidence match
+        that label-free estimate.
+    \end{enumerate}
+
+Each change is independently switchable from configuration, which is what makes the ablation
+in Section~\ref{sec:results} possible -- and the ablation is where this project's real finding
+lives. \textbf{The three changes together do not improve calibration: they make it
+dramatically worse.} Run in isolation, however, one of the three delivers exactly the
+calibration improvement this project set out to find, at no accuracy cost. We report both
+results without softening either one.

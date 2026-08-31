@@ -1,0 +1,16 @@
+\section{Conclusion}
+
+This project set out to undo TDA's calibration loss with three training-free, label-free
+changes to its cache loop, and measured whether that worked rather than assuming it. It did not:
+bundled together as specified, the three contributions meet the project's own success criterion
+on 0 of 5 datasets, trading away both accuracy and calibration relative to plain TDA. But the
+ablation that made this failure legible also isolated a real success inside it -- leave-one-out
+temperature scaling, run alone, matches TDA-equivalent accuracy exactly while cutting mean ECE
+by 24\% toward zero-shot CLIP's level, and meets the success criterion on 4 of 5 datasets, for
+a structural reason (a monotonic
+rescaling cannot move accuracy) that makes the result as close to guaranteed-safe as a
+calibration intervention gets. Margin admission and probabilistic fusion, the other two
+contributions, are the ones actually responsible for the bundle's failure, and neither helps
+consistently even in isolation. The finding this report stands behind is therefore narrower and
+more specific than the one we set out to demonstrate: not ``three changes fix TDA's
+calibration,'' but ``one of three does, and we now know which, and why the other two do not.''

@@ -1,0 +1,14 @@
+# Ablation variant "margin_fusion": margin admission + probability fusion on,
+# temperature scaling off.
+# Base: configs/method/cal_tda.yaml — entropy_threshold, alpha, beta,
+# shot_capacity all inherited unchanged.
+use_margin_admission: true
+margin_threshold: 1.0
+use_prob_fusion: true
+fusion_weight: 0.5
+use_loo_temperature: false
+
+entropy_threshold: 0.5
+alpha: 2.0
+beta: 5.0
+shot_capacity: 3

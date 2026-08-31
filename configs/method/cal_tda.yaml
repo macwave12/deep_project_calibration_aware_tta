@@ -1,0 +1,12 @@
+# Our full method: all three training-free contributions enabled.
+use_margin_admission: true
+margin_threshold: 1.0   # global; see note above — NOT tuned per dataset
+use_prob_fusion: true
+fusion_weight: 0.5
+use_loo_temperature: true
+
+# Inherited TDA hyperparameters (kept identical to the baseline for fairness).
+entropy_threshold: 0.5
+alpha: 2.0
+beta: 5.0
+shot_capacity: 3

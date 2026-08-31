@@ -1,0 +1,19 @@
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lrr}
+\toprule
+ & Accuracy & ECE \\
+\midrule
+none: TDA-equivalent (all flags off) & 56.60 & 11.28 \\
+margin: + margin admission & 53.67 & 18.06 \\
+fusion: + probabilistic fusion & 55.60 & 24.54 \\
+temp: + LOO temperature & 56.60 & 8.54 \\
+margin\_fusion: + margin + fusion & 55.22 & 23.94 \\
+margin\_temp: + margin + temperature & 53.67 & 19.39 \\
+fusion\_temp: + fusion + temperature & 55.60 & 24.78 \\
+all: all three (ours) & 55.22 & 24.12 \\
+\bottomrule
+\end{tabular}
+\caption{Ablation: mean accuracy and ECE (\%) across the five datasets.}
+\label{tab:ablation}
+\end{table}

@@ -1,0 +1,18 @@
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lrrrrrr}
+\toprule
+ & \multicolumn{3}{c}{Accuracy} & \multicolumn{3}{c}{ECE} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+ & \texttt{clipzs} & \texttt{tda} & \texttt{cal\_tda} & \texttt{clipzs} & \texttt{tda} & \texttt{cal\_tda} \\
+\midrule
+Aircraft & 23.85 & 24.27 & 23.97 & 5.44 & 15.51 & 8.65 \\
+DTD & 44.39 & 47.04 & 45.63 & 8.27 & 17.41 & 17.72 \\
+EuroSAT & 42.06 & 53.17 & 48.88 & 7.16 & 14.38 & 17.53 \\
+Flowers102 & 67.32 & 69.91 & 68.86 & 2.63 & 6.39 & 32.73 \\
+Pets & 88.20 & 88.77 & 88.74 & 4.37 & 2.52 & 43.98 \\
+\bottomrule
+\end{tabular}
+\caption{Top-1 accuracy and ECE (\%, 20 bins) on the five test splits.}
+\label{tab:main}
+\end{table}

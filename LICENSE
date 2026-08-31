@@ -1,0 +1,45 @@
+These terms cover this project's own additions only. This repository also contains
+third-party code that is NOT covered by this license and is not ours to relicense --
+see NOTICE for what was borrowed, from where, and under what terms.
+
+MIT License
+
+Copyright (c) 2026 Gal Machlin and Idan Yehuda
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+Scope note: this license covers the original contributions of this repository
+(see `NOTICE` for the exact file list) — the `cal_tda` method
+(`online_method/cal_tda.py`), the calibration and LOO-temperature utilities
+(`utils/calibration.py`, `utils/loo_temperature.py`), the config, scripts,
+analysis, tests, and documentation added on top of the forked framework.
+
+It does **not** relicense the forked upstream framework. `TomSheng21/tta-vlm`
+(the base this repository forks) does not publish a LICENSE file as of this
+fork; its original code (`clip/`, `data/`, `instance_method/`,
+`online_method/tda.py`, `online_method/clipzs.py` and the other unmodified
+`online_method/*.py` files, most of `utils/`, `online_tta.py`,
+`instance_tta.py`) remains the property of its original authors and is used
+here, modified in places, for a non-commercial academic course project with
+attribution — see `NOTICE`. `kdiaaa/tda`, whose cache logic upstream ported
+into `online_method/tda.py` and which this project used as a reference for
+`cal_tda`, is itself MIT licensed (Copyright (c) 2024 Adilbek Karmanov); that
+license's terms apply to the cache-logic portions traceable to it.

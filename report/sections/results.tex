@@ -1,0 +1,172 @@
+\section{Results}
+\label{sec:results}
+
+\subsection{Headline: the bundled method as specified}
+
+Table~\ref{tab:main} is generated directly by \texttt{analysis/aggregate.py} from
+\texttt{results/summary.csv}; no number in it is hand-typed.
+
+\input{../results/summary_table.tex}
+
+Averaged over the five datasets, zero-shot CLIP reaches 53.16\% accuracy at 5.57\% ECE, TDA
+reaches 56.63\% at 11.24\% ECE, and \texttt{cal\_tda} with all three contributions enabled --
+the method exactly as specified -- reaches 55.22\% at 24.12\% ECE. \textbf{This is a clear
+failure of the bundled method.} Accuracy is lower than TDA's on every single dataset (from 0.03
+points on Pets up to 4.29 points on EuroSAT), and ECE is worse than TDA's on four of the five
+datasets, dramatically so on Flowers102 (32.73\% vs.\ 6.39\%) and Pets (43.98\% vs.\ 2.52\%).
+Aircraft is the sole dataset where the bundle's ECE number looks better than TDA's (8.65\%
+vs.\ 15.51\%) -- Section~\ref{sec:discussion} shows this is not real correction, only the same
+underconfidence failure landing closer to correct by accident on this one low-accuracy dataset.
+We do
+not reframe this as a partial success: on the spec's own success criterion (accuracy $\geq$ TDA
+\emph{and} ECE $<$ TDA, on at least 3 of 5 datasets), the bundled method meets the bar on
+\textbf{0 of 5} datasets.
+
+Figure~\ref{fig:scatter} plots the same comparison directly: our success criterion is a point as far right as
+TDA (equal accuracy) but as far down as zero-shot CLIP (honest confidence). The bundled method's
+green star sits left of TDA's orange square on every dataset (lower accuracy) and above it on
+four of the five (higher ECE) -- Aircraft is the one dataset where the star sits below the
+square, matching the exception already noted above.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.75\textwidth]{accuracy_vs_ece.png}
+    \caption{Accuracy vs.\ ECE, all five datasets. The purple diamond (LOO temperature only,
+    Section~\ref{sec:ablation}) is the configuration this report ultimately recommends, plotted
+    alongside the three headline methods. Marker shape and colour identify the method (see legend);
+    each dataset's four points are joined by a line in that dataset's own colour, labelled at the
+    line's right-hand end. Lines run left to right by accuracy; they mark grouping only, not a
+    progression.}
+    \label{fig:scatter}
+\end{figure}
+
+\subsection{Reliability diagrams}
+
+Figure~\ref{fig:reliability} plots, per dataset, the confidence-vs-accuracy curve for each of
+the three headline methods plus the ablation's \texttt{temp}-only variant (a curve on the
+dashed identity line is perfectly calibrated). The
+grid makes the aggregate ECE numbers in Table~\ref{tab:main} legible per bin, and the direction
+of the failure is visible directly: on every dataset, \texttt{cal\_tda}'s curve sits
+\emph{above} the identity line -- accuracy exceeds stated confidence, not the reverse. In
+the five \texttt{cal\_tda} reliability records the highest occupied confidence bin tops out at
+0.70 on EuroSAT and at 0.60 or below on the other four, so there is no high-confidence region
+to be confidently wrong in; the method is instead severely \emph{underconfident}, most visibly on
+Pets, where 88.74\% accuracy is reported at only 44.77\% mean confidence. Section~\ref{sec:discussion}
+explains the mechanism, including why Aircraft -- the one dataset where the bundle's ECE
+looked like an improvement over TDA in Table~\ref{tab:main} -- is not a case of the method
+correcting itself, but the smallest instance of the same underconfidence effect.
+
+\begin{figure}[htbp]
+    \centering
+    % Three panels per row. Two-per-row was tried and reverted: five square panels
+    % in three rows exceed \textheight, and LaTeX responds by pushing the caption
+    % and the last subcaption clean off the bottom of the paper ("Float too large
+    % for page by 128pt"). On-page legibility is fixed in make_figures.py instead,
+    % by shrinking the matplotlib canvas rather than enlarging the float. Slot six
+    % holds the legend the five panels share.
+    \begin{subfigure}[t]{0.32\textwidth}
+        \includegraphics[width=\linewidth]{reliability_dtd.png}
+        \caption{DTD}
+    \end{subfigure}
+    \begin{subfigure}[t]{0.32\textwidth}
+        \includegraphics[width=\linewidth]{reliability_flower102.png}
+        \caption{Flowers102}
+    \end{subfigure}
+    \begin{subfigure}[t]{0.32\textwidth}
+        \includegraphics[width=\linewidth]{reliability_pets.png}
+        \caption{Pets}
+    \end{subfigure}\\[1ex]
+    \begin{subfigure}[t]{0.32\textwidth}
+        \includegraphics[width=\linewidth]{reliability_eurosat.png}
+        \caption{EuroSAT}
+    \end{subfigure}
+    \begin{subfigure}[t]{0.32\textwidth}
+        \includegraphics[width=\linewidth]{reliability_aircraft.png}
+        \caption{Aircraft}
+    \end{subfigure}
+    % A minipage, not a subfigure: the legend is not a sixth panel and must not be
+    % lettered (f) or counted in the figure's subcaptions.
+    %
+    % [b], not [t], and an explicit height. Given a height, minipage's [t] puts the
+    % box *top* on the row's baseline -- which is the bottom edge of the panels
+    % beside it, so the legend landed a full panel below the row. [b] puts the box
+    % bottom there instead, so a box exactly one panel high (0.32\textwidth: the
+    % panels are square) spans the row, and inner-pos c centres the legend in it.
+    \begin{minipage}[b][0.32\textwidth][c]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{reliability_legend.png}
+    \end{minipage}
+    \caption{Reliability diagrams, all five datasets: zero-shot CLIP, TDA, \texttt{cal\_tda}
+    (all three contributions), and the ablation's \texttt{temp}-only variant. All five panels
+    share the legend at bottom right; a curve on the dashed identity line is perfectly calibrated.}
+    \label{fig:reliability}
+\end{figure}
+
+\subsection{The ablation}
+\label{sec:ablation}
+
+Table~\ref{tab:ablation} (generated by \texttt{analysis/make\_ablation\_table.py} from a
+40-run sweep -- all eight on/off combinations of the three contributions, on all five datasets)
+isolates which of the three changes are responsible for the failure above.
+
+\input{tables/ablation.tex}
+
+\textbf{Contribution 3 (LOO temperature scaling) alone succeeds.} The ablation's own \texttt{none} baseline is
+\texttt{cal\_tda} with all three flags off, run inside the same 40-run sweep; it is the correct
+same-code-path comparison, since \texttt{temp} and \texttt{none} differ by exactly one config
+flag. Against it, \texttt{temp} matches accuracy \emph{exactly}, to 0.00 points, on all five
+datasets -- a structural guarantee, since temperature scaling is a monotonic rescaling of the
+logits and cannot change an argmax. It cuts mean ECE from 11.28\% to 8.54\%, the best mean ECE
+of all eight ablation variants, including \texttt{all} (24.12\%). The per-dataset breakdown is in Table~\ref{tab:temp-per-dataset}:
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+Dataset & \texttt{none} ECE & \texttt{temp} ECE & Change \\
+\midrule
+Aircraft   & 15.56 & 4.21  & $-11.35$ \\
+DTD        & 17.41 & 4.68  & $-12.73$ \\
+EuroSAT    & 14.43 & 13.43 & $-1.00$ \\
+Flowers102 & 6.51  & 4.85  & $-1.66$ \\
+% \textbf does not reach inside math mode, so $+13.06$ printed at roman weight
+% next to a bold "(worse)" in the same cell. \mathbf carries the weight in.
+Pets       & 2.48  & \textbf{15.54} & \textbf{$\mathbf{+13.06}$ (worse)} \\
+\bottomrule
+\end{tabular}
+\captionof{table}{Per-dataset ECE (\%) for the ablation's \texttt{none} and \texttt{temp} variants. Pets is the one reversal.}
+\label{tab:temp-per-dataset}
+\end{center}
+
+This is not a uniform win: on Pets, where the \texttt{none} baseline was already very well
+calibrated (2.48\% ECE),
+LOO temperature scaling makes calibration substantially \emph{worse}. We discuss the mechanism
+in Section~\ref{sec:discussion} rather than average it away.
+
+\textbf{Two counts, and why they differ.} Against the ablation's \texttt{none} baseline,
+\texttt{temp} meets the spec's success criterion on \textbf{4 of 5} datasets (all but Pets).
+Against the separately run headline \texttt{tda} rows in Table~\ref{tab:main}, the count is
+lower -- \textbf{2 of 5} -- because \texttt{none} and \texttt{tda} are two different process
+invocations of what should be identical logic, and in practice differ by 0--4 flipped
+predictions per dataset out of 1{,}692--8{,}100 samples. The cause is not a logic difference:
+upstream \texttt{tda} accumulates its final logits in fp16, while \texttt{cal\_tda} (even
+with every flag off) upcasts to fp32 before its final step, and at CLIP's logit magnitudes that
+rounding difference is worth roughly one unit in the last place -- enough, on
+borderline-margin predictions, to flip an argmax once every few hundred to a few thousand
+samples. Both counts are correct; they
+answer different questions. The 4-of-5 count answers whether temperature scaling, holding
+everything else fixed, helps calibration without moving accuracy -- yes, on 4 of 5. The
+2-of-5 count answers whether a \texttt{temp}-only run, as a real separate process, beats the
+specific \texttt{tda} numbers quoted in Table~\ref{tab:main} -- only on 2 of 5, because of run-to-run floating-point drift that
+is two orders of magnitude smaller than any effect discussed above.
+
+\textbf{Contributions 1 and 2 are the ones actually responsible for the bundle's failure.}
+Margin admission alone \emph{lowers} mean accuracy (56.60\% $\rightarrow$ 53.67\%) and raises
+mean ECE (11.28\% $\rightarrow$ 18.06\%): its selectivity throws away cache signal the
+unfiltered cache was using correctly on some datasets. Probabilistic fusion alone is the worst
+single component: it raises mean ECE to 24.54\%, driven by blowups on Flowers102 (32.46\%) and
+Pets (43.77\%) specifically, though it happens to help Aircraft (15.56\% $\rightarrow$
+9.16\%) -- the reason ``all three'' still beats plain TDA's ECE on that one dataset. Neither
+contribution helps consistently even in isolation; both actively hurt the mean.
+
+Cache admission rates, which explain part of why margin admission behaves so differently across
+datasets, are reported in Section~\ref{sec:admission-rates}.

@@ -1,0 +1,26 @@
+dataset: pets
+n_classes: 37
+expected_test_samples: 3669
+backbone: ViT-B/16
+
+# Per-dataset TDA hyperparameters, from kdiaaa/tda configs/oxford_pets.yaml.
+#
+# This `positive`/`negative` block is a MIRROR of upstream's `TDA.pos_params`
+# (online_method/tda.py:58-61) plus its hardcoded neg_alpha/neg_beta
+# (tda.py:72-73), kept here for documentation and verification, not as the
+# runtime source. The runner reads alpha/beta from that hardcoded table at
+# runtime, NOT from this file — editing the values below changes nothing.
+# `tests/test_configs.py::test_dataset_config_matches_upstream_tda_hyperparameters`
+# enforces that this file and upstream's table agree.
+positive:
+  enabled: True
+  shot_capacity: 3
+  alpha: 2.0
+  beta: 7.0
+negative:
+  enabled: True
+  shot_capacity: 2
+  alpha: 0.117
+  beta: 1.0
+  entropy_threshold: {lower: 0.2, upper: 0.5}
+  mask_threshold: {lower: 0.03, upper: 1.0}

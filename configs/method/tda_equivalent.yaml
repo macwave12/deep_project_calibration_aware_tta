@@ -1,0 +1,10 @@
+# Control: cal_tda with every contribution switched off must equal upstream TDA.
+use_margin_admission: false
+margin_threshold: 0.1
+use_prob_fusion: false
+fusion_weight: 0.5
+use_loo_temperature: false
+entropy_threshold: 0.5
+alpha: 2.0
+beta: 5.0
+shot_capacity: 3

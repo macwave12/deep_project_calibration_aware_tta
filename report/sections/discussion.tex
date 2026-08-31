@@ -1,0 +1,108 @@
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Where it worked, and why}
+
+LOO temperature scaling alone is a real, if not universal, calibration improvement. The
+mechanism is direct: it always smooths the model's confidence toward a single label-free
+accuracy estimate computed from the cache. Where TDA's cache was badly overconfident relative
+to its own accuracy -- DTD (17.41\% $\rightarrow$ 4.68\% ECE) and Aircraft (15.56\%
+$\rightarrow$ 4.21\%, same-code-path \texttt{none}-vs-\texttt{temp} comparison) chief among
+them -- pulling confidence down toward the estimate is exactly the correction needed, and the
+improvement is large.
+
+\subsection{Where it did not, and why}
+
+The same mechanism explains the Pets reversal. On Pets, TDA's cache was already close to
+perfectly calibrated (2.52\% ECE for the headline \texttt{tda} run, 2.48\% for the ablation's
+\texttt{none} baseline) -- the model's stated confidence already matched its
+accuracy. LOO temperature scaling has no notion of ``already well calibrated''; it always
+smooths toward the LOO estimate regardless of how good the starting point was, so with no
+overconfidence to correct, it manufactures underconfidence instead (ECE rises to 15.54\% under
+\texttt{temp}, or as high as 43.98\% under the full bundle). A method that only ever pushes
+confidence toward one estimate, with no mechanism to detect when the starting point does not
+need correcting, will help wherever that estimate happens to be closer to the truth than the
+model's own confidence, and hurt wherever the estimate is not.
+
+Margin admission and probabilistic fusion fail for related but distinct reasons. Margin
+admission's single global threshold (\texttt{margin\_threshold} $= 1.0$) is not portable:
+measured admission rates (Section~\ref{sec:admission-rates}) run from 15.9\% on Aircraft to
+81.9\% on Pets, and they track zero-shot CLIP's accuracy rather than class count. On Aircraft the cache
+mostly starves; on Pets the gate is nearly a no-op. The gate is therefore most selective exactly
+where the cache had the most to contribute. Neither
+extreme is what a per-dataset-tuned gate would look like, and, as Section~\ref{sec:results} shows, its
+selectivity costs accuracy outright (56.60\% $\rightarrow$ 53.67\% under margin admission
+alone).
+
+Probabilistic fusion, meanwhile, is the single worst component in the ablation (mean ECE
+24.54\%) -- but not for the reason it first appears. \texttt{compute\_cache\_logits}
+(inherited unmodified from upstream TDA) returns, for each class, a sum of
+$\exp(-\beta(1 - \mathrm{affinity}))$ terms over whatever cached items belong to that class --
+an unnormalized, comparatively small-magnitude quantity, since affinity is a cosine similarity
+in $[-1, 1]$ and only the handful of classes actually represented in a small cache get a
+nonzero score at all. $\sigma(z_{\text{cache}})$ is therefore close to uniform relative to
+$\sigma(z_{\text{clip}})$, which is sharply peaked because CLIP's own logits are already scaled
+by its learned logit scale ($\approx 100$). Averaging a near-uniform distribution into a
+near-one-hot one at $w = 0.5$ (Eq.~\eqref{eq:fusion}) caps top-1 probability well below what CLIP
+alone would report, \emph{regardless of how much evidence actually supports the prediction} -- fusion
+does not need both sources to agree on a wrong answer to produce this effect; it produces the effect on
+every sample, right or wrong alike. This single fact accounts for everything the reliability
+diagrams show (Section~\ref{sec:results}): no \texttt{cal\_tda} reliability record on any
+dataset reaches even 0.70 mean confidence in its highest-occupied bin, mean confidence sits
+8.7--44 points below accuracy on every dataset, and the size of that gap tracks accuracy itself:
+it is largest on the highest-accuracy dataset (Pets, 88.74\% accuracy capped near 44.77\%
+confidence) and smallest on the lowest-accuracy one (Aircraft, 23.97\% accuracy capped near
+15.32\%). That is what a fixed confidence ceiling does -- it costs a high-accuracy dataset far
+more calibration error than a low-accuracy one. Fusion's ECE is therefore not overconfidence from agreeing wrong
+answers; it is underconfidence manufactured by capping every prediction's confidence near one
+fixed point, independent of correctness.
+
+This also explains Aircraft's apparent improvement in Table~\ref{tab:main} without invoking any
+real correction. The \texttt{none} baseline on Aircraft is overconfident to begin with (mean
+confidence 39.77\% against 24.21\% accuracy, ECE 15.56\%) -- ordinary TDA-style overconfidence.
+Adding fusion does not fix that overconfidence; it overshoots straight past it, capping
+confidence at 15.2--15.4\% against 23.97--24.42\% accuracy (ECE 8.65--9.20\%). The resulting
+ECE is smaller purely because Aircraft's true accuracy (23.97\%) happens to sit close to
+fusion's confidence ceiling on this particular dataset -- an accident of
+where the ceiling landed relative to Aircraft's accuracy, not evidence that fusion diagnosed and
+corrected \texttt{none}'s overconfidence. On every other dataset, where accuracy is higher, the
+same ceiling produces a much larger gap in the other direction, which is why fusion is the worst
+component overall despite this one favourable-looking case.
+
+\subsection{The margin$\times$temperature interaction, and its limits}
+
+An earlier single-dataset (DTD) observation suggested a clean interaction, and the five-dataset
+runs bear it out: once margin
+admission and fusion are both active, the LOO temperature search pins at its grid boundary
+$T = 1.0$ on 98--100\% of samples on every dataset, meaning the search wants to sharpen further
+than the smoothing-only grid allows and Contribution 3 becomes effectively inert on top of Contributions 1
+and 2 -- consistent with the ECE difference between \texttt{margin\_fusion} and \texttt{all}
+being tiny everywhere (0.00--0.36 points). Testing that story against temperature on top of
+margin \emph{alone} (without fusion in between) shows it does not generalize cleanly: pinning
+drops to 75--95\% on four datasets, with a correspondingly larger ECE effect (DTD improves by
+2.81 points, Flowers102 by 2.25), and \textbf{Pets breaks the pattern outright} -- its
+\texttt{margin\_temp} run pins only 0.2\% of samples at the boundary, the opposite of inert, and
+it is exactly on Pets, already well calibrated under margin alone (2.53\% ECE), that adding
+temperature does the most damage of any margin-plus-temperature run (2.53\% $\rightarrow$
+14.79\%; the larger temperature-induced regression in the ablation is Pets without margin,
+Table~\ref{tab:temp-per-dataset}: 2.48\% $\rightarrow$ 15.54\%). The
+single-dataset story pointed to one mechanism; five datasets show it holds strongly with fusion
+present, holds more weakly for margin alone, and inverts on the one dataset a single-dataset
+study would have missed. We report this as a caution about generalizing a mechanism from one
+dataset, not as a discarded finding -- the underlying explanation (temperature is inert exactly
+when the search is already pinned against its floor) still holds; what changes across datasets
+is how often that precondition is met.
+
+\subsection{Accuracy/calibration trade-off, stated plainly}
+
+None of the three contributions, alone or combined, is a free lunch. Contribution 3 is the one
+change in this project that costs nothing in accuracy (it structurally cannot, being a
+monotonic rescaling) and buys a real mean calibration improvement -- but even that
+improvement is not uniform, and reverses on the one dataset that was already well calibrated.
+Contributions 1 and 2 cost accuracy, calibration, or both, on average, and the one apparent
+exception -- fusion's lower ECE on Aircraft -- is not a benefit either, once its mechanism is
+understood: it is the same confidence-capping failure landing, by the accident of that one
+dataset's low accuracy, closer to correct than the overconfidence it replaced. The honest summary of this project's
+central finding is that a training-free, label-free calibration fix is achievable, but it is one
+targeted change (temperature scaling on a label-free accuracy estimate), not the three-part
+bundle we set out to build.

@@ -1,0 +1,96 @@
+NOTICE
+======
+
+This project is a fork of `TomSheng21/tta-vlm` with a new calibration-aware
+test-time-adaptation method (`cal_tda`) added on top. It also reuses cache
+logic that `tta-vlm` itself ported from `kdiaaa/tda`, and targets a
+calibration gap documented by a third-party benchmark paper. This file
+records what was borrowed from where, under what license, and what this
+project did with it — see `LICENSE` for the license terms that apply to our
+own additions.
+
+1. TomSheng21/tta-vlm
+----------------------
+Source:  https://github.com/TomSheng21/tta-vlm
+License: none published (no `LICENSE` file in the upstream repository as of
+         this fork). Used here, with attribution, for a non-commercial
+         academic course project; all rights to the original code remain
+         with its authors.
+What:    the evaluation framework — CLIP wrapper, dataset loaders, the
+         `online_tta.py` / `instance_tta.py` entry points, and the `tda` /
+         `clipzs` baseline method implementations this project compares
+         against and builds `cal_tda` on top of.
+
+Files copied verbatim (unmodified upstream):
+  clip/__init__.py, clip/clip.py, clip/model.py, clip/simple_tokenizer.py,
+  clip/bpe_simple_vocab_16e6.txt.gz, clip/custom_clip.py
+  data/__init__.py, data/augmix_ops.py, data/cls_to_names.py,
+  data/hoi_dataset.py, data/imagenet_variants.py, data/imagnet_prompts.py
+  instance_method/ (all files) — unused episodic methods, kept for parity
+  online_method/clipzs.py, online_method/tda.py, online_method/boostadapter.py,
+  online_method/dmn.py, online_method/dmn_weak.py, online_method/dpe.py,
+  online_method/dynaprompt.py, online_method/ecalp.py,
+  online_method/ecalp_utils.py, online_method/onzeta.py
+  utils/__init__.py, utils/tools.py
+  figs/ttavlm.png
+
+Files modified (upstream + our changes, see `docs/UPSTREAM_SEAMS.md` and
+git history for the exact diffs):
+  clip/constants.py         — cache-path fix for this machine.
+  data/datautils.py         — `ID_to_DIRNAME` repointed at our local layout.
+  data/fewshot_datasets.py  — dataset subfolder paths repointed at DATA_ROOT.
+  instance_tta.py           — local cache-path fix, same pattern as
+                               `clip/constants.py`: `--load_tecoa`'s
+                               `robust_pretrain_path` table repointed at this
+                               machine's `.cache/tecoa/` layout. (Its
+                               `mkdir -p` call is unmodified upstream code,
+                               unlike `online_tta.py`'s equivalent, since
+                               `instance_method/`'s entry point is unused by
+                               this project and was not exercised enough to
+                               need that fix.)
+  online_tta.py             — portability fixes (`os.makedirs`, `-j 0`
+                               workaround), plus registration of `cal_tda`
+                               as a selectable `--algorithm` and a
+                               `--config`/`--out-dir`/`--run-name` seam that
+                               writes the JSON run records this project's
+                               analysis pipeline reads.
+
+2. kdiaaa/tda
+-------------
+Source:  https://github.com/kdiaaa/tda
+License: MIT License, Copyright (c) 2024 Adilbek Karmanov.
+What:    the original positive/negative feature-cache logic (cache update,
+         eviction, and the `alpha`/`beta`-weighted cache-logit computation)
+         and the per-dataset hyperparameter tables (`shot_capacity`,
+         `alpha`, `beta`, `entropy_threshold`, `mask_threshold`). This
+         project did not vendor `kdiaaa/tda` directly; it consumes this
+         logic as already ported into `online_method/tda.py` by
+         `TomSheng21/tta-vlm` (see above), and used it as the reference
+         implementation when writing `online_method/cal_tda.py`'s margin
+         admission and probabilistic fusion, which read the same cache
+         structures and reuse the same `alpha`/`beta` cache-logit math.
+         `configs/*.yaml`'s per-dataset `positive`/`negative` blocks mirror
+         `kdiaaa/tda`'s per-dataset config values, kept here as
+         documentation and verified against upstream's hardcoded table by
+         `tests/test_configs.py`.
+
+3. arXiv:2506.24000 — "The Illusion of Progress? A Critical Look at
+   Test-Time Adaptation for Vision-Language Models" (Sheng, Liang, He, Wang,
+   Tan; NeurIPS 2025)
+-----------------------------------------------------------------------
+Source:  https://arxiv.org/abs/2506.24000
+License: not applicable — no code taken, cited as the source of the
+         calibration-gap motivation and its baseline ECE numbers (the paper
+         reports TDA raising average ECE 5.70% -> 9.21% across its
+         benchmark while gaining accuracy). This project's own measured
+         numbers (`results/summary.csv`) are independent runs on 5 datasets
+         with this codebase, not copies of the paper's table.
+
+4. This project's own additions (see `LICENSE`)
+------------------------------------------------
+Everything not listed above is original to this project:
+`online_method/cal_tda.py` (the method itself); `utils/calibration.py`,
+`utils/loo_temperature.py`, `utils/evaluation.py`; `configs/`; `scripts/`;
+`analysis/`; `tests/`; `docs/`; `environment.md`; `notebooks/`; `README.md`;
+`LICENSE`; `NOTICE`; `results/summary.csv`, `results/ablation.csv`, and the
+generated figures under `analysis/figures/`.

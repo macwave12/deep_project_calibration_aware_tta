@@ -1,0 +1,35 @@
+# SDD scratch workspace (ledger, briefs, review packages)
+.superpowers/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Data and run outputs live outside git, EXCEPT the raw per-run JSON records under
+# results/raw/ -- those are the sole evidence for every number this project reports
+# (accuracy, ECE, reliability curves, admission/temperature diagnostics), so they are
+# committed rather than ignored. A parent-directory `ignore` pattern hides everything
+# below it from Git even when a later line tries to un-ignore a specific file deeper
+# inside, so each directory level under results/raw/ is explicitly un-ignored too.
+data_root/
+online_results/
+results/raw/*
+!results/raw/**/
+!results/raw/**/*.json
+results/*.log
+.cache/
+
+# Upstream (tta-vlm) additions
+output_results/
+*.sh
+!scripts/*.sh
+
+# LaTeX build intermediates (main.pdf IS committed - it is the deliverable)
+report/*.aux
+report/*.log
+report/*.blg
+report/*.bbl
+report/*.out
+report/*.toc
+report/*.xdv

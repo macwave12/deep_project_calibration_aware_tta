@@ -1,0 +1,86 @@
+\section{Experiments}
+\label{sec:experiments}
+
+\subsection{Datasets and protocol}
+
+All numbers in this report are measured on the \emph{test split only} of five standard
+few-shot recognition datasets, using the CoOp split files so counts match the benchmark
+literature exactly. Table~\ref{tab:datasets} lists them:
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+Dataset & Test images & Classes \\
+\midrule
+DTD & 1{,}692 & 47 \\
+Oxford Flowers 102 & 2{,}463 & 102 \\
+Oxford Pets & 3{,}669 & 37 \\
+EuroSAT & 8{,}100 & 10 \\
+FGVC Aircraft & 3{,}333 & 100 \\
+\bottomrule
+\end{tabular}
+\captionof{table}{The five evaluation datasets: test-split size and class count (CoOp splits).}
+\label{tab:datasets}
+\end{center}
+
+Every method -- zero-shot CLIP (\texttt{clipzs}), TDA (\texttt{tda}), and our method
+(\texttt{cal\_tda}) -- is evaluated one image at a time in a single online pass over the test
+split, with no repeated epochs and no access to any dataset's training or validation split.
+Ground-truth labels are held out of every adaptation step: the cache, the margin gate, the
+fusion weight, and the LOO temperature search all operate on the model's own predictions
+(``pseudo-labels''), never on a true label; labels are opened only once per run, by the final
+scorer, to compute accuracy and ECE. The backbone is \texttt{ViT-B/16} throughout, with
+batch size 1 and seed 0.
+
+Calibration is measured with expected calibration error (ECE), computed with 20 equal-width
+bins by the single implementation in \texttt{utils/calibration.py} that scores every method
+identically.
+
+\subsection{Cache admission rates}
+\label{sec:admission-rates}
+
+Margin admission (Section~\ref{sec:method}, Contribution 1) uses one \emph{global} threshold
+(\texttt{margin\_threshold} $= 1.0$), deliberately not tuned per dataset -- fitting it to each
+dataset's own test-set margin distribution would be test-set tuning, which the no-labels
+protocol above is meant to rule out. Because the logits are $100 \times$ a cosine similarity
+(CLIP's \texttt{logit\_scale} times the dot product of two unit vectors), a threshold of 1.0
+asks for a top-1/top-2 cosine gap of only 0.01 -- a quantity with no dataset-independent
+meaning. Measured admission rates on the full \texttt{cal\_tda} run (all three contributions
+on) show what that threshold costs (Table~\ref{tab:admission}):
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+Dataset & Classes & Zero-shot accuracy & Admission rate \\
+\midrule
+Aircraft   & 100 & 23.85\% & 15.9\% \\
+EuroSAT    & 10  & 42.06\% & 26.5\% \\
+DTD        & 47  & 44.39\% & 53.0\% \\
+Flowers102 & 102 & 67.32\% & 65.7\% \\
+Pets       & 37  & 88.20\% & 81.9\% \\
+\bottomrule
+\end{tabular}
+\captionof{table}{Cache admission rates under the single global margin threshold (\texttt{margin\_threshold} $= 1.0$), ordered by admission rate.}
+\label{tab:admission}
+\end{center}
+
+The gate ranges from admitting only 15.9\% of samples on Aircraft -- where the cache mostly
+starves -- to 81.9\% on Pets, where it is nearly a no-op and the method has quietly reverted to
+upstream TDA's unconditional admission.
+
+What varies with the gate is not class count. Flowers102 has the most classes of the five and
+the second-\emph{highest} admission rate; EuroSAT has the fewest and the second-lowest. The
+ordering that does hold is the one shown in the table: across all five datasets, admission rate
+is rank-correlated with zero-shot CLIP's accuracy, without exception. The mechanism is
+straightforward -- where CLIP already separates the classes (pets, flowers), top-1/top-2 gaps
+are wide and the gate opens; where CLIP is lost (fine-grained aircraft variants, out-of-domain
+satellite imagery), every class looks similar to every other, margins collapse, and the gate
+closes. Five datasets cannot establish a law, even though a perfect rank match among five has
+roughly a 1\% chance of arising by accident, so we state the ordering as the pattern our runs
+show rather than as a proven relationship.
+
+That ordering is, however, the least useful behaviour a gate could have: it fills the cache
+where the cache is least needed and starves it precisely where adaptation had the most room to
+help. That mismatch, not the raw spread, is why margin admission, run alone, costs accuracy
+(56.60\% $\rightarrow$ 53.67\%, Table~\ref{tab:ablation}). We report it as a limitation of the
+fixed-threshold design (Section~\ref{sec:discussion}), not as a bug to be silently retuned away.

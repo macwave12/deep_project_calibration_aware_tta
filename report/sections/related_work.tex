@@ -1,0 +1,33 @@
+\section{Related Work}
+
+\textbf{Training-free test-time adaptation for CLIP.} TDA~\cite{karmanov2024tda} adapts CLIP
+at test time with two small feature caches -- a positive cache keyed by the model's own
+predicted class, and a negative cache of low-confidence samples used as a correction term --
+built and consumed purely from forward passes, with no backpropagation and no labels. Each new
+test image is scored by CLIP and optionally admitted to the positive cache by an entropy
+threshold; the final logits are a sum of CLIP's own logits and an $\alpha/\beta$-weighted
+cache-logit term computed from the currently cached features. This project's
+\texttt{CalTDA}, in \texttt{online\_method/cal\_tda.py}, subclasses TDA directly and reuses its cache-update and
+cache-logit machinery unmodified; the three contributions in Section~\ref{sec:method}
+change only the admission rule, the CLIP/cache combination rule, and a final temperature.
+
+\textbf{The calibration cost of TTA.} \citet{sheng2025illusion} benchmark a broad set of TTA
+methods for vision-language models, including TDA, across the same class of few-shot
+recognition datasets used here, and report accuracy alongside expected calibration error
+(ECE). Their finding motivates this entire project: TTA's forward-pass-only adaptation loop
+tends to raise accuracy while \emph{also} raising ECE, because methods that reward and reuse
+confident predictions have no mechanism to distinguish confident-and-correct from
+confident-and-wrong. Their reported average ECE for TDA rises 5.70\% $\rightarrow$ 9.21\% on
+their suite even as accuracy improves. This project targets that specific gap using TDA as the
+adapted method and their framing of the problem, while running fully independent
+experiments (Section~\ref{sec:experiments}) rather than reusing their reported numbers.
+
+\textbf{Temperature scaling and ECE.} Expected calibration error (ECE) buckets predictions by
+confidence and measures the gap between confidence and empirical accuracy within each bucket,
+weighted by bucket occupancy~\cite{guo2017calibration}. Temperature scaling divides logits by
+a single learned scalar $T$ before the softmax. The operation is rank-preserving (it cannot
+change which class a model predicts) but reshapes confidence, and $T$ is normally fit by
+minimizing negative log-likelihood on a labelled validation set. This project cannot use a
+labelled validation set -- the spec's no-ground-truth constraint applies throughout adaptation -- so
+Section~\ref{sec:method} replaces the usual supervised fit with a leave-one-out, label-free
+accuracy estimate computed from the method's own cache.

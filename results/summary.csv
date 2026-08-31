@@ -1,0 +1,16 @@
+dataset,method,accuracy,ece,n_samples,n_classes,backbone,seed,admission_rate,temp_mean,temp_frac_at_grid_boundary
+dtd,clipzs,44.39,8.27,1692,47,ViT-B/16,0,,,
+dtd,tda,47.04,17.41,1692,47,ViT-B/16,0,,,
+dtd,cal_tda,45.63,17.72,1692,47,ViT-B/16,0,0.5296,1.1922,0.9882
+flower102,clipzs,67.32,2.63,2463,102,ViT-B/16,0,,,
+flower102,tda,69.91,6.39,2463,102,ViT-B/16,0,,,
+flower102,cal_tda,68.86,32.73,2463,102,ViT-B/16,0,0.6569,1.0734,0.9838
+pets,clipzs,88.2,4.37,3669,37,ViT-B/16,0,,,
+pets,tda,88.77,2.52,3669,37,ViT-B/16,0,,,
+pets,cal_tda,88.74,43.98,3669,37,ViT-B/16,0,0.819,1.0383,0.9896
+eurosat,clipzs,42.06,7.16,8100,10,ViT-B/16,0,,,
+eurosat,tda,53.17,14.38,8100,10,ViT-B/16,0,,,
+eurosat,cal_tda,48.88,17.53,8100,10,ViT-B/16,0,0.2654,1.0235,1.0
+aircraft,clipzs,23.85,5.44,3333,100,ViT-B/16,0,,,
+aircraft,tda,24.27,15.51,3333,100,ViT-B/16,0,,,
+aircraft,cal_tda,23.97,8.65,3333,100,ViT-B/16,0,0.1593,1.0,1.0

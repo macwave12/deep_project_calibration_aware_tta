@@ -1,0 +1,51 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx,booktabs,amsmath,amssymb,hyperref,caption,subcaption}
+% [numbers] puts natbib in numeric mode: the reference list is numbered [1], [2],
+% ... and every citation in the text shows its number. \citet still works -- it
+% renders as "Karmanov et al. [2]" rather than dropping the number -- so the
+% author-year phrasing in the prose survives the switch.
+\usepackage[numbers]{natbib}
+\graphicspath{{figures/}}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+\title{Calibration-Aware Test-Time Adaptation for CLIP}
+\author{Gal Machlin (207627811) \and Idan Yehuda (207016270)}
+% Empty, not omitted: dropping \date entirely makes \maketitle print today's
+% date, which is the opposite of what is wanted here.
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Test-time adaptation (TTA) methods such as TDA~\cite{karmanov2024tda} use only forward
+passes and a feature cache to recover much of the accuracy CLIP loses out of distribution, but
+a 2025 benchmark~\cite{sheng2025illusion} showed that the gain comes with a hidden cost: TDA's
+cache rewards confident predictions whether or not they are correct, so its accuracy gain arrives
+bundled with worse calibration (the benchmark reports average ECE rising 5.70\%
+$\rightarrow$ 9.21\% across its suite). We propose three training-free, label-free changes to
+TDA's cache loop -- margin-based cache admission, probabilistic fusion, and leave-one-out (LOO)
+temperature scaling -- meant to recover calibration. Measured on
+five datasets (\texttt{ViT-B/16}, test split only), the three changes bundled together as
+specified \emph{do not} win: mean accuracy drops from TDA's 56.63\% to 55.22\% and mean ECE
+gets \emph{worse}, from 11.24\% to 24.12\%. An ablation isolating each change shows why: two of
+the three contributions are actively harmful, and the third -- LOO temperature scaling, run
+alone -- is not. It matches the TDA-equivalent baseline's accuracy exactly (56.60\%, to 0.00
+points, a structural guarantee of a monotonic rescaling) while cutting mean ECE from 11.28\%
+to 8.54\%, a 24\% reduction toward zero-shot CLIP's 5.57\%. We report this honestly: the
+bundled method fails, one of its three components alone succeeds, and we explain the
+mechanism behind both outcomes.
+\end{abstract}
+
+\input{sections/introduction}
+\input{sections/related_work}
+\input{sections/method}
+\input{sections/experiments}
+\input{sections/results}
+\input{sections/discussion}
+\input{sections/conclusion}
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+\end{document}
