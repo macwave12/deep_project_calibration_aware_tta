@@ -1,0 +1,17 @@
+# Exploration variant "fusion_gate_sharpen": both: sharpened cache, fused only on two-way ties.
+# Base: configs/method/ablation/fusion.yaml (margin off, fusion on, temperature
+# off). Not part of the ablation; records land in results/raw/exploration/.
+use_margin_admission: false
+margin_threshold: 1.0
+use_prob_fusion: true
+fusion_weight: 0.5
+fusion_gate: true
+fusion_gate_max_gap: 0.2
+fusion_gate_min_mass: 0.6
+fusion_sharpen_cache: true
+use_loo_temperature: false
+
+entropy_threshold: 0.5
+alpha: 2.0
+beta: 5.0
+shot_capacity: 3

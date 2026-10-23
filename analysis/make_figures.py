@@ -223,8 +223,160 @@ def plot_reliability_legend(out_path: Path) -> None:
     plt.close(fig)
 
 
+# --- Ablation figure palette -------------------------------------------------
+# Two hues and one neutral, not one hue per variant: the eight bars are eight
+# measurements of the SAME quantity, so colour here is emphasis, not identity.
+# Identity is carried by the y-tick label on every row, which is why no bar
+# needs a hue of its own.
+#
+# Validated with the dataviz skill's checker (light surface, all pairs):
+#   #7D5BA6 / #DD8452 / #C9C6C0 -> CVD separation 15.2 deutan, 19.3 tritan;
+#   normal-vision floor 17.6. All above the ΔE 15 floor.
+# Two deliberate deviations, both correct for the role each colour plays:
+#   1. #C9C6C0 fails the lightness-band and chroma-floor checks by design --
+#      those checks scope to categorical series, and this is the recessive
+#      ground the highlighted rows are read against.
+#   2. The full method ("all") is NOT given a third hue. The obvious candidate
+#      was #55A868, the green this module already uses for `cal_tda`, but
+#      green-vs-#DD8452-orange measures ΔE 4.5 under protanopia -- a red-green
+#      collision a protan viewer cannot resolve at all. It gets a hatch and a
+#      bold label instead, which is secondary encoding rather than a fourth
+#      colour nobody can see.
+# #7D5BA6 is a higher-chroma step of TEMP_VARIANT_STYLE's #8172B2, which reads
+# as grey at bar size (chroma 0.097, under the 0.1 floor) and would have been
+# indistinguishable from the recessive bars it is supposed to stand out from.
+ABLATION_WINNER_COLOR = "#7D5BA6"
+ABLATION_BASELINE_COLOR = "#DD8452"
+ABLATION_NEUTRAL_COLOR = "#C9C6C0"
+
+# Display names. The parenthesised halves are what keep the two highlighted
+# rows identifiable without reference to their colour.
+ABLATION_VARIANT_LABELS = {
+    "none": "none  (= TDA baseline)",
+    "margin": "margin admission",
+    "fusion": "probabilistic fusion",
+    "temp": "LOO temperature  (ours, best)",
+    "margin_fusion": "margin + fusion",
+    "margin_temp": "margin + temperature",
+    "fusion_temp": "fusion + temperature",
+    "all": "all three  (ours, as specified)",
+}
+
+
+# Second ablation (margin admission off): the same two-panel layout. The
+# highlighted row is now the gate, the hatched row the two-contribution
+# combination, mirroring how the first figure marks "ours, best" and "ours, as
+# specified".
+GATE_ABLATION_VARIANT_LABELS = {
+    "none": "none  (= TDA baseline)",
+    "gate": "gated fusion  (ours, best)",
+    "temp": "LOO temperature",
+    "gate_temp": "gated fusion + temperature",
+}
+
+
+def plot_ablation_ece(
+    ablation: pd.DataFrame, out_path: Path, *,
+    labels: dict = ABLATION_VARIANT_LABELS, winner: str = "temp",
+    baseline: str = "none", hatched: str = "all",
+    title: str = "Ablation: all eight on/off combinations, mean over 5 datasets",
+) -> None:
+    """Mean ECE and mean accuracy per ablation variant, as paired bar panels.
+
+    Two panels rather than one chart with two x-scales: ECE and accuracy are
+    different quantities on different ranges, and overlaying them on twin axes
+    would let the choice of scale decide which contribution looks best. Sharing
+    the y axis gets the comparison across without that liberty -- the reader
+    checks one row's position in both panels.
+
+    Rows are sorted by mean ECE ascending, so "best calibrated" is top. The
+    point the figure has to land is that the top row (`temp`) sits at the SAME
+    accuracy as the baseline it beats on ECE, which is only visible when both
+    panels share a row order.
+    """
+    means = (
+        ablation.groupby("variant")[["accuracy", "ece"]].mean()
+        .reindex(labels)
+        .dropna()
+        .sort_values("ece", ascending=False)  # ascending top-down after invert
+    )
+
+    colors, hatches = [], []
+    for variant in means.index:
+        if variant == winner:
+            colors.append(ABLATION_WINNER_COLOR)
+            hatches.append("")
+        elif variant == baseline:
+            colors.append(ABLATION_BASELINE_COLOR)
+            hatches.append("")
+        else:
+            colors.append(ABLATION_NEUTRAL_COLOR)
+            hatches.append("////" if variant == hatched else "")
+
+    row_labels = [labels[v] for v in means.index]
+    positions = range(len(means))
+
+    fig, (ax_ece, ax_acc) = plt.subplots(
+        1, 2, figsize=(11.5, 4.4), sharey=True,
+        gridspec_kw={"width_ratios": [1.35, 1]},
+    )
+
+    for ax, column, panel_title, xlabel in (
+        (ax_ece, "ece", "Mean ECE  -  lower is better", "ECE, 20 bins (%)"),
+        (ax_acc, "accuracy", "Mean top-1 accuracy  -  higher is better", "accuracy (%)"),
+    ):
+        # height=0.72 leaves a visible surface gap between adjacent bars, so
+        # two same-coloured neighbours never read as one fused block.
+        bars = ax.barh(
+            positions, means[column], height=0.72, color=colors,
+            edgecolor="white", linewidth=0.8, zorder=3,
+        )
+        for bar, hatch in zip(bars, hatches):
+            if hatch:
+                bar.set_hatch(hatch)
+                bar.set_edgecolor("#7A776F")
+        span = float(means[column].max())
+        for position, value in zip(positions, means[column]):
+            # Every bar is labelled, not a selective few: this is a static
+            # figure on a projector slide with no hover layer to fall back on,
+            # and eight rows is few enough that eight numbers do not crowd.
+            # Labels also discharge the validator's contrast warning on the
+            # two sub-3:1 fills.
+            ax.text(
+                value + span * 0.015, position, f"{value:.2f}",
+                va="center", ha="left", fontsize=9.5, color="#333333",
+            )
+        ax.set_xlabel(xlabel, fontsize=10)
+        ax.set_title(panel_title, fontsize=11)
+        ax.set_xlim(0, span * 1.18)
+        ax.grid(axis="x", alpha=0.25, zorder=0)
+        ax.set_axisbelow(True)
+        # The row's name is its label; a tick mark pointing at a bar that
+        # starts at the axis adds nothing and leaves dashes floating in the
+        # gutter of the shared-y right-hand panel.
+        ax.tick_params(axis="y", length=0)
+        for spine in ("top", "right", "left"):
+            ax.spines[spine].set_visible(False)
+
+    # Accuracy bars starting at 0 compress every difference into the last few
+    # percent of the axis; the panel's job is to show the rows are nearly tied,
+    # and a zero baseline shows that honestly. The ECE panel keeps 0 too, since
+    # 0 is a meaningful floor there (perfect calibration).
+    ax_ece.set_yticks(list(positions))
+    ax_ece.set_yticklabels(row_labels, fontsize=10)
+    for tick, variant in zip(ax_ece.get_yticklabels(), means.index):
+        if variant in (winner, hatched):
+            tick.set_fontweight("bold")
+
+    fig.suptitle(title, fontsize=12.5, y=0.985)
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.savefig(out_path, dpi=200)
+    plt.close(fig)
+
+
 def make_all_figures(
-    summary_csv, raw_dir, figures_dir, ablation_csv=None, ablation_raw_dir=None
+    summary_csv, raw_dir, figures_dir, ablation_csv=None, ablation_raw_dir=None,
+    ablation_gate_csv=None,
 ) -> None:
     summary = pd.read_csv(summary_csv)
     raw_dir = Path(raw_dir)
@@ -232,6 +384,7 @@ def make_all_figures(
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     temp_variant = None
+    ablation = None
     if ablation_csv is not None:
         ablation_csv = Path(ablation_csv)
         if ablation_csv.exists():
@@ -241,6 +394,15 @@ def make_all_figures(
     ablation_raw_dir = Path(ablation_raw_dir) if ablation_raw_dir is not None else None
 
     plot_accuracy_vs_ece(summary, figures_dir / "accuracy_vs_ece.png", temp_variant)
+    if ablation is not None:
+        plot_ablation_ece(ablation, figures_dir / "ablation_ece.png")
+    if ablation_gate_csv is not None and Path(ablation_gate_csv).exists():
+        plot_ablation_ece(
+            pd.read_csv(ablation_gate_csv), figures_dir / "ablation_gate_ece.png",
+            labels=GATE_ABLATION_VARIANT_LABELS, winner="gate", baseline="none",
+            hatched="gate_temp",
+            title="Second ablation (margin off): gated fusion x temperature, mean over 5 datasets",
+        )
     plot_reliability_legend(figures_dir / "reliability_legend.png")
     for dataset in summary["dataset"].unique():
         plot_reliability(
@@ -262,10 +424,15 @@ def main() -> None:
         "--ablation-raw-dir", default="results/raw/ablation",
         help="adds the ablation's temp-only reliability curve to each per-dataset diagram",
     )
+    parser.add_argument(
+        "--ablation-gate-csv", default="results/ablation_gate.csv",
+        help="the second ablation (gated fusion x temperature); adds its bar chart, if present",
+    )
     args = parser.parse_args()
 
     make_all_figures(
-        args.summary_csv, args.raw_dir, args.figures_dir, args.ablation_csv, args.ablation_raw_dir
+        args.summary_csv, args.raw_dir, args.figures_dir, args.ablation_csv,
+        args.ablation_raw_dir, ablation_gate_csv=args.ablation_gate_csv,
     )
     print(f"wrote figures to {args.figures_dir}")
 

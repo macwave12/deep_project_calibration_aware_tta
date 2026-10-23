@@ -58,6 +58,38 @@ def probabilistic_fusion(
     return (1.0 - weight) * clip_probs + weight * cache_probs
 
 
+def is_two_way_tie(clip_logits: torch.Tensor, max_gap: float, min_mass: float) -> torch.Tensor:
+    """Per-row: is CLIP torn between exactly two classes?
+
+    True when the top-two probabilities are within `max_gap` of each other AND
+    together hold at least `min_mass` of the distribution. The second clause is
+    what "low entropy" buys: a sample spread thinly over many classes has a
+    small top-two gap too, but there the cache's vote is noise, not a
+    tie-breaker. Thresholds are in probability space, so one global pair means
+    the same thing on 10 classes as on 100.
+    """
+    top2 = clip_logits.softmax(dim=-1).topk(2, dim=-1).values
+    gap = top2[..., 0] - top2[..., 1]
+    mass = top2[..., 0] + top2[..., 1]
+    return (gap < max_gap) & (mass > min_mass)
+
+
+def match_logit_range(cache_logits: torch.Tensor, clip_logits: torch.Tensor) -> torch.Tensor:
+    """Rescale cache logits so their per-row (max - min) equals CLIP's.
+
+    Cache logits are sums of a few exponential similarity weights, so they top
+    out around 2 while CLIP's spread is 5-10; softmaxed as-is over 100 classes
+    the cache is nearly flat and a 50/50 mixture simply halves CLIP's
+    confidence. Matching the spread makes the two distributions comparably
+    peaked before they are mixed. A flat cache (zero range) is returned as is.
+    The scale factor is positive, so the cache's ranking is unchanged.
+    """
+    clip_range = clip_logits.max(dim=-1, keepdim=True).values - clip_logits.min(dim=-1, keepdim=True).values
+    cache_range = cache_logits.max(dim=-1, keepdim=True).values - cache_logits.min(dim=-1, keepdim=True).values
+    scale = torch.where(cache_range > 1e-8, clip_range / cache_range.clamp_min(1e-8), torch.ones_like(cache_range))
+    return cache_logits * scale
+
+
 @dataclass
 class CalTdaConfig:
     """Every knob of our method. Each `use_*` flag isolates one contribution,
@@ -67,6 +99,18 @@ class CalTdaConfig:
     margin_threshold: float = 0.1
     use_prob_fusion: bool = True
     fusion_weight: float = 0.5
+    # Refinements to contribution 2, both off by default so every existing
+    # config and the whole ablation keep their recorded behaviour.
+    #   fusion_gate: fuse only where CLIP is torn between two classes (see
+    #     `is_two_way_tie`); everywhere else the cache stays out and the
+    #     output is plain CLIP, which neither sharpens nor dilutes.
+    #   fusion_sharpen_cache: rescale cache logits to CLIP's spread before the
+    #     softmax (see `match_logit_range`) so the mixture is not dominated by
+    #     a nearly flat cache distribution.
+    fusion_gate: bool = False
+    fusion_gate_max_gap: float = 0.2
+    fusion_gate_min_mass: float = 0.6
+    fusion_sharpen_cache: bool = False
     use_loo_temperature: bool = True
 
     # Inherited from TDA; kept so `cal_tda` with all flags off == `tda`.
@@ -94,8 +138,12 @@ class CalTdaConfig:
         ]
         if self.use_prob_fusion:
             inert.append('alpha')  # the fusion branch never reads it
+            if not self.fusion_gate:
+                inert += ['fusion_gate_max_gap', 'fusion_gate_min_mass']
         else:
-            inert.append('fusion_weight')  # the additive branch never reads it
+            # The additive branch never reads any fusion knob.
+            inert += ['fusion_weight', 'fusion_gate', 'fusion_gate_max_gap',
+                      'fusion_gate_min_mass', 'fusion_sharpen_cache']
         if not self.use_margin_admission:
             inert.append('margin_threshold')
         return sorted(inert)
@@ -130,6 +178,25 @@ class CalTdaConfig:
         return cls(**data)
 
 
+def fusion_probs(
+    clip_logits: torch.Tensor,
+    cache_logits: torch.Tensor,
+    config: CalTdaConfig,
+) -> torch.Tensor:
+    """Contribution 2 with its refinements: the fused distribution, pre-temperature.
+
+    Order: sharpen the cache (if enabled), mix, then gate (if enabled). Gating
+    last means the ungated rows are exactly softmax(clip_logits), untouched by
+    the cache in either direction.
+    """
+    cache = match_logit_range(cache_logits, clip_logits) if config.fusion_sharpen_cache else cache_logits
+    fused = probabilistic_fusion(clip_logits, cache, config.fusion_weight)
+    if not config.fusion_gate:
+        return fused
+    tie = is_two_way_tie(clip_logits, config.fusion_gate_max_gap, config.fusion_gate_min_mass)
+    return torch.where(tie.unsqueeze(-1), fused, clip_logits.softmax(dim=-1))
+
+
 def pre_temperature_logits(
     clip_logits: torch.Tensor,
     cache_logits: torch.Tensor,
@@ -142,8 +209,7 @@ def pre_temperature_logits(
     pins the two definitions together.
     """
     if config.use_prob_fusion:
-        fused = probabilistic_fusion(clip_logits, cache_logits, config.fusion_weight)
-        return fused.clamp_min(1e-12).log()
+        return fusion_probs(clip_logits, cache_logits, config).clamp_min(1e-12).log()
     return clip_logits + config.alpha * cache_logits
 
 
@@ -158,7 +224,7 @@ def finalize_probs(
     With every flag off this is exactly upstream TDA: softmax(clip + alpha*cache).
     """
     if config.use_prob_fusion:
-        probs = probabilistic_fusion(clip_logits, cache_logits, config.fusion_weight)
+        probs = fusion_probs(clip_logits, cache_logits, config)
         if config.use_loo_temperature and temperature != 1.0:
             # Re-enter logit space to apply temperature, then renormalize.
             probs = (probs.clamp_min(1e-12).log() / temperature).softmax(dim=-1)

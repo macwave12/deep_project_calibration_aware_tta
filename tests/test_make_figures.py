@@ -57,3 +57,38 @@ def test_reruns_are_idempotent(fake_results):
     # accumulating, so the count must stay exact -- not >=.
     assert len(list(figures.glob("*.png"))) == 4
     assert (figures / "reliability_legend.png").exists()
+
+
+@pytest.fixture
+def fake_ablation(tmp_path):
+    """All eight variants x two datasets, so the figure's groupby has something
+    to average and `reindex` sees every key it expects."""
+    variants = [
+        "none", "margin", "fusion", "temp",
+        "margin_fusion", "margin_temp", "fusion_temp", "all",
+    ]
+    rows = [
+        {"dataset": dataset, "variant": variant,
+         "accuracy": 50.0 + index, "ece": 20.0 - index}
+        for dataset in ["dtd", "pets"]
+        for index, variant in enumerate(variants)
+    ]
+    path = tmp_path / "ablation.csv"
+    pd.DataFrame(rows).to_csv(path, index=False)
+    return path
+
+
+def test_creates_the_ablation_bar_chart(fake_results, fake_ablation):
+    summary, raw, figures = fake_results
+    make_all_figures(summary, raw, figures, ablation_csv=fake_ablation)
+    chart = figures / "ablation_ece.png"
+    assert chart.exists() and chart.stat().st_size > 0
+
+
+def test_no_ablation_chart_without_an_ablation_csv(fake_results, tmp_path):
+    """A missing ablation CSV must leave the figure absent rather than emitting
+    an empty one -- a blank 8-bar chart would read as 'the ablation ran and
+    found nothing', which is a different claim from 'the ablation was not run'."""
+    summary, raw, figures = fake_results
+    make_all_figures(summary, raw, figures, ablation_csv=tmp_path / "missing.csv")
+    assert not (figures / "ablation_ece.png").exists()

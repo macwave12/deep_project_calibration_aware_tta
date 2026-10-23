@@ -1,0 +1,21 @@
+# Second ablation, variant "none": neither contribution: TDA-equivalent baseline.
+# Two contributions, both on/off: gated probabilistic fusion (fuse only on
+# two-way ties, plain CLIP elsewhere) and LOO temperature. Margin admission is
+# off throughout; the cache is filled by upstream TDA's own rule.
+# The "none" and "temp" records are byte-for-byte the same runs as the first
+# ablation's (same code path, seed and config); scripts/run_ablation_gate.ps1
+# regenerates all twenty from scratch.
+use_margin_admission: false
+margin_threshold: 1.0
+use_prob_fusion: false
+fusion_weight: 0.5
+fusion_gate: false
+fusion_gate_max_gap: 0.2
+fusion_gate_min_mass: 0.6
+fusion_sharpen_cache: false
+use_loo_temperature: false
+
+entropy_threshold: 0.5
+alpha: 2.0
+beta: 5.0
+shot_capacity: 3

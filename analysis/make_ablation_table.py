@@ -32,7 +32,45 @@ VARIANT_LABEL = {
 }
 
 
-def build_ablation(raw_dir, out_csv, out_tex) -> pd.DataFrame:
+# The second ablation keeps only the two contributions that survived the first
+# one -- gated probabilistic fusion and LOO temperature -- with margin admission
+# off throughout. Same shape of study, half the flags, four variants.
+GATE_VARIANT_ORDER = ["none", "gate", "temp", "gate_temp"]
+GATE_VARIANT_LABEL = {
+    "none": "none: TDA-equivalent (both off)",
+    "gate": "gate: + gated fusion",
+    "temp": "temp: + LOO temperature",
+    "gate_temp": "gate_temp: + gated fusion + temperature",
+}
+
+DEFAULT_CAPTION = "Ablation: mean accuracy and ECE (\\%) across the five datasets."
+
+STUDIES = {
+    "three": dict(
+        raw_dir="results/raw/ablation",
+        out_csv="results/ablation.csv",
+        out_tex="report/tables/ablation.tex",
+        variant_order=VARIANT_ORDER,
+        variant_label=VARIANT_LABEL,
+        caption=DEFAULT_CAPTION,
+        label="tab:ablation",
+    ),
+    "gate": dict(
+        raw_dir="results/raw/ablation_gate",
+        out_csv="results/ablation_gate.csv",
+        out_tex="report/tables/ablation_gate.tex",
+        variant_order=GATE_VARIANT_ORDER,
+        variant_label=GATE_VARIANT_LABEL,
+        caption=("Second ablation, margin admission off: mean accuracy and ECE (\\%) "
+                 "across the five datasets for gated fusion and LOO temperature."),
+        label="tab:ablation-gate",
+    ),
+}
+
+
+def build_ablation(raw_dir, out_csv, out_tex, *, variant_order=VARIANT_ORDER,
+                   variant_label=VARIANT_LABEL, caption=DEFAULT_CAPTION,
+                   label="tab:ablation") -> pd.DataFrame:
     raw_dir = Path(raw_dir)
     files = sorted(raw_dir.glob("*.json"))
     if not files:
@@ -53,15 +91,15 @@ def build_ablation(raw_dir, out_csv, out_tex) -> pd.DataFrame:
 
     frame = pd.DataFrame(rows)
     frame["_v"] = frame["variant"].apply(
-        lambda v: VARIANT_ORDER.index(v) if v in VARIANT_ORDER else len(VARIANT_ORDER)
+        lambda v: variant_order.index(v) if v in variant_order else len(variant_order)
     )
     frame = frame.sort_values(["_v", "dataset"]).drop(columns="_v")
 
     means = (
         frame.groupby("variant")[["accuracy", "ece"]].mean().round(2)
-        .reindex([v for v in VARIANT_ORDER if v in set(frame["variant"])])
+        .reindex([v for v in variant_order if v in set(frame["variant"])])
     )
-    means.index = [VARIANT_LABEL.get(v, v) for v in means.index]
+    means.index = [variant_label.get(v, v) for v in means.index]
 
     Path(out_csv).parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(out_csv, index=False)
@@ -75,8 +113,8 @@ def build_ablation(raw_dir, out_csv, out_tex) -> pd.DataFrame:
                 # margin_temp, fusion_temp), so this is load-bearing, not defensive.
                 escape=True,
             ),
-            caption="Ablation: mean accuracy and ECE (\\%) across the five datasets.",
-            label="tab:ablation",
+            caption=caption,
+            label=label,
         ),
         encoding="utf-8",
     )
@@ -85,12 +123,26 @@ def build_ablation(raw_dir, out_csv, out_tex) -> pd.DataFrame:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--raw-dir", default="results/raw/ablation")
-    parser.add_argument("--out-csv", default="results/ablation.csv")
-    parser.add_argument("--out-tex", default="report/tables/ablation.tex")
+    parser.add_argument(
+        "--study", choices=sorted(STUDIES), default="three",
+        help="which ablation to build: 'three' (the original 8-variant study) or "
+             "'gate' (gated fusion x temperature, margin off); sets the defaults below",
+    )
+    parser.add_argument("--raw-dir", default=None)
+    parser.add_argument("--out-csv", default=None)
+    parser.add_argument("--out-tex", default=None)
     args = parser.parse_args()
 
-    frame = build_ablation(args.raw_dir, args.out_csv, args.out_tex)
+    study = STUDIES[args.study]
+    frame = build_ablation(
+        args.raw_dir or study["raw_dir"],
+        args.out_csv or study["out_csv"],
+        args.out_tex or study["out_tex"],
+        variant_order=study["variant_order"],
+        variant_label=study["variant_label"],
+        caption=study["caption"],
+        label=study["label"],
+    )
     print(frame.to_string(index=False))
 
 
