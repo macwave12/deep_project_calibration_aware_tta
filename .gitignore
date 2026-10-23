@@ -25,6 +25,15 @@ output_results/
 *.sh
 !scripts/*.sh
 
+# Slide renders used to eyeball the deck during a build; regenerate on demand
+presentation/_preview/
+
+# Illustrative figures the deck builder regenerates on every run
+presentation/assets/
+
+# PowerPoint lock file left behind while the deck is open
+presentation/~$*.pptx
+
 # LaTeX build intermediates (main.pdf IS committed - it is the deliverable)
 report/*.aux
 report/*.log

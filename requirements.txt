@@ -13,4 +13,5 @@ ftfy>=6.2
 regex>=2024.5.15
 tqdm>=4.66
 pytest>=8.0
+python-pptx>=1.0.2
 info-nce-pytorch>=0.1.4
