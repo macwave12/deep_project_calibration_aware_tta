@@ -27,6 +27,7 @@ foreach ($dataset in $datasets) {
 }
 
 python analysis/make_ablation_table.py --study gate
+python analysis/make_contribution_tables.py
 python analysis/make_figures.py
 
 Write-Host "done: results/ablation_gate.csv, report/tables/ablation_gate.tex and analysis/figures/ are up to date"

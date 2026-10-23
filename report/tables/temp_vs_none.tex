@@ -1,0 +1,17 @@
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+Dataset & none acc. & temp acc. & none ECE & temp ECE \\
+\midrule
+DTD & 47.04 & 47.04 & 17.41 & 4.68 \\
+Flowers102 & 69.79 & 69.79 & 6.51 & 4.85 \\
+Pets & 88.74 & 88.74 & 2.48 & 15.54 \\
+EuroSAT & 53.22 & 53.22 & 14.43 & 13.43 \\
+Aircraft & 24.21 & 24.21 & 15.56 & 4.21 \\
+Mean & 56.60 & 56.60 & 11.28 & 8.54 \\
+\bottomrule
+\end{tabular}
+\caption{LOO temperature scaling against the TDA-equivalent baseline (\texttt{none}): accuracy and ECE (\%) per dataset. Accuracy is identical by construction.}
+\label{tab:temp}
+\end{table}

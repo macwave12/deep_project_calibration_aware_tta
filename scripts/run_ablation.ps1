@@ -23,6 +23,7 @@ foreach ($dataset in $datasets) {
 }
 
 python analysis/make_ablation_table.py
+python analysis/make_contribution_tables.py
 
 # The headline scatter and every per-dataset reliability diagram now also plot the
 # ablation's `temp` variant (results/ablation.csv, results/raw/ablation/), so figures must

@@ -1,0 +1,17 @@
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+Dataset & none acc. & fusion acc. & none ECE & fusion ECE \\
+\midrule
+DTD & 47.04 & 45.80 & 17.41 & 17.69 \\
+Flowers102 & 69.79 & 68.90 & 6.51 & 32.46 \\
+Pets & 88.74 & 88.77 & 2.48 & 43.78 \\
+EuroSAT & 53.22 & 50.12 & 14.43 & 19.62 \\
+Aircraft & 24.21 & 24.42 & 15.56 & 9.16 \\
+Mean & 56.60 & 55.60 & 11.28 & 24.54 \\
+\bottomrule
+\end{tabular}
+\caption{Probabilistic fusion as proposed (ungated, $w = 0.5$) against the TDA-equivalent baseline (\texttt{none}): accuracy and ECE (\%) per dataset.}
+\label{tab:fusion}
+\end{table}

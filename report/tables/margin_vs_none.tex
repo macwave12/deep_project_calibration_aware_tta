@@ -1,0 +1,17 @@
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lrrrrr}
+\toprule
+Dataset & none acc. & margin acc. & none ECE & margin ECE & Admission rate \\
+\midrule
+DTD & 47.04 & 44.86 & 17.41 & 20.11 & 52.96 \\
+Flowers102 & 69.79 & 67.19 & 6.51 & 8.63 & 65.69 \\
+Pets & 88.74 & 88.42 & 2.48 & 2.53 & 81.90 \\
+EuroSAT & 53.22 & 48.91 & 14.43 & 26.38 & 26.54 \\
+Aircraft & 24.21 & 18.96 & 15.56 & 32.64 & 15.93 \\
+Mean & 56.60 & 53.67 & 11.28 & 18.06 & 48.60 \\
+\bottomrule
+\end{tabular}
+\caption{Margin admission against the TDA-equivalent baseline (\texttt{none}, all flags off, run in the same sweep): accuracy and ECE (\%) per dataset, and the fraction of test samples the margin gate admitted to the cache.}
+\label{tab:margin}
+\end{table}

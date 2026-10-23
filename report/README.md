@@ -1,9 +1,11 @@
 # Report
 
-`main.tex` plus `sections/*.tex` and `refs.bib`. Two of the tables and all of the figures are
+`main.tex` plus `sections/*.tex` and `refs.bib`. Every results table and every figure is
 generated, not hand-written:
 
 - `tables/ablation.tex` &mdash; `analysis/make_ablation_table.py`
+- `tables/ablation_gate.tex` &mdash; `analysis/make_ablation_table.py --study gate`
+- `tables/{margin,fusion,gate,temp}_vs_none.tex` &mdash; `analysis/make_contribution_tables.py`
 - `../results/summary_table.tex` &mdash; `analysis/aggregate.py`
 - `figures/*.png` &mdash; `analysis/make_figures.py`, copied here from `analysis/figures/`
   (copied, never symlinked; kept in sync by `scripts/run_all.ps1` / `.sh`)
