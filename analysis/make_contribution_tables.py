@@ -30,17 +30,17 @@ BASELINE = "none"
 # (key, study, variant, label, caption)
 TABLES = [
     ("margin", "first", "margin", "tab:margin",
-     "Margin admission against the TDA-equivalent baseline (\\texttt{none}, all flags off, "
+     "Margin admission against the TDA-equivalent baseline (\\emph{none}, all flags off, "
      "run in the same sweep): accuracy and ECE (\\%) per dataset, and the fraction of test "
      "samples the margin gate admitted to the cache."),
     ("fusion", "first", "fusion", "tab:fusion",
      "Probabilistic fusion as proposed (ungated, $w = 0.5$) against the TDA-equivalent "
-     "baseline (\\texttt{none}): accuracy and ECE (\\%) per dataset."),
+     "baseline (\\emph{none}): accuracy and ECE (\\%) per dataset."),
     ("gate", "second", "gate", "tab:gate",
-     "Gated probabilistic fusion against the TDA-equivalent baseline (\\texttt{none}): "
+     "Gated probabilistic fusion against the TDA-equivalent baseline (\\emph{none}): "
      "accuracy and ECE (\\%) per dataset."),
     ("temp", "second", "temp", "tab:temp",
-     "LOO temperature scaling against the TDA-equivalent baseline (\\texttt{none}): "
+     "LOO temperature scaling against the TDA-equivalent baseline (\\emph{none}): "
      "accuracy and ECE (\\%) per dataset. Accuracy is identical by construction."),
 ]
 

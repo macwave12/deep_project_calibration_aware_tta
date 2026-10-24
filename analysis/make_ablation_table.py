@@ -32,8 +32,8 @@ VARIANT_LABEL = {
 }
 
 
-# The second ablation keeps only the two contributions that survived the first
-# one -- gated probabilistic fusion and LOO temperature -- with margin admission
+# The margin-off ablation keeps only the two contributions that survived the
+# per-contribution sweep -- gated probabilistic fusion and LOO temperature -- with margin admission
 # off throughout. Same shape of study, half the flags, four variants.
 GATE_VARIANT_ORDER = ["none", "gate", "temp", "gate_temp"]
 GATE_VARIANT_LABEL = {
@@ -61,7 +61,7 @@ STUDIES = {
         out_tex="report/tables/ablation_gate.tex",
         variant_order=GATE_VARIANT_ORDER,
         variant_label=GATE_VARIANT_LABEL,
-        caption=("Second ablation, margin admission off: mean accuracy and ECE (\\%) "
+        caption=("Ablation with margin admission off: mean accuracy and ECE (\\%) "
                  "across the five datasets for gated fusion and LOO temperature."),
         label="tab:ablation-gate",
     ),
