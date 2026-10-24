@@ -13,7 +13,8 @@ def fake_results(tmp_path):
     rows = []
     for dataset in ["dtd", "pets"]:
         for method, accuracy, ece in [
-            ("clipzs", 40.2, 5.7), ("tda", 43.1, 9.2), ("cal_tda", 43.0, 6.1)
+            ("clipzs", 40.2, 5.7), ("tda", 43.1, 9.2), ("cal_tda_gate_temp", 42.0, 6.5),
+            ("cal_tda_gate", 42.0, 4.9), ("cal_tda_temp", 43.1, 7.0),
         ]:
             rows.append({
                 "dataset": dataset, "method": method, "accuracy": accuracy, "ece": ece,
@@ -32,6 +33,24 @@ def fake_results(tmp_path):
     summary = tmp_path / "summary.csv"
     pd.DataFrame(rows).to_csv(summary, index=False)
     return summary, raw, tmp_path / "figures"
+
+
+def test_legend_lists_every_headline_method():
+    from analysis.aggregate import METHOD_ORDER
+    from analysis.make_figures import METHOD_STYLE
+    assert list(METHOD_STYLE) == METHOD_ORDER
+
+
+def test_missing_headline_record_warns(fake_results):
+    summary, raw, figures = fake_results
+    (raw / "dtd_cal_tda_gate.json").unlink()
+    with pytest.warns(UserWarning, match="cal_tda_gate"):
+        make_all_figures(summary, raw, figures)
+
+
+def test_make_all_figures_no_longer_takes_an_ablation_raw_dir():
+    import inspect
+    assert "ablation_raw_dir" not in inspect.signature(make_all_figures).parameters
 
 
 def test_creates_the_headline_scatter(fake_results):

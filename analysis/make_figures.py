@@ -1,7 +1,9 @@
 """Generate every figure the report uses. No manual plotting, ever.
 
 Headline claim, stated visually: our point should sit as far right as TDA
-(same accuracy) but as far down as zero-shot CLIP (honest confidence).
+(same accuracy) but as far down as zero-shot CLIP (honest confidence). The
+five series in the scatter, the reliability panels and their shared legend
+all come from METHOD_STYLE, so the three cannot disagree.
 """
 
 from __future__ import annotations
@@ -17,26 +19,29 @@ matplotlib.use("Agg")  # headless: figures are files, not windows
 import matplotlib.pyplot as plt  # noqa: E402
 import pandas as pd  # noqa: E402
 
+# The five headline methods, in results/summary.csv's METHOD_ORDER. One dict
+# drives the scatter, every reliability panel and the shared legend, so the
+# three cannot list different series. `cal_tda_gate` is the recommended method.
+# The fifth hue (#CCB974, muted yellow) was chosen away from the four existing
+# method hues and from the five dataset-connector hues below.
 METHOD_STYLE = {
     "clipzs": {"label": "CLIP zero-shot", "marker": "o", "color": "#4C72B0"},
     "tda": {"label": "TDA (CVPR'24)", "marker": "s", "color": "#DD8452"},
-    "cal_tda": {"label": "Ours, all 3 contributions (loses on ECE)", "marker": "*", "color": "#55A868"},
-}
-# The ablation's best-performing variant (LOO temperature scaling alone, margin
-# admission and probabilistic fusion both off) -- the configuration the README
-# actually recommends, not the three-contribution bundle above. Plotted
-# separately so the headline figure shows the result this project stands
-# behind, not just the one it argues against.
-TEMP_VARIANT_STYLE = {
-    "label": "Ours, temperature only (recommended)", "marker": "D", "color": "#8172B2",
+    "cal_tda_gate_temp": {
+        "label": "Ours: gated fusion + LOO temperature", "marker": "^", "color": "#CCB974",
+    },
+    "cal_tda_gate": {
+        "label": "Ours: gated fusion (recommended)", "marker": "D", "color": "#8172B2",
+    },
+    "cal_tda_temp": {"label": "Ours: LOO temperature", "marker": "*", "color": "#55A868"},
 }
 
 # Connector colours for the per-dataset lines in the headline scatter. Marker
 # colour already encodes the method, so one flat grey for every connector left
 # DTD's and EuroSAT's point clouds interleaved with no way to tell which point
-# belonged to which line. These hues are deliberately chosen away from the four
-# method colours above (blue / orange / green / purple) so a thin connector is
-# never mistaken for a marker's colour.
+# belonged to which line. These hues are deliberately chosen away from the five
+# method colours above (blue / orange / yellow / purple / green) so a thin
+# connector is never mistaken for a marker's colour.
 DATASET_LINE_COLORS = [
     "#C44E52",  # red
     "#937860",  # brown
@@ -46,9 +51,7 @@ DATASET_LINE_COLORS = [
 ]
 
 
-def plot_accuracy_vs_ece(
-    summary: pd.DataFrame, out_path: Path, temp_variant: pd.DataFrame | None = None
-) -> None:
+def plot_accuracy_vs_ece(summary: pd.DataFrame, out_path: Path) -> None:
     fig, ax = plt.subplots(figsize=(6.5, 5))
     for method, style in METHOD_STYLE.items():
         subset = summary[summary["method"] == method]
@@ -59,17 +62,8 @@ def plot_accuracy_vs_ece(
             marker=style["marker"], color=style["color"], s=110,
             label=style["label"], edgecolors="white", linewidths=0.8, zorder=3,
         )
-    if temp_variant is not None and not temp_variant.empty:
-        style = TEMP_VARIANT_STYLE
-        ax.scatter(
-            temp_variant["accuracy"], temp_variant["ece"],
-            marker=style["marker"], color=style["color"], s=110,
-            label=style["label"], edgecolors="white", linewidths=0.8, zorder=3,
-        )
-    # The grey polyline joins every point belonging to one dataset, so the eye can
-    # follow a single dataset across methods. The temp-only variant is one of those
-    # points -- it was previously scattered but left off the line, which made the
-    # recommended configuration look like it belonged to no dataset at all.
+    # The polyline joins every point belonging to one dataset, so the eye can
+    # follow a single dataset across methods.
     #
     # Points are joined in increasing accuracy, not in method order. Method order
     # makes the path double back on itself (TDA is the most accurate on most
@@ -78,16 +72,9 @@ def plot_accuracy_vs_ece(
     # The line carries no ordering meaning of its own -- it only says "same
     # dataset" -- so sorting by x costs nothing and guarantees a path that never
     # crosses itself.
-    temp_by_dataset = (
-        temp_variant.set_index("dataset") if temp_variant is not None and not temp_variant.empty
-        else None
-    )
     for index, (dataset, group) in enumerate(summary.groupby("dataset")):
         ordered = group.set_index("method").reindex(METHOD_STYLE).dropna(subset=["accuracy"])
         points = list(zip(ordered["accuracy"], ordered["ece"]))
-        if temp_by_dataset is not None and dataset in temp_by_dataset.index:
-            row = temp_by_dataset.loc[dataset]
-            points.append((row["accuracy"], row["ece"]))
         if not points:
             continue
         points.sort(key=lambda p: p[0])
@@ -118,11 +105,8 @@ def plot_accuracy_vs_ece(
     plt.close(fig)
 
 
-def plot_reliability(
-    raw_dir: Path, dataset: str, out_path: Path, ablation_raw_dir: Path | None = None
-) -> None:
-    """One reliability curve per headline method, plus the ablation's `temp` variant if
-    `ablation_raw_dir` has a record for this dataset.
+def plot_reliability(raw_dir: Path, dataset: str, out_path: Path) -> None:
+    """One reliability curve per headline method (every key of METHOD_STYLE).
 
     A record that is silently missing must not produce a figure that looks like a complete
     one with fewer curves -- on a fresh clone without `results/raw/` committed, this used to
@@ -143,7 +127,8 @@ def plot_reliability(
         record_path = raw_dir / f"{dataset}_{method}.json"
         if not record_path.exists():
             warnings.warn(
-                f"plot_reliability({dataset}): no run record at {record_path} -- the "
+                f"plot_reliability({dataset}): no run record for method '{method}' at "
+                f"{record_path} -- the "
                 f"'{style['label']}' curve will be MISSING from {out_path.name}, not just "
                 f"absent from this dataset by design. Check results/raw/ is populated "
                 f"(committed, or regenerated by scripts/run_all).",
@@ -160,26 +145,6 @@ def plot_reliability(
             [p[0] for p in points], [p[1] for p in points],
             marker=style["marker"], color=style["color"], label=style["label"], linewidth=1.5,
         )
-
-    if ablation_raw_dir is not None:
-        temp_path = Path(ablation_raw_dir) / f"{dataset}_temp.json"
-        if temp_path.exists():
-            curve = json.loads(temp_path.read_text(encoding="utf-8"))["reliability"]
-            points = [
-                (c, a) for c, a, n in zip(curve["bin_conf"], curve["bin_acc"], curve["bin_count"]) if n > 0
-            ]
-            if points:
-                style = TEMP_VARIANT_STYLE
-                ax.plot(
-                    [p[0] for p in points], [p[1] for p in points],
-                    marker=style["marker"], color=style["color"], label=style["label"], linewidth=1.5,
-                )
-        else:
-            warnings.warn(
-                f"plot_reliability({dataset}): no ablation record at {temp_path} -- the "
-                f"recommended temp-only curve will be MISSING from {out_path.name}.",
-                stacklevel=2,
-            )
 
     # These panels are placed five-to-a-figure in the report, each scaled to about
     # 0.48\textwidth -- roughly 0.6x. Matplotlib's defaults (10pt) land near 6pt on
@@ -213,7 +178,7 @@ def plot_reliability_legend(out_path: Path) -> None:
         ax.plot([], [], linestyle="--", color="black", alpha=0.5,
                 label="perfect calibration")[0],
     ]
-    for style in list(METHOD_STYLE.values()) + [TEMP_VARIANT_STYLE]:
+    for style in METHOD_STYLE.values():
         handles.append(
             ax.plot([], [], marker=style["marker"], color=style["color"],
                     linewidth=1.5, label=style["label"])[0]
@@ -242,7 +207,7 @@ def plot_reliability_legend(out_path: Path) -> None:
 #      collision a protan viewer cannot resolve at all. It gets a hatch and a
 #      bold label instead, which is secondary encoding rather than a fourth
 #      colour nobody can see.
-# #7D5BA6 is a higher-chroma step of TEMP_VARIANT_STYLE's #8172B2, which reads
+# #7D5BA6 is a higher-chroma step of METHOD_STYLE["cal_tda_gate"]'s #8172B2, which reads
 # as grey at bar size (chroma 0.097, under the 0.1 floor) and would have been
 # indistinguishable from the recessive bars it is supposed to stand out from.
 ABLATION_WINNER_COLOR = "#7D5BA6"
@@ -375,25 +340,18 @@ def plot_ablation_ece(
 
 
 def make_all_figures(
-    summary_csv, raw_dir, figures_dir, ablation_csv=None, ablation_raw_dir=None,
-    ablation_gate_csv=None,
+    summary_csv, raw_dir, figures_dir, ablation_csv=None, ablation_gate_csv=None,
 ) -> None:
     summary = pd.read_csv(summary_csv)
     raw_dir = Path(raw_dir)
     figures_dir = Path(figures_dir)
     figures_dir.mkdir(parents=True, exist_ok=True)
 
-    temp_variant = None
     ablation = None
-    if ablation_csv is not None:
-        ablation_csv = Path(ablation_csv)
-        if ablation_csv.exists():
-            ablation = pd.read_csv(ablation_csv)
-            temp_variant = ablation[ablation["variant"] == "temp"][["dataset", "accuracy", "ece"]]
+    if ablation_csv is not None and Path(ablation_csv).exists():
+        ablation = pd.read_csv(ablation_csv)
 
-    ablation_raw_dir = Path(ablation_raw_dir) if ablation_raw_dir is not None else None
-
-    plot_accuracy_vs_ece(summary, figures_dir / "accuracy_vs_ece.png", temp_variant)
+    plot_accuracy_vs_ece(summary, figures_dir / "accuracy_vs_ece.png")
     if ablation is not None:
         plot_ablation_ece(ablation, figures_dir / "ablation_ece.png")
     if ablation_gate_csv is not None and Path(ablation_gate_csv).exists():
@@ -405,10 +363,7 @@ def make_all_figures(
         )
     plot_reliability_legend(figures_dir / "reliability_legend.png")
     for dataset in summary["dataset"].unique():
-        plot_reliability(
-            raw_dir, dataset, figures_dir / f"reliability_{dataset}.png",
-            ablation_raw_dir=ablation_raw_dir,
-        )
+        plot_reliability(raw_dir, dataset, figures_dir / f"reliability_{dataset}.png")
 
 
 def main() -> None:
@@ -418,11 +373,7 @@ def main() -> None:
     parser.add_argument("--figures-dir", default="analysis/figures")
     parser.add_argument(
         "--ablation-csv", default="results/ablation.csv",
-        help="adds the ablation's temp-only variant to the headline scatter, if present",
-    )
-    parser.add_argument(
-        "--ablation-raw-dir", default="results/raw/ablation",
-        help="adds the ablation's temp-only reliability curve to each per-dataset diagram",
+        help="the first ablation (three contributions); adds its bar chart, if present",
     )
     parser.add_argument(
         "--ablation-gate-csv", default="results/ablation_gate.csv",
@@ -432,7 +383,7 @@ def main() -> None:
 
     make_all_figures(
         args.summary_csv, args.raw_dir, args.figures_dir, args.ablation_csv,
-        args.ablation_raw_dir, ablation_gate_csv=args.ablation_gate_csv,
+        ablation_gate_csv=args.ablation_gate_csv,
     )
     print(f"wrote figures to {args.figures_dir}")
 
