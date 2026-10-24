@@ -1,16 +1,26 @@
 \section{Conclusion}
 
 This project set out to undo TDA's calibration loss with three training-free, label-free
-changes to its cache loop, and measured whether that worked rather than assuming it. It did not:
-bundled together as specified, the three contributions meet the project's own success criterion
-on 0 of 5 datasets, trading away both accuracy and calibration relative to plain TDA. But the
-ablation that made this failure legible also isolated a real success inside it -- leave-one-out
-temperature scaling, run alone, matches TDA-equivalent accuracy exactly while cutting mean ECE
-by 24\% toward zero-shot CLIP's level, and meets the success criterion on 4 of 5 datasets, for
-a structural reason (a monotonic
-rescaling cannot move accuracy) that makes the result as close to guaranteed-safe as a
-calibration intervention gets. Margin admission and probabilistic fusion, the other two
-contributions, are the ones actually responsible for the bundle's failure, and neither helps
-consistently even in isolation. The finding this report stands behind is therefore narrower and
-more specific than the one we set out to demonstrate: not ``three changes fix TDA's
-calibration,'' but ``one of three does, and we now know which, and why the other two do not.''
+changes to its cache loop, and measured each one rather than assuming it worked. Margin-based
+cache admission fails outright: its fixed logit threshold does not port across datasets, a
+starved cache is a biased cache, and the top-two gap cannot tell a confident mistake from a
+confident success, so the gate removes the wrong samples. We dropped it. Probabilistic fusion
+fails as proposed, for a reason the equation makes visible once the two inputs' scales are
+compared: a nearly flat cache distribution averaged into CLIP's peaked one caps every
+prediction's confidence near one half, and ECE punishes that underconfidence exactly as it
+punishes overconfidence. The repair follows from the diagnosis. Fusing only where CLIP is torn
+between two classes, and leaving the cache out everywhere else, removes the dilution while
+keeping the one thing the cache is good for, breaking ties. Gated fusion lowers TDA's mean ECE
+from 11.24\% to 4.61\%, below zero-shot CLIP's own 5.57\%, at a mean accuracy cost of 1.62
+points, most of it on EuroSAT. Leave-one-out temperature scaling helps on its own, cutting mean
+ECE to 8.54\% at unchanged accuracy, but reverses on the dataset that was already calibrated
+and adds nothing on top of the gate, because the gate has already removed the overconfidence it
+was built to correct.
+
+The method we recommend is therefore TDA's cache with gated probabilistic fusion: one extra
+comparison per sample, no labels, no training, no change to the cache itself. Against the
+project's own success criterion it passes on one dataset of five, and we report that count as
+it stands. What the result supports is a narrower and, we think, more useful claim than the one
+we set out to make: that TDA's calibration loss comes from consulting the cache on samples
+where it can only add confidence, and that the gap between CLIP's top two scores, applied at
+prediction time rather than at admission time, is enough to tell those samples apart.

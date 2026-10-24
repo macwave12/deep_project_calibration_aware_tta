@@ -1,12 +1,12 @@
 \section{Method}
 \label{sec:method}
 
-All three changes are implemented as switchable seams in \texttt{online\_method/cal\_tda.py},
-whose \texttt{CalTDA} class subclasses upstream TDA's runner class. With every flag off, \texttt{CalTDA} reduces
-exactly to upstream TDA -- same caches, same per-dataset $\alpha/\beta$ hyperparameters, same
-additive combination -- which is the equivalence this project treats as a correctness
-invariant (verified at the unit-test level in \texttt{tests/test\_cal\_tda\_runner.py} and, at the
-level of a full run, by the \texttt{none} row of the ablation in Table~\ref{tab:ablation}).
+All three changes are implemented as independently switchable options on top of upstream
+TDA's runner. With every option off, our method reduces exactly to upstream TDA -- same caches,
+same per-dataset $\alpha/\beta$ hyperparameters, same additive combination -- which is the
+equivalence this project treats as a correctness invariant (verified by unit tests and, at the
+level of a full run, by the \emph{none} rows of Tables~\ref{tab:margin}--\ref{tab:temp} and
+Table~\ref{tab:ablation-gate}).
 
 \subsection{Contribution 1: margin-based cache admission}
 
@@ -18,7 +18,7 @@ sample, let $z_{(1)}$ and $z_{(2)}$ be its two largest entries. The \emph{margin
     m = z_{(1)} - z_{(2)},
 \end{equation}
 and a sample is admitted to the positive cache only when $m$ exceeds a fixed global threshold
-(\texttt{margin\_threshold} $= 1.0$). Rationale: entropy conflates ``the model is decisive''
+(set to $1.0$). Rationale: entropy conflates ``the model is decisive''
 with ``the model is decisive about a class it has seen a lot of evidence for''; the top-1/top-2
 gap is a more direct decisiveness signal and does not require normalizing by the number of
 classes.
@@ -72,25 +72,18 @@ regardless of which reason came first.) Temperature scaling is a
 monotonic rescaling of the logits, so applying it never changes a prediction, only its reported
 confidence.
 
-% The \allowbreak after each \_ is load-bearing, not decoration: TeX will not
-% hyphenate inside \texttt, so these three identifiers form one unbreakable box
-% and the line overruns the right margin by ~83pt -- text physically off the
-% page. \allowbreak adds a legal break point without printing a hyphen.
-All three contributions are independently switchable. Each reads a boolean config flag
-(\texttt{use\_\allowbreak margin\_\allowbreak admission},
-\texttt{use\_\allowbreak prob\_\allowbreak fusion},
-\texttt{use\_\allowbreak loo\_\allowbreak temperature}), so all eight on/off combinations are
-runnable from configuration alone, which is the space Section~\ref{sec:results}'s ablation
-sweeps.
+All three contributions are independently switchable from configuration, so all eight on/off
+combinations can be run without any code change, which is the space the sweeps in
+Section~\ref{sec:results} cover.
 
 \subsection{Code and attribution}
 
 This project is a fork of \texttt{TomSheng21/tta-vlm}~\cite{tta-vlm-repo}, which supplies the
 evaluation framework used throughout: the CLIP wrapper, the dataset loaders, the entry points,
-and the \texttt{tda} and \texttt{clipzs} baselines every number in this report is compared
-against. The cache-update and cache-logit machinery that \texttt{cal\_tda} inherits and reuses
+and the TDA and zero-shot CLIP baselines every number in this report is compared
+against. The cache-update and cache-logit machinery that our method inherits and reuses
 unmodified originates in \texttt{kdiaaa/tda}~\cite{tda-repo} (MIT-licensed) as ported into that
-fork. Our own contribution is \texttt{online\_method/cal\_tda.py} and the calibration,
+fork. Our own contribution is the calibration-aware method itself and the calibration,
 temperature-search, evaluation, analysis, and reporting code around it. The full source --
 including the scripts that regenerate every number, table, and figure in this report from the
 raw run records -- is at

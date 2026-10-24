@@ -1,60 +1,218 @@
 \section{Results}
 \label{sec:results}
 
-\subsection{Headline: the bundled method as specified}
+The three contributions were proposed together, but they are not reported together. Each is
+measured first on its own, against the same baseline, labelled \emph{none} in the tables: our
+method with every change switched off, which is upstream TDA run through our code path
+(Section~\ref{sec:method}). Comparing a contribution to this baseline rather than to the
+separately run TDA rows isolates that one change, since the two runs differ by nothing
+else. Where a contribution fails, we say why, and where the diagnosis suggests a repair, we test
+the repair before moving on. Only then are the surviving pieces compared against zero-shot CLIP
+and TDA together (Section~\ref{sec:together}).
 
-Table~\ref{tab:main} is generated directly by \texttt{analysis/aggregate.py} from
-\texttt{results/summary.csv}; no number in it is hand-typed.
+\subsection{Contribution 1: margin-based cache admission}
+\label{sec:margin}
+
+Table~\ref{tab:margin} compares margin admission alone -- margin on, fusion off, temperature
+off -- with the baseline, per dataset, together with the fraction of test samples
+the gate admitted to the positive cache.
+
+\input{tables/margin_vs_none.tex}
+
+Margin admission loses on every dataset and on both metrics. Mean accuracy drops from 56.60\%
+to 53.67\% and mean ECE rises from 11.28\% to 18.06\%. The per-dataset spread is the
+informative part. The threshold is one global constant, $1.0$ on raw logits, deliberately not tuned per dataset, because fitting it to each test set's own margin
+distribution would be test-set tuning. Since CLIP's logits are $100\times$ a cosine similarity,
+a gap of 1.0 asks for a top-1/top-2 cosine difference of only 0.01, a quantity with no
+dataset-independent meaning. The admission column shows what that costs: the gate admits 15.9\%
+of samples on Aircraft and 81.9\% on Pets, and the rate is ordered by zero-shot CLIP's accuracy
+on the dataset, not by its class count (Flowers102 has the most classes and the second-highest
+rate; EuroSAT has the fewest and the second-lowest). Where CLIP already separates the classes,
+margins are wide and the gate opens; where CLIP is lost, every class looks like every other,
+margins collapse, and the gate closes. The damage is ordered the same way: Pets, at 81.9\%
+admission, is a near no-op (ECE $+0.05$ points), while Aircraft, at 15.9\%, doubles its ECE.
+
+Three things went wrong, and the admission rate explains only the first.
+
+\begin{enumerate}
+    \item \textbf{The threshold does not port across datasets.} A fixed logit gap means
+        different things on 10 and 100 classes, so one constant is simultaneously too loose
+        on Pets and far too strict on Aircraft and EuroSAT.
+    \item \textbf{A starving cache is not a smaller cache; it is a biased one.} If the cache
+        were merely thinner, predictions would drift toward plain CLIP and calibration toward
+        CLIP's own 5\%. Instead ECE doubles. At 16\% admission, most classes have no cache
+        entry at all: only the classes CLIP finds easy clear the threshold, so the cache fills
+        with those classes and nothing else. A new image's nearest cached neighbours can then
+        only ever vote for an easy class, whatever the image actually shows. The cache becomes
+        a prior pulling every prediction toward the handful of classes CLIP was already
+        confident about -- which flips correct predictions on the under-represented classes
+        (the accuracy drop) and adds those votes confidently (the ECE rise). Pets, with 37
+        classes and 82\% admission, keeps every class covered, and nothing happens.
+    \item \textbf{It filters on the wrong signal.} The diagnosis was that confidently
+        \emph{wrong} samples enter the cache. But a confidently wrong prediction has a large
+        margin, exactly like a confidently right one. Margin and entropy both measure how loud
+        CLIP is, and neither sees correctness, so the gate could never remove the samples it
+        was designed to remove. It only removed near-ties -- and upstream TDA's per-class
+        eviction by entropy was already removing those wherever a class saw enough traffic.
+        The gate was redundant where it was harmless and biasing where it bit.
+\end{enumerate}
+
+We therefore drop margin admission. Every variant from here on has margin admission off, and
+the positive cache is filled by upstream TDA's own unconditional rule.
+
+\subsection{Contribution 2: probabilistic fusion}
+\label{sec:fusion}
+
+Table~\ref{tab:fusion} compares probabilistic fusion as proposed in Section~\ref{sec:method}
+-- fusion on with $w = 0.5$, margin off, temperature off -- with the baseline.
+
+\input{tables/fusion_vs_none.tex}
+
+Fusion as proposed is the worst single change in the project: mean ECE rises from 11.28\% to
+24.54\%, driven by Flowers102 (6.51\% $\rightarrow$ 32.46\%) and Pets (2.48\% $\rightarrow$
+43.78\%). Accuracy moves little (mean 56.60\% $\rightarrow$ 55.60\%), so the cache is still
+doing its job of choosing the class; what breaks is the confidence attached to the choice.
+
+The mechanism is visible in Eq.~\eqref{eq:fusion} once the two inputs' scales are compared.
+The cache logits, computed exactly as in upstream TDA, are per class a sum of a few
+$\exp(-\beta(1 - \mathrm{affinity}))$ terms over the cached items of that class.
+With at most three items per class and affinity a cosine in $[-1, 1]$, the largest cache logit
+is about 2 and most classes score near zero. Softmaxed over 100 classes, that is a nearly flat
+distribution whose top entry is around 7\%. CLIP's logits, by contrast, carry its learned logit
+scale ($\approx 100$) and are sharply peaked, often above 90\%. A 50/50 average of a peaked
+distribution and a flat one halves the peak. Fusion therefore caps top-1 probability near one
+half on every sample, right or wrong alike -- it does not need the two sources to agree on a
+wrong answer; it produces the effect unconditionally. ECE penalises underconfidence exactly as it
+penalises overconfidence, so the cost scales with accuracy: on Pets the model is right 88.77\% of
+the time and reports roughly 45\% confidence, a gap of about 44 points, which is the 43.78\% in
+the table. Aircraft is the one dataset where fusion's ECE looks like an improvement (15.56\%
+$\rightarrow$ 9.16\%), and it is not a correction: Aircraft's true accuracy (24\%) happens to sit
+close to where the confidence ceiling landed, so the same ceiling that ruins Pets lands near the
+truth there by accident.
+
+\paragraph{Gating the fusion.}
+The diagnosis says fusion fails because it runs on every sample, including the large majority
+where CLIP already has a clear winner and the cache can only dilute it. On those samples the
+cache cannot change the argmax either way, so the right move is to leave it out entirely:
+additive TDA would only sharpen (the original overconfidence) and fusion would only dilute. The
+cache has a real job on exactly one kind of sample -- a two-way tie, where it can break the tie,
+which is where TDA's accuracy gain comes from -- and on a genuine tie a confidence near one half
+is roughly honest. We therefore gate the fusion. Let $p = \sigma(z_{\text{clip}})$ and let
+$p_{(1)} \geq p_{(2)}$ be its two largest entries. A sample is a \emph{two-way tie} when
+\begin{equation}
+    p_{(1)} - p_{(2)} < 0.2 \quad\text{and}\quad p_{(1)} + p_{(2)} > 0.6 .
+    \label{eq:gate}
+\end{equation}
+The first condition is the close call; the second is what ``low entropy'' buys: a sample spread
+thinly over many classes also has a small top-two gap, but there CLIP is confused rather than
+torn, and the cache's vote is noise. On a tie the output is Eq.~\eqref{eq:fusion} with
+$w = 0.5$; otherwise it is $\sigma(z_{\text{clip}})$, CLIP's own distribution (corrected by
+TDA's negative cache, which is untouched throughout), with the positive cache not consulted.
+Both thresholds are in probability space, so one global pair means the same thing on 10 and
+100 classes -- the portability margin admission lacked -- and both were fixed a priori before
+any run, not tuned. The gate is a separate switch, off by default, so every run above is
+unaffected.
+
+Table~\ref{tab:gate} compares gated fusion -- gate on, margin off, temperature off -- with
+the same baseline.
+
+\input{tables/gate_vs_none.tex}
+
+The blow-up is gone. Flowers102 and Pets return to single-digit ECE, and gated fusion beats the
+baseline's ECE on four of five datasets, by ten or more points on three of them (DTD 17.41\%
+$\rightarrow$ 6.24\%, EuroSAT 14.43\% $\rightarrow$ 3.56\%, Aircraft 15.56\% $\rightarrow$
+3.48\%). Mean ECE falls from 11.28\% to 4.61\%, which is below zero-shot CLIP's own 5.57\%
+(Section~\ref{sec:together}): the method is better calibrated than the frozen model it started
+from. Pets is the one loss (2.48\% $\rightarrow$ 5.68\%), on the dataset where TDA was already
+nearly perfectly calibrated. The accuracy side is the cost. Gated fusion matches or fractionally
+exceeds the baseline on Pets and Aircraft, gives up 0.77 points on Flowers102 and 1.35 on DTD,
+and 5.92 on EuroSAT, where it returns more than half of TDA's eleven-point gain. TDA's flips on
+EuroSAT happen on samples with a moderate margin, pushed over by that dataset's strong cache
+weighting ($\alpha = 4$, $\beta = 8$); the gate, by construction, keeps the cache out of those.
+
+The gate uses the same quantity margin admission used -- the gap between CLIP's top two
+scores -- and the contrast between the two is the clearest finding in this section. Margin
+admission applied it at storage time, to decide what the cache remembers, and threw information
+away permanently and unevenly across classes. The gate applies it at prediction time, to decide
+when the cache is consulted, and leaves every class represented. Same test, opposite purpose:
+admission kept the clear winners and discarded the close calls, while the gate leaves the clear
+winners alone and brings the cache in only on the close calls, which are the only samples where
+the cache can change anything but confidence.
+
+\subsection{Contribution 3: leave-one-out temperature scaling}
+\label{sec:temperature}
+
+Table~\ref{tab:temp} compares LOO temperature scaling alone -- temperature on, margin off,
+fusion off -- with the baseline.
+
+\input{tables/temp_vs_none.tex}
+
+Accuracy is identical on every dataset, to 0.00 points. This is not a coincidence but a
+structural guarantee: temperature scaling is a monotonic rescaling of the logits and cannot
+change an argmax, so any difference would itself be a bug. On calibration it is a real but not
+uniform improvement. Mean ECE falls from 11.28\% to 8.54\%, with large gains where the baseline
+was badly overconfident (DTD 17.41\% $\rightarrow$ 4.68\%, Aircraft 15.56\% $\rightarrow$
+4.21\%) and small ones on EuroSAT and Flowers102. On Pets it is a clear reversal: 2.48\%
+$\rightarrow$ 15.54\%.
+
+The Pets failure has a simple cause. The search has no stopping rule. It always moves mean
+confidence toward the label-free accuracy estimate $\hat{a}$, whether or not the model was
+already honest, so where TDA was already calibrated the only thing it can do is damage. And
+$\hat{a}$ is biased low on fine-grained data: the estimate is leave-one-out nearest-neighbour
+agreement inside the cache, and on Pets a cached Birman's nearest cached neighbour is often a
+Ragdoll even when both pseudo-labels are correct, so the agreement rate sits well below the
+true accuracy. The search reads that as ``accuracy is lower than confidence'' and smooths a model
+that did not need it. The smoothing-only grid floor at $T = 1.0$ (Section~\ref{sec:method})
+cannot help here; it only prevents the opposite mistake.
+
+\subsection{Putting it together}
+\label{sec:together}
+
+Table~\ref{tab:main} compares the five headline methods on all five datasets: zero-shot CLIP
+(CLIP), TDA, and three variants of our method -- gated fusion alone (Gate), LOO temperature
+alone (Temp), and the two together (Gate+Temp). Margin admission is off in all three.
 
 \input{../results/summary_table.tex}
 
-Averaged over the five datasets, zero-shot CLIP reaches 53.16\% accuracy at 5.57\% ECE, TDA
-reaches 56.63\% at 11.24\% ECE, and \texttt{cal\_tda} with all three contributions enabled --
-the method exactly as specified -- reaches 55.22\% at 24.12\% ECE. \textbf{This is a clear
-failure of the bundled method.} Accuracy is lower than TDA's on every single dataset (from 0.03
-points on Pets up to 4.29 points on EuroSAT), and ECE is worse than TDA's on four of the five
-datasets, dramatically so on Flowers102 (32.73\% vs.\ 6.39\%) and Pets (43.98\% vs.\ 2.52\%).
-Aircraft is the sole dataset where the bundle's ECE number looks better than TDA's (8.65\%
-vs.\ 15.51\%) -- Section~\ref{sec:discussion} shows this is not real correction, only the same
-underconfidence failure landing closer to correct by accident on this one low-accuracy dataset.
-We do
-not reframe this as a partial success: on the spec's own success criterion (accuracy $\geq$ TDA
-\emph{and} ECE $<$ TDA, on at least 3 of 5 datasets), the bundled method meets the bar on
-\textbf{0 of 5} datasets.
-
-Figure~\ref{fig:scatter} plots the same comparison directly: our success criterion is a point as far right as
-TDA (equal accuracy) but as far down as zero-shot CLIP (honest confidence). The bundled method's
-green star sits left of TDA's orange square on every dataset (lower accuracy) and above it on
-four of the five (higher ECE) -- Aircraft is the one dataset where the star sits below the
-square, matching the exception already noted above.
+Averaged over the five datasets, zero-shot CLIP reaches 53.16\% accuracy at 5.57\% ECE and
+TDA 56.63\% at 11.24\%. Gated fusion alone reaches 55.01\% at 4.61\%: it keeps most of TDA's
+accuracy gain over CLIP (1.85 of 3.47 points) while reporting better-calibrated confidence than
+either. Figure~\ref{fig:scatter} shows the same comparison as a scatter: the target is a point
+as far right as TDA and as far down as zero-shot CLIP, and the purple diamond sits below both
+on three of the five datasets.
 
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=0.75\textwidth]{accuracy_vs_ece.png}
-    \caption{Accuracy vs.\ ECE, all five datasets. The purple diamond (LOO temperature only,
-    Section~\ref{sec:ablation}) is the configuration this report ultimately recommends, plotted
-    alongside the three headline methods. Marker shape and colour identify the method (see legend);
-    each dataset's four points are joined by a line in that dataset's own colour, labelled at the
-    line's right-hand end. Lines run left to right by accuracy; they mark grouping only, not a
-    progression.}
+    \caption{Accuracy vs.\ ECE on all five datasets for the five headline methods: zero-shot
+    CLIP, TDA, and our method with gated fusion and LOO temperature together, gated fusion
+    alone, and LOO temperature alone. Marker shape and colour identify the method (legend);
+    each dataset's five points are joined by a line in that dataset's own colour, labelled at
+    the line's right-hand end. Lines run left to right by accuracy and mark grouping only.}
     \label{fig:scatter}
 \end{figure}
 
-\subsection{Reliability diagrams}
+Table~\ref{tab:ablation-gate} is the ablation over the two surviving contributions: both on/off
+combinations of gated fusion and LOO temperature, margin off, on all five datasets, 20 runs.
 
-Figure~\ref{fig:reliability} plots, per dataset, the confidence-vs-accuracy curve for each of
-the three headline methods plus the ablation's \texttt{temp}-only variant (a curve on the
-dashed identity line is perfectly calibrated). The
-grid makes the aggregate ECE numbers in Table~\ref{tab:main} legible per bin, and the direction
-of the failure is visible directly: on every dataset, \texttt{cal\_tda}'s curve sits
-\emph{above} the identity line -- accuracy exceeds stated confidence, not the reverse. In
-the five \texttt{cal\_tda} reliability records the highest occupied confidence bin tops out at
-0.70 on EuroSAT and at 0.60 or below on the other four, so there is no high-confidence region
-to be confidently wrong in; the method is instead severely \emph{underconfident}, most visibly on
-Pets, where 88.74\% accuracy is reported at only 44.77\% mean confidence. Section~\ref{sec:discussion}
-explains the mechanism, including why Aircraft -- the one dataset where the bundle's ECE
-looked like an improvement over TDA in Table~\ref{tab:main} -- is not a case of the method
-correcting itself, but the smallest instance of the same underconfidence effect.
+\input{tables/ablation_gate.tex}
+
+The two contributions do not stack. Adding temperature on top of the gate leaves accuracy
+unchanged, as it must, and makes mean ECE worse (4.61\% $\rightarrow$ 6.59\%). The reason is
+that both target the same thing. Temperature scaling was designed to undo the overconfidence
+that TDA's cache manufactures; the gate removes that overconfidence at the source, by never
+letting the cache sharpen a prediction CLIP had already made. What is left after the gate is
+CLIP's own calibration, already around 5\%, and the label-free estimate is not accurate enough
+to improve on it. On EuroSAT and Aircraft the search wants to sharpen, the floor at $T = 1$
+blocks it, and the search is a no-op on 99.9\% and 92.5\% of samples respectively; on Pets it
+acts on every sample and in the wrong direction (5.68\% $\rightarrow$ 13.90\%), the same Pets
+failure as in Section~\ref{sec:temperature}. We therefore recommend gated fusion alone.
+
+Figure~\ref{fig:reliability} plots, per dataset, the reliability curve for each of the five
+headline methods. The direction of each failure is visible directly: TDA's curves sit below the
+identity line (stated confidence exceeds accuracy), the temperature-only curves sit above it on
+Pets (confidence below accuracy), and gated fusion tracks the diagonal most closely on DTD,
+EuroSAT and Aircraft.
 
 \begin{figure}[htbp]
     \centering
@@ -96,77 +254,41 @@ correcting itself, but the smallest instance of the same underconfidence effect.
         \centering
         \includegraphics[width=\linewidth]{reliability_legend.png}
     \end{minipage}
-    \caption{Reliability diagrams, all five datasets: zero-shot CLIP, TDA, \texttt{cal\_tda}
-    (all three contributions), and the ablation's \texttt{temp}-only variant. All five panels
-    share the legend at bottom right; a curve on the dashed identity line is perfectly calibrated.}
+    \caption{Reliability diagrams, all five datasets, for the same five methods as
+    Figure~\ref{fig:scatter}: zero-shot CLIP, TDA, gated fusion + LOO temperature, gated
+    fusion alone, and LOO temperature alone. All five panels share the legend at bottom right;
+    a curve on the dashed identity line is perfectly calibrated.}
     \label{fig:reliability}
 \end{figure}
 
-\subsection{The ablation}
-\label{sec:ablation}
+\paragraph{The success criterion, counted honestly.}
+The project's criterion was accuracy $\geq$ TDA \emph{and} ECE $<$ TDA on at least 3 of 5
+datasets, against the TDA column of Table~\ref{tab:main}. Gated fusion meets
+it on Aircraft only: it ties TDA's accuracy on Pets but loses on ECE there, and on DTD,
+Flowers102 and EuroSAT it beats TDA's ECE by a wide margin while sitting below TDA's accuracy
+by 1.35, 0.89 and 5.87 points. Temperature alone meets it on 2 of 5 (DTD and EuroSAT; on the
+other three its accuracy is a few hundredths below the separately run TDA numbers, the
+floating-point drift described in Section~\ref{sec:limitations}). No variant reaches 3 of 5.
+What the method does deliver is different from what the criterion asks for: it trades a small
+part of TDA's accuracy gain for calibration better than the frozen model's, and it does so
+without labels, without training, and with one extra comparison per sample.
 
-Table~\ref{tab:ablation} (generated by \texttt{analysis/make\_ablation\_table.py} from a
-40-run sweep -- all eight on/off combinations of the three contributions, on all five datasets)
-isolates which of the three changes are responsible for the failure above.
+\subsection{Limitations}
+\label{sec:limitations}
 
-\input{tables/ablation.tex}
-
-\textbf{Contribution 3 (LOO temperature scaling) alone succeeds.} The ablation's own \texttt{none} baseline is
-\texttt{cal\_tda} with all three flags off, run inside the same 40-run sweep; it is the correct
-same-code-path comparison, since \texttt{temp} and \texttt{none} differ by exactly one config
-flag. Against it, \texttt{temp} matches accuracy \emph{exactly}, to 0.00 points, on all five
-datasets -- a structural guarantee, since temperature scaling is a monotonic rescaling of the
-logits and cannot change an argmax. It cuts mean ECE from 11.28\% to 8.54\%, the best mean ECE
-of all eight ablation variants, including \texttt{all} (24.12\%). The per-dataset breakdown is in Table~\ref{tab:temp-per-dataset}:
-
-\begin{center}
-\begin{tabular}{lrrr}
-\toprule
-Dataset & \texttt{none} ECE & \texttt{temp} ECE & Change \\
-\midrule
-Aircraft   & 15.56 & 4.21  & $-11.35$ \\
-DTD        & 17.41 & 4.68  & $-12.73$ \\
-EuroSAT    & 14.43 & 13.43 & $-1.00$ \\
-Flowers102 & 6.51  & 4.85  & $-1.66$ \\
-% \textbf does not reach inside math mode, so $+13.06$ printed at roman weight
-% next to a bold "(worse)" in the same cell. \mathbf carries the weight in.
-Pets       & 2.48  & \textbf{15.54} & \textbf{$\mathbf{+13.06}$ (worse)} \\
-\bottomrule
-\end{tabular}
-\captionof{table}{Per-dataset ECE (\%) for the ablation's \texttt{none} and \texttt{temp} variants. Pets is the one reversal.}
-\label{tab:temp-per-dataset}
-\end{center}
-
-This is not a uniform win: on Pets, where the \texttt{none} baseline was already very well
-calibrated (2.48\% ECE),
-LOO temperature scaling makes calibration substantially \emph{worse}. We discuss the mechanism
-in Section~\ref{sec:discussion} rather than average it away.
-
-\textbf{Two counts, and why they differ.} Against the ablation's \texttt{none} baseline,
-\texttt{temp} meets the spec's success criterion on \textbf{4 of 5} datasets (all but Pets).
-Against the separately run headline \texttt{tda} rows in Table~\ref{tab:main}, the count is
-lower -- \textbf{2 of 5} -- because \texttt{none} and \texttt{tda} are two different process
-invocations of what should be identical logic, and in practice differ by 0--4 flipped
-predictions per dataset out of 1{,}692--8{,}100 samples. The cause is not a logic difference:
-upstream \texttt{tda} accumulates its final logits in fp16, while \texttt{cal\_tda} (even
-with every flag off) upcasts to fp32 before its final step, and at CLIP's logit magnitudes that
-rounding difference is worth roughly one unit in the last place -- enough, on
-borderline-margin predictions, to flip an argmax once every few hundred to a few thousand
-samples. Both counts are correct; they
-answer different questions. The 4-of-5 count answers whether temperature scaling, holding
-everything else fixed, helps calibration without moving accuracy -- yes, on 4 of 5. The
-2-of-5 count answers whether a \texttt{temp}-only run, as a real separate process, beats the
-specific \texttt{tda} numbers quoted in Table~\ref{tab:main} -- only on 2 of 5, because of run-to-run floating-point drift that
-is two orders of magnitude smaller than any effect discussed above.
-
-\textbf{Contributions 1 and 2 are the ones actually responsible for the bundle's failure.}
-Margin admission alone \emph{lowers} mean accuracy (56.60\% $\rightarrow$ 53.67\%) and raises
-mean ECE (11.28\% $\rightarrow$ 18.06\%): its selectivity throws away cache signal the
-unfiltered cache was using correctly on some datasets. Probabilistic fusion alone is the worst
-single component: it raises mean ECE to 24.54\%, driven by blowups on Flowers102 (32.46\%) and
-Pets (43.77\%) specifically, though it happens to help Aircraft (15.56\% $\rightarrow$
-9.16\%) -- the reason ``all three'' still beats plain TDA's ECE on that one dataset. Neither
-contribution helps consistently even in isolation; both actively hurt the mean.
-
-Cache admission rates, which explain part of why margin admission behaves so differently across
-datasets, are reported in Section~\ref{sec:admission-rates}.
+Every number here is one seed, one backbone (\texttt{ViT-B/16}) and five datasets. That is
+enough to establish that margin admission and ungated fusion fail, that the gate repairs fusion,
+and that temperature does not stack on it; it is not enough to claim the gate's margins hold
+universally, and the smaller effects (the one-point EuroSAT ECE change under temperature, the
+sub-point accuracy gaps on Pets and Aircraft) are within what a different stream order could
+plausibly move. The gate's two thresholds were fixed a priori and have been tested on nothing
+but these five datasets. Its accuracy cost on EuroSAT is real and would need a dataset-aware
+gap -- which is to say, tuning -- to recover. The LOO estimate is only as good as the cache it
+reads, and it is biased low on fine-grained data, which is what breaks temperature scaling on
+Pets. Finally, the baseline and the separately run TDA rows differ by
+0--4 flipped predictions per dataset out of 1{,}692--8{,}100: upstream TDA accumulates
+its final logits in fp16 while our implementation upcasts to fp32 before its final step, and at
+CLIP's logit magnitudes that rounding step is worth about one unit in the last place, enough to
+flip a borderline argmax once every few hundred to few thousand samples. This is two orders of
+magnitude below any effect discussed above, but it is why the two baselines are two distinct,
+both-correct sets of numbers rather than duplicates.

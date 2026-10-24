@@ -37,9 +37,11 @@ labels, by changing three seams of TDA's cache loop:
         that label-free estimate.
     \end{enumerate}
 
-Each change is independently switchable from configuration, which is what makes the ablation
-in Section~\ref{sec:results} possible -- and the ablation is where this project's real finding
-lives. \textbf{The three changes together do not improve calibration: they make it
-dramatically worse.} Run in isolation, however, one of the three delivers exactly the
-calibration improvement this project set out to find, at no accuracy cost. We report both
-results without softening either one.
+Each change is independently switchable from configuration, so each can be measured on its
+own against a TDA-equivalent baseline, and Section~\ref{sec:results} does exactly that, in
+order. The first change fails and is dropped. The second fails as proposed, but the diagnosis
+of why points at a repair -- apply the fusion only where CLIP is torn between two classes --
+and the repaired version is the method this report recommends: it brings TDA's calibration
+error below zero-shot CLIP's while keeping most of TDA's accuracy gain. The third helps on its
+own but adds nothing on top of the second. We report each failure alongside its mechanism
+rather than only the configuration that worked.

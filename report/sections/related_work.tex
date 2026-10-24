@@ -7,8 +7,8 @@ built and consumed purely from forward passes, with no backpropagation and no la
 test image is scored by CLIP and optionally admitted to the positive cache by an entropy
 threshold; the final logits are a sum of CLIP's own logits and an $\alpha/\beta$-weighted
 cache-logit term computed from the currently cached features. This project's
-\texttt{CalTDA}, in \texttt{online\_method/cal\_tda.py}, subclasses TDA directly and reuses its cache-update and
-cache-logit machinery unmodified; the three contributions in Section~\ref{sec:method}
+method subclasses TDA directly and reuses its cache-update and cache-logit machinery
+unmodified; the three contributions in Section~\ref{sec:method}
 change only the admission rule, the CLIP/cache combination rule, and a final temperature.
 
 \textbf{The calibration cost of TTA.} \citet{sheng2025illusion} benchmark a broad set of TTA
