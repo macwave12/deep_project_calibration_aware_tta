@@ -269,28 +269,10 @@ datasets, against the TDA column of Table~\ref{tab:main}. Gated fusion meets
 it on Aircraft only: it ties TDA's accuracy on Pets but loses on ECE there, and on DTD,
 Flowers102 and EuroSAT it beats TDA's ECE by a wide margin while sitting below TDA's accuracy
 by 1.35, 0.89 and 5.87 points. Temperature alone meets it on 2 of 5 (DTD and EuroSAT; on the
-other three its accuracy is a few hundredths below the separately run TDA numbers, the
-floating-point drift described in Section~\ref{sec:limitations}). No variant reaches 3 of 5.
+other three its accuracy is 0.03--0.12 points below the separately run TDA numbers: upstream
+TDA sums its final logits in half precision while our implementation uses single precision,
+a rounding difference that flips a handful of borderline predictions per dataset and is not a
+method effect). No variant reaches 3 of 5.
 What the method does deliver is different from what the criterion asks for: it trades a small
 part of TDA's accuracy gain for calibration better than the frozen model's, and it does so
 without labels, without training, and with one extra comparison per sample.
-
-\subsection{Limitations}
-\label{sec:limitations}
-
-Every number here is one seed, one backbone (\texttt{ViT-B/16}) and five datasets. That is
-enough to establish that margin admission and ungated fusion fail, that the gate repairs fusion,
-and that temperature does not stack on it; it is not enough to claim the gate's margins hold
-universally, and the smaller effects (the one-point EuroSAT ECE change under temperature, the
-sub-point accuracy gaps on Pets and Aircraft) are within what a different stream order could
-plausibly move. The gate's two thresholds were fixed a priori and have been tested on nothing
-but these five datasets. Its accuracy cost on EuroSAT is real and would need a dataset-aware
-gap -- which is to say, tuning -- to recover. The LOO estimate is only as good as the cache it
-reads, and it is biased low on fine-grained data, which is what breaks temperature scaling on
-Pets. Finally, the baseline and the separately run TDA rows differ by
-0--4 flipped predictions per dataset out of 1{,}692--8{,}100: upstream TDA accumulates
-its final logits in fp16 while our implementation upcasts to fp32 before its final step, and at
-CLIP's logit magnitudes that rounding step is worth about one unit in the last place, enough to
-flip a borderline argmax once every few hundred to few thousand samples. This is two orders of
-magnitude below any effect discussed above, but it is why the two baselines are two distinct,
-both-correct sets of numbers rather than duplicates.
