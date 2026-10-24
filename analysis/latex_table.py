@@ -56,13 +56,18 @@ def _rule_under_spanners(body: str) -> str:
     return "\n".join(lines)
 
 
-def wrap_table(tabular: str, caption: str, label: str, placement: str = "htbp") -> str:
+def wrap_table(tabular: str, caption: str, label: str, placement: str = "htbp",
+               preamble: str = "") -> str:
     """Wrap a bare `tabular` environment in a centred float with the caption below.
 
     `\\label` must follow `\\caption`: LaTeX's `\\ref` resolves to whatever
     counter was last stepped, and it is `\\caption` that steps the table
     counter. A label placed before the caption silently points at the
     *previous* float instead.
+
+    `preamble` is emitted after `\\centering` and before the tabular: a wide
+    table passes `\\small` and a tighter `\\tabcolsep` here so the size change
+    is scoped to the float and never leaks into the surrounding text.
     """
     body = tabular.strip()
     # pandas emits the float wrapper too when it is given a caption; strip any
@@ -76,9 +81,10 @@ def wrap_table(tabular: str, caption: str, label: str, placement: str = "htbp") 
         )
     return (
         f"\\begin{{table}}[{placement}]\n"
-        f"\\centering\n"
-        f"{body}\n"
-        f"\\caption{{{caption}}}\n"
-        f"\\label{{{label}}}\n"
-        f"\\end{{table}}\n"
+        + f"\\centering\n"
+        + (f"{preamble}\n" if preamble else "")
+        + f"{body}\n"
+        + f"\\caption{{{caption}}}\n"
+        + f"\\label{{{label}}}\n"
+        + f"\\end{{table}}\n"
     )

@@ -1,5 +1,11 @@
 """Generate the 19-slide conference deck for the final presentation.
 
+STALE (2026-10-24): this deck tells the earlier three-contribution story and
+reads a `cal_tda` method row that `results/summary.csv` no longer carries
+(the headline methods are now `cal_tda_gate`, `cal_tda_temp` and
+`cal_tda_gate_temp`), so it currently fails to build. Updating it to the
+gated-fusion finding of `report/main_v2.pdf` is a follow-up plan.
+
 Every number on every slide is READ FROM `results/summary.csv` and
 `results/ablation.csv` at build time. Nothing is typed in by hand. Re-run the
 sweep, re-run this script, and the deck is correct again -- the same rule the

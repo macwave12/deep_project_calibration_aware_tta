@@ -70,7 +70,7 @@ BASE_COMMANDS = {
     "newcommand", "renewcommand", "DeclareMathOperator",
     # Spacing and line-breaking primitives from the TeX kernel:
     "hfill", "vfill", "allowbreak", "linebreak", "newline", "textbackslash",
-    "quad", "qquad",
+    "quad", "qquad", "small", "setlength", "tabcolsep",
     # amsmath, always loaded by this report's preamble:
     "frac", "sum", "prod", "int", "left", "right", "text", "substack", "operatorname",
     "boldsymbol", "nonumber", "notag", "eqref",

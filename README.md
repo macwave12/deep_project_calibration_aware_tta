@@ -5,6 +5,11 @@
 **Student IDs:** 207627811 (Gal Machlin), 207016270 (Idan Yehuda)
 **Repository:** <https://github.com/macwave12/deep_project_calibration_aware_tta>
 
+> **Status (2026-10-24):** the current report is `report/main_v2.pdf`, which measures each
+> contribution alone, drops margin admission, repairs probabilistic fusion with a two-way-tie
+> gate, and recommends gated fusion. The **Results** section below and the slide deck still
+> describe the earlier three-contribution bundle and are updated in a follow-up.
+
 ---
 
 ## What this is

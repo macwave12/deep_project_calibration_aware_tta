@@ -82,11 +82,23 @@ def test_summary_table_shows_display_names_not_code_keys(tmp_path):
 
     tex = summary_table_tex(_headline_frame(tmp_path))
 
-    for leaked in ("cal_tda", r"cal\_tda", "clipzs", r"	exttt"):
+    for leaked in ("cal_tda", r"cal\_tda", "clipzs", "\\texttt"):
         assert leaked not in tex
     for shown in ("CLIP", "TDA", "Gate+Temp", "Gate", "Temp"):
         assert shown in tex
     assert r"\label{tab:main}" in tex
+
+
+def test_summary_table_is_set_small_with_tight_columns_so_eleven_columns_fit(tmp_path):
+    # Eleven columns at the body size overflow the text width by ~37pt
+    # (pdflatex "Overfull \\hbox" on tab:main); the float must shrink itself.
+    from analysis.aggregate import summary_table_tex
+
+    tex = summary_table_tex(_headline_frame(tmp_path))
+
+    body_start = tex.index(r"\begin{tabular}")
+    assert r"\small" in tex[:body_start]
+    assert r"\setlength{\tabcolsep}{4pt}" in tex[:body_start]
 
 
 def test_summary_table_orders_datasets_as_the_report_does_and_ends_with_a_mean_row(tmp_path):

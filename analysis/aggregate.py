@@ -77,7 +77,10 @@ def summary_table_tex(frame: pd.DataFrame) -> str:
         # pandas >= 2.0 defaults escape=False, so keep escaping explicit.
         escape=True,
     )
-    return wrap_table(tabular, caption=MAIN_TABLE_CAPTION, label="tab:main")
+    # Eleven columns at the body size run ~37pt past the text width; shrink
+    # the float, not the document.
+    return wrap_table(tabular, caption=MAIN_TABLE_CAPTION, label="tab:main",
+                      preamble=r"\small\setlength{\tabcolsep}{4pt}")
 
 
 COLUMNS = [

@@ -40,9 +40,10 @@ Three things went wrong, and the admission rate explains only the first.
         on Pets and far too strict on Aircraft and EuroSAT.
     \item \textbf{A starving cache is not a smaller cache; it is a biased one.} If the cache
         were merely thinner, predictions would drift toward plain CLIP and calibration toward
-        CLIP's own 5\%. Instead ECE doubles. At 16\% admission, most classes have no cache
-        entry at all: only the classes CLIP finds easy clear the threshold, so the cache fills
-        with those classes and nothing else. A new image's nearest cached neighbours can then
+        CLIP's own 5\%. Instead ECE doubles. At 16\% admission, many classes are likely to
+        have no cache entry at all (we record the admission rate, not per-class coverage):
+        only the classes CLIP finds easy clear the threshold, so the cache fills with those
+        classes and little else. A new image's nearest cached neighbours can then
         only ever vote for an easy class, whatever the image actually shows. The cache becomes
         a prior pulling every prediction toward the handful of classes CLIP was already
         confident about -- which flips correct predictions on the under-represented classes
@@ -126,9 +127,10 @@ $\rightarrow$ 6.24\%, EuroSAT 14.43\% $\rightarrow$ 3.56\%, Aircraft 15.56\% $\r
 from. Pets is the one loss (2.48\% $\rightarrow$ 5.68\%), on the dataset where TDA was already
 nearly perfectly calibrated. The accuracy side is the cost. Gated fusion matches or fractionally
 exceeds the baseline on Pets and Aircraft, gives up 0.77 points on Flowers102 and 1.35 on DTD,
-and 5.92 on EuroSAT, where it returns more than half of TDA's eleven-point gain. TDA's flips on
-EuroSAT happen on samples with a moderate margin, pushed over by that dataset's strong cache
-weighting ($\alpha = 4$, $\beta = 8$); the gate, by construction, keeps the cache out of those.
+and 5.92 on EuroSAT, where it returns more than half of TDA's eleven-point gain. The likely
+reason, which we did not instrument, is that TDA's EuroSAT flips happen on samples with a
+moderate margin, pushed over by that dataset's strong cache weighting ($\alpha = 4$,
+$\beta = 8$); the gate, by construction, keeps the cache out of those.
 
 The gate uses the same quantity margin admission used -- the gap between CLIP's top two
 scores -- and the contrast between the two is the clearest finding in this section. Margin

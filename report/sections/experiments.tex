@@ -37,10 +37,13 @@ bins by a single implementation that scores every method identically.
 Three sweeps produce every number in Section~\ref{sec:results}. The headline sweep covers
 five methods on the five datasets (25 configurations): zero-shot CLIP, TDA, and three
 configurations of our method. A per-contribution sweep runs our method under every on/off
-combination of the three proposed changes (40 configurations); only its baseline, margin-only
-and fusion-only variants are reported, since the other five involve margin admission, which
-Section~\ref{sec:margin} drops. The ablation of Section~\ref{sec:together} covers both on/off
-combinations of the two surviving changes with margin admission off (20 configurations).
+combination of the three proposed changes (40 configurations); only its baseline, margin-only,
+fusion-only and temperature-only variants are used, since the other four involve margin
+admission, which Section~\ref{sec:margin} drops, or ungated fusion, which
+Section~\ref{sec:fusion} replaces. The ablation of Section~\ref{sec:together} covers both
+on/off combinations of the two surviving changes with margin admission off (20
+configurations); its baseline and temperature-only rows are the per-contribution sweep's, and
+Table~\ref{tab:main}'s EuroSAT Temp and Gate+Temp cells are the ablation's.
 Runs are deterministic -- every configuration that was executed twice produced identical
 records -- so where two sweeps call for the same configuration (same code path, seed and
 effective settings) the run is executed once and its record reused. The scripts that
