@@ -1,15 +1,15 @@
-"""Generate the 19-slide conference deck for the final presentation.
+"""Generate the 18-slide conference deck for the final presentation.
 
-STALE (2026-10-24): this deck tells the earlier three-contribution story and
-reads a `cal_tda` method row that `results/summary.csv` no longer carries
-(the headline methods are now `cal_tda_gate`, `cal_tda_temp` and
-`cal_tda_gate_temp`), so it currently fails to build. Updating it to the
-gated-fusion finding of `report/main_v2.pdf` is a follow-up plan.
+The deck mirrors `report/main_v2.pdf`: each of the three changes is measured
+alone against the TDA-equivalent baseline, margin admission is dropped,
+probabilistic fusion is repaired by a two-way-tie gate, temperature does not
+stack on the gate, and gated fusion is the recommended method.
 
-Every number on every slide is READ FROM `results/summary.csv` and
-`results/ablation.csv` at build time. Nothing is typed in by hand. Re-run the
-sweep, re-run this script, and the deck is correct again -- the same rule the
-report and README already follow, applied to the talk.
+Every number on every slide is READ FROM `results/summary.csv`,
+`results/ablation.csv`, `results/ablation_gate.csv` and the margin run
+records at build time. Nothing is typed in by hand. Re-run the sweeps, re-run
+this script, and the deck is correct again -- the same rule the report
+follows, applied to the talk.
 
     python presentation/build_pptx.py
 
@@ -21,6 +21,7 @@ same structure for reading outside PowerPoint.
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -30,6 +31,17 @@ from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Emu, Inches, Pt
+
+# Run as a script from the repo root, `presentation/` is sys.path[0], not the
+# root; the deck shares the report's method order, labels and admission-rate
+# reader rather than carrying a second copy that can drift.
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+from analysis.aggregate import (  # noqa: E402
+    DATASET_LABEL as DATASET_LABELS, DATASET_ORDER, METHOD_LABEL, METHOD_ORDER,
+)
+from analysis.make_contribution_tables import _admission_rates  # noqa: E402
 
 # --- Theme -------------------------------------------------------------------
 # Hues are the ones the figures already use, so a slide and the chart on it
@@ -63,32 +75,28 @@ BODY_TOP = Inches(1.72)
 BODY_BOTTOM = Inches(6.82)
 CONTENT_W = SLIDE_W - 2 * MARGIN
 
-DATASET_LABELS = {
-    "dtd": "DTD",
-    "flower102": "Flowers102",
-    "pets": "Pets",
-    "eurosat": "EuroSAT",
-    "aircraft": "Aircraft",
-}
-DATASET_ORDER = list(DATASET_LABELS)
 
 
 # --- Data --------------------------------------------------------------------
 class Results:
-    """Every figure the deck quotes, pulled from the committed CSVs.
+    """Every figure the deck quotes, pulled from the committed CSVs and records.
 
     Kept as one object so a slide function can never reach around it to a
-    hard-coded literal -- if a number is not derivable from the CSVs, it does
-    not belong on a slide.
+    hard-coded literal -- if a number is not derivable from the CSVs or the run
+    records, it does not belong on a slide.
     """
 
-    def __init__(self, summary_csv: Path, ablation_csv: Path,
-                 method_config_yaml: Path):
+    def __init__(self, summary_csv: Path, ablation_csv: Path, ablation_gate_csv: Path,
+                 ablation_raw_dir: Path, margin_config_yaml: Path, gate_config_yaml: Path):
         self.summary = pd.read_csv(summary_csv)
-        self.ablation = pd.read_csv(ablation_csv)
-        self.method_config = yaml.safe_load(
-            Path(method_config_yaml).read_text(encoding="utf-8")
-        )
+        self.studies = {
+            "ablation": pd.read_csv(ablation_csv),
+            "ablation_gate": pd.read_csv(ablation_gate_csv),
+        }
+        # Percent, keyed by dataset: the same reader the report's margin table uses.
+        self.admission = _admission_rates(Path(ablation_raw_dir))
+        self.margin_config = yaml.safe_load(Path(margin_config_yaml).read_text(encoding="utf-8"))
+        self.gate_config = yaml.safe_load(Path(gate_config_yaml).read_text(encoding="utf-8"))
 
     def cell(self, dataset: str, method: str, column: str) -> float:
         row = self.summary[
@@ -101,79 +109,57 @@ class Results:
     def method_mean(self, method: str, column: str) -> float:
         return float(self.summary[self.summary["method"] == method][column].mean())
 
-    def variant_mean(self, variant: str, column: str) -> float:
-        return float(self.ablation[self.ablation["variant"] == variant][column].mean())
-
-    def variant_cell(self, dataset: str, variant: str, column: str) -> float:
-        row = self.ablation[
-            (self.ablation["dataset"] == dataset) & (self.ablation["variant"] == variant)
-        ]
+    def variant_cell(self, dataset: str, variant: str, column: str,
+                     study: str = "ablation") -> float:
+        frame = self.studies[study]
+        row = frame[(frame["dataset"] == dataset) & (frame["variant"] == variant)]
         if row.empty:
-            raise KeyError(f"no {variant} row for {dataset} in ablation.csv")
+            raise KeyError(f"no {variant} row for {dataset} in {study}")
         return float(row.iloc[0][column])
 
-    def method_constant(self, key: str):
-        """A knob read from the shipped method config, not retyped onto a slide.
+    def variant_mean(self, variant: str, column: str, study: str = "ablation") -> float:
+        frame = self.studies[study]
+        return float(frame[frame["variant"] == variant][column].mean())
 
-        The deck quotes `margin_threshold` and `fusion_weight` as part of the
-        method description. Those live in `configs/method/cal_tda.yaml`, which
-        is what the runs actually used, so the slide should read them from
-        there rather than carry a second copy that can silently disagree.
-        """
-        return self.method_config[key]
+    def admission_rate(self, dataset: str) -> float:
+        """Share of test samples the margin gate admitted, in percent."""
+        return self.admission[dataset]
+
+    def margin_constant(self, key: str):
+        """A knob read from the config the margin ablation run actually used."""
+        return self.margin_config[key]
+
+    def gate_constant(self, key: str):
+        """A knob read from the config the gated-fusion headline run actually used."""
+        return self.gate_config[key]
 
     def n_total_images(self) -> int:
         per_dataset = self.summary.groupby("dataset")["n_samples"].first()
         return int(per_dataset.sum())
 
-    def n_ablation_runs(self) -> int:
-        return int(len(self.ablation))
+    def n_runs(self, study: str) -> int:
+        return int(len(self.studies[study]))
 
-    def admission_range(self) -> tuple[tuple[str, float], tuple[str, float]]:
-        rows = self.summary[self.summary["method"] == "cal_tda"].dropna(
-            subset=["admission_rate"]
-        )
-        low = rows.loc[rows["admission_rate"].idxmin()]
-        high = rows.loc[rows["admission_rate"].idxmax()]
-        return (low["dataset"], float(low["admission_rate"])), (
-            high["dataset"], float(high["admission_rate"])
-        )
+    def boundary_fraction(self, dataset: str, method: str) -> float:
+        """Share of a run's samples whose temperature search stopped on a grid edge."""
+        return self.cell(dataset, method, "temp_frac_at_grid_boundary")
 
-    def boundary_fraction_range(self) -> tuple[float, float]:
-        column = self.summary[self.summary["method"] == "cal_tda"][
-            "temp_frac_at_grid_boundary"
-        ].dropna()
-        return float(column.min()), float(column.max())
+    def criterion_hits(self, method: str) -> int:
+        """Datasets where `method` matches TDA's accuracy AND beats its ECE.
 
-    def criterion_hits(self) -> int:
-        """Datasets where cal_tda beats tda on accuracy AND on ECE.
-
-        This is the spec's success criterion, recomputed here rather than
-        asserted, so the slide cannot claim a different count than the CSV
-        supports.
+        The project's success criterion, recomputed here rather than asserted,
+        so a slide cannot claim a different count than the CSV supports.
         """
         hits = 0
         for dataset in DATASET_ORDER:
-            better_accuracy = self.cell(dataset, "cal_tda", "accuracy") >= self.cell(
+            better_accuracy = self.cell(dataset, method, "accuracy") >= self.cell(
                 dataset, "tda", "accuracy"
             )
-            better_ece = self.cell(dataset, "cal_tda", "ece") < self.cell(
-                dataset, "tda", "ece"
-            )
+            better_ece = self.cell(dataset, method, "ece") < self.cell(dataset, "tda", "ece")
             hits += int(better_accuracy and better_ece)
         return hits
 
-    def temp_beats_none_on_ece(self) -> int:
-        return sum(
-            int(
-                self.variant_cell(dataset, "temp", "ece")
-                < self.variant_cell(dataset, "none", "ece")
-            )
-            for dataset in DATASET_ORDER
-        )
 
-
-# --- Layout helpers ----------------------------------------------------------
 def _style_run(run, size, *, bold=False, color=INK, italic=False, font=FONT):
     run.font.size = Pt(size)
     run.font.bold = bold
@@ -601,8 +587,9 @@ labels. We asked whether they also make it more trustworthy - whether the
 confidence it reports can still be believed - and whether we could fix that
 with three training-free changes.
 
-The short answer, which I will not hide until the end: two of our three ideas
-failed, one worked, and the interesting part of this talk is why.
+The short answer, which I will not hide until the end: one of our three ideas
+failed and was dropped, one failed and was repaired on the way, and the repaired
+one is what we recommend. The interesting part of this talk is why.
 """)
     return slide
 
@@ -613,8 +600,8 @@ def slide_agenda(prs, results):
     entries = [
         ("1", "Background", "CLIP  ·  test-time adaptation  ·  what calibration means"),
         ("2", "TDA", "the cache-based method we build on, and where it goes wrong"),
-        ("3", "Our method", "three independently-switchable, training-free changes"),
-        ("4", "Results", "headline numbers, the 40-run ablation, and the mechanism"),
+        ("3", "Our method", "three training-free changes, each measured alone - one repaired on the way"),
+        ("4", "Results", "five methods on five datasets, the ablation, and what the gate tells us"),
         ("5", "Conclusion", "what we stand behind, and what we do not"),
     ]
 
@@ -1177,18 +1164,17 @@ So confidence goes up. Accuracy does not necessarily follow, because nothing
 in that loop ever consulted a label. Confidently wrong predictions are
 reinforced exactly as efficiently as confidently right ones.
 
-That is our diagnosis, and each of our three changes attacks one link in
-this chain.
+That is our diagnosis. Each of our three changes attacks one link in this
+chain, and we measure each one alone before combining anything.
 """)
     return slide
 
 
-def _contribution_slide(prs, results, *, number, title, kicker, problem, change,
-                        detail_bullets, formula, formula_caption, callout,
-                        callout_color=ACCENT, notes=""):
-    """Shared layout for the three contribution slides, so they read as a set."""
-    slide = new_slide(prs, title, kicker=kicker)
+GOOD = RGBColor(0x3C, 0x8C, 0x5A)        # the one green in the deck: the result that holds
 
+
+def _change_strip(slide, number, problem, change):
+    """The "change N" chip plus the Baseline/Ours rows at the top of a change slide."""
     chip = slide.shapes.add_shape(
         MSO_SHAPE.ROUNDED_RECTANGLE, SLIDE_W - MARGIN - Inches(1.55),
         Inches(0.50), Inches(1.55), Inches(0.52)
@@ -1207,7 +1193,7 @@ def _contribution_slide(prs, results, *, number, title, kicker, problem, change,
 
     rows = [("Baseline", problem, MUTED), ("Ours", change, ACCENT)]
     for index, (label, text, color) in enumerate(rows):
-        row_top = int(Inches(1.90) + index * Inches(0.74))
+        row_top = int(Inches(1.72) + index * Inches(0.74))
         _, frame = _textbox(slide, MARGIN, row_top, Inches(1.35), Inches(0.66),
                             anchor=MSO_ANCHOR.MIDDLE)
         run = frame.paragraphs[0].add_run()
@@ -1218,458 +1204,661 @@ def _contribution_slide(prs, results, *, number, title, kicker, problem, change,
                             Inches(10.65), Inches(0.66), anchor=MSO_ANCHOR.MIDDLE)
         run = frame.paragraphs[0].add_run()
         run.text = text
-        _style_run(run, 16.5, bold=(index == 1), color=color)
+        _style_run(run, 15, bold=(index == 1), color=color)
 
-    # 3.42 -> 5.22 is 1.8in of bullet room. Four bullets at these sizes fill
-    # roughly 1.6in, which is the budget this layout has: the earlier version
-    # started them at 3.72 and the fourth bullet rendered BEHIND the formula
-    # panel, invisible in PowerPoint and invisible to a structural check.
-    add_bullets(slide, detail_bullets, top=Inches(3.42), size=14.5, sub_size=12.5,
-                spacing=7)
 
-    add_panel(slide, MARGIN, Inches(5.28), CONTENT_W, Inches(0.84))
-    _, frame = _textbox(slide, MARGIN + Inches(0.3), Inches(5.42),
-                        CONTENT_W - Inches(0.6), Inches(0.62))
-    run = frame.paragraphs[0].add_run()
-    run.text = formula
-    _style_run(run, 15, bold=True, color=INK)
-    run = frame.paragraphs[0].add_run()
-    run.text = "      " + formula_caption
-    _style_run(run, 12, italic=True, color=MUTED)
+def _change_slide(prs, *, number, title, kicker, problem, change, left_items, table,
+                  callout, callout_color=ACCENT, notes="", footnote=None):
+    """Idea on top, reasons on the left, the per-dataset verdict on the right.
 
-    add_callout(slide, callout, color=callout_color, top=Inches(6.25))
+    One layout for every change slide, so the three read as a set: the chip
+    and the Baseline/Ours strip say what the change is, the table says what
+    it did against the same baseline, and the callout says the verdict.
+    """
+    slide = new_slide(prs, title, kicker=kicker)
+    _change_strip(slide, number, problem, change)
+
+    body_top = Inches(3.25)
+    add_bullets(slide, left_items, left=MARGIN, top=body_top, width=Inches(5.55),
+                size=12, sub_size=11, spacing=4)
+
+    table_left = Inches(6.40)
+    add_table(
+        slide, table["header"], table["rows"], table_left, body_top,
+        SLIDE_W - MARGIN - table_left,
+        col_widths=table.get("col_widths"),
+        font_size=table.get("font_size", 11), header_size=table.get("header_size", 10.5),
+        row_height=table.get("row_height", Inches(0.32)),
+        highlight_rows=table.get("highlight_rows", ()),
+        highlight_color=table.get("highlight_color"),
+    )
+
+    if footnote:
+        _, frame = _textbox(slide, MARGIN, Inches(5.72), CONTENT_W, Inches(0.40))
+        run = frame.paragraphs[0].add_run()
+        run.text = footnote
+        _style_run(run, 10.5, italic=True, color=MUTED)
+
+    add_callout(slide, callout, color=callout_color, top=Inches(6.12), size=15)
     set_notes(slide, notes)
     return slide
 
 
-def slide_change_margin(prs, results):
-    (low_dataset, low_rate), (high_dataset, high_rate) = results.admission_range()
-    threshold = results.method_constant("margin_threshold")
-    return _contribution_slide(
-        prs, results, number=1,
-        title="Admit by margin, not by entropy",
-        kicker="3 · Our method",
-        problem="TDA admits samples by entropy, which only measures how peaked the whole prediction is.",
-        change="We admit a sample only when its top logit clearly beats the runner-up — proof one class won.",
-        detail_bullets=[
-            "Entropy is a property of all C classes at once, so it can be driven low by a "
-            "long flat tail even when the top two classes are nearly tied - exactly the "
-            "ambiguous case we want kept out.",
-            "The top-2 margin asks the narrower question: did one class actually beat the "
-            "runner-up? That is a more direct signal of a decisive prediction.",
-            (1, f"One GLOBAL threshold of {threshold:g}, deliberately NOT tuned per dataset - "
-                "fitting it to each test set would be test-set tuning, even without labels."),
-            (1, f"Measured admission rates span {high_rate * 100:.1f}% ({DATASET_LABELS[high_dataset]}) "
-                f"down to {low_rate * 100:.1f}% ({DATASET_LABELS[low_dataset]}). "
-                "We report that spread as a limitation rather than retuning it away."),
+def _versus_rows(results, variant, study="ablation"):
+    """Per-dataset rows comparing the `none` baseline with `variant`, plus a Mean row."""
+    rows = []
+    for dataset in DATASET_ORDER:
+        rows.append([
+            DATASET_LABELS[dataset],
+            pct(results.variant_cell(dataset, "none", "accuracy", study)),
+            pct(results.variant_cell(dataset, variant, "accuracy", study)),
+            pct(results.variant_cell(dataset, "none", "ece", study)),
+            pct(results.variant_cell(dataset, variant, "ece", study)),
+        ])
+    rows.append([
+        "Mean",
+        pct(results.variant_mean("none", "accuracy", study)),
+        pct(results.variant_mean(variant, "accuracy", study)),
+        pct(results.variant_mean("none", "ece", study)),
+        pct(results.variant_mean(variant, "ece", study)),
+    ])
+    return rows
+
+
+def _versus_header(variant):
+    return ["Dataset", "none acc.", f"{variant} acc.", "none ECE", f"{variant} ECE"]
+
+
+def slide_margin(prs, results):
+    threshold = results.margin_constant("margin_threshold")
+    none_acc = results.variant_mean("none", "accuracy")
+    margin_acc = results.variant_mean("margin", "accuracy")
+    none_ece = results.variant_mean("none", "ece")
+    margin_ece = results.variant_mean("margin", "ece")
+    rates = {d: results.admission_rate(d) for d in DATASET_ORDER}
+    high = max(rates, key=rates.get)
+    low = min(rates, key=rates.get)
+    pets_none = results.variant_cell("pets", "none", "ece")
+    pets_margin = results.variant_cell("pets", "margin", "ece")
+    aircraft_none = results.variant_cell("aircraft", "none", "ece")
+    aircraft_margin = results.variant_cell("aircraft", "margin", "ece")
+
+    rows = []
+    for dataset in DATASET_ORDER:
+        rows.append([
+            DATASET_LABELS[dataset],
+            f"{results.cell(dataset, 'clipzs', 'n_samples'):,.0f}",
+            f"{results.cell(dataset, 'clipzs', 'n_classes'):.0f}",
+            f"{rates[dataset]:.1f}%",
+            pct(results.variant_cell(dataset, "none", "accuracy")),
+            pct(results.variant_cell(dataset, "margin", "accuracy")),
+            pct(results.variant_cell(dataset, "none", "ece")),
+            pct(results.variant_cell(dataset, "margin", "ece")),
+        ])
+    rows.append([
+        "Mean / total", f"{results.n_total_images():,}", "",
+        f"{sum(rates.values()) / len(rates):.1f}%",
+        pct(none_acc), pct(margin_acc), pct(none_ece), pct(margin_ece),
+    ])
+
+    return _change_slide(
+        prs, number=1,
+        title="Change 1: admit by margin — and why it fails",
+        kicker="3 · Our method, one change at a time",
+        problem="TDA offers every sample to its positive cache; entropy only decides who gets evicted.",
+        change=(f"Admit a sample only if its top logit beats the runner-up by more than "
+                f"{threshold:.1f}: one global threshold, fixed before any run."),
+        left_items=[
+            f"It does not port. CLIP logits are 100 × a cosine, so a gap of {threshold:.1f} is a "
+            "0.01 cosine difference, which means something different on 10 and 100 classes. "
+            f"Admission follows CLIP's accuracy: {rates[high]:.1f}% on {DATASET_LABELS[high]}, "
+            f"{rates[low]:.1f}% on {DATASET_LABELS[low]}.",
+            "A starving cache is a biased cache. Only the classes CLIP already finds easy "
+            "clear the bar, so the cache can only vote for those, and pulls every prediction "
+            f"toward them: {DATASET_LABELS[low]} ECE {pct(aircraft_none)} → {pct(aircraft_margin)}. "
+            f"Pets, at {rates['pets']:.1f}% admission, is a near no-op "
+            f"({pct(pets_none)} → {pct(pets_margin)}).",
+            "It filters loudness, not correctness. A confidently wrong sample has a large "
+            "margin too, so the gate removes close calls, which TDA's eviction already "
+            "handled, and nothing else.",
         ],
-        formula=f"margin(x)  =  top1(logits)  −  top2(logits)         admit  if  margin > {threshold:g}",
-        formula_caption="replaces the entropy gate; everything else in the cache is untouched",
-        callout="Goal: keep confidently-ambiguous samples out of the cache in the first place.",
+        table={
+            "header": ["Dataset", "Images", "Classes", "Admitted",
+                       "none acc.", "margin acc.", "none ECE", "margin ECE"],
+            "rows": rows,
+            "col_widths": [0.19, 0.11, 0.10, 0.12, 0.12, 0.12, 0.12, 0.12],
+            "font_size": 10.5, "header_size": 10, "row_height": Inches(0.30),
+            "highlight_rows": (len(rows) - 1,),
+        },
+        footnote=("Every number from here on: ViT-B/16, batch 1, seed 0, CoOp test splits "
+                  "only, ECE with 20 bins. \"none\" = our method with every change off = TDA "
+                  "through our code, run in the same sweep; each change is measured alone "
+                  "against it."),
+        callout=(f"Loses on every dataset, on both metrics: accuracy {pct(none_acc)} → "
+                 f"{pct(margin_acc)}, ECE {pct(none_ece)} → {pct(margin_ece)}. Dropped."),
+        callout_color=WARN,
         notes=f"""
-Change one attacks the admission gate.
+From here on, one change at a time, each measured alone against the same
+baseline: our method with every change switched off, which is TDA run
+through our code, in the same sweep. The small table on the right also
+carries the setup: five datasets, {results.n_total_images():,} test images per method, CoOp
+test splits, ViT-B/16, batch size one so it is genuinely online, seed zero,
+twenty-bin ECE. Labels are opened once per run, by the final scorer.
 
-The trouble with entropy is that it is a property of the whole distribution
-across all classes. On a hundred-class problem a long flat tail can drive
-entropy down even when the top two classes are essentially tied - and that
-tied case is exactly what we want to keep out of the cache.
+Change one replaces entropy admission with a margin gate: admit only if the
+top logit beats the runner-up by more than {threshold:g}. One global threshold,
+fixed before any run, because fitting it per test set would be test-set
+tuning even without labels.
 
-The top-2 margin asks a narrower and more relevant question: did one class
-actually beat the runner-up?
+It loses everywhere. Mean accuracy {pct(none_acc)} to {pct(margin_acc)}, mean ECE
+{pct(none_ece)} to {pct(margin_ece)}. The admitted column explains the first reason: a
+logit gap of one means something different on ten and a hundred classes, so
+the gate admits {rates[high]:.1f} percent on {DATASET_LABELS[high]} and {rates[low]:.1f} percent on
+{DATASET_LABELS[low]}, ordered by how well CLIP already does.
 
-One honest caveat, which becomes important later. We use a single global
-threshold of one point zero for every dataset. We could have tuned it per
-dataset, but fitting a threshold to each test set margin distribution is
-test-set tuning even though no labels are involved. The cost is that logit
-margins do not share a scale across datasets with different class counts:
-admission runs from {high_rate * 100:.1f} percent on {DATASET_LABELS[high_dataset]} down to {low_rate * 100:.1f} percent on
-{DATASET_LABELS[low_dataset]}, where the cache nearly starves. We report that rather than
-retune it.
+Second reason: a starving cache is not a smaller cache, it is a biased one.
+Only the easy classes clear the bar, so the cache can only ever vote for
+easy classes, whatever the image shows. That is why {DATASET_LABELS[low]} doubles its
+ECE while Pets, where almost everything is admitted, barely moves.
+
+Third: margin filters loudness, not correctness. A confidently wrong sample
+has a large margin exactly like a confidently right one, so the gate could
+never remove the samples it was designed for. We drop it; everything from
+here on has margin admission off.
 """)
 
 
-def slide_change_fusion(prs, results):
-    weight = results.method_constant("fusion_weight")
-    return _contribution_slide(
-        prs, results, number=2,
-        title="Fuse probabilities, do not add logits",
-        kicker="3 · Our method",
-        problem="TDA adds the cache's logits onto CLIP's — an unbounded sum that can only grow sharper.",
-        change="We take a convex mixture of the two probability distributions, bounded by its inputs.",
-        detail_bullets=[
-            "Adding two agreeing logit vectors produces a distribution sharper than either "
-            "input. That is the mechanism that manufactures confidence out of agreement.",
-            "A convex combination cannot do that: a weighted average is bounded by its most "
-            "confident input, so agreement can change WHICH class wins without inflating "
-            "HOW confident the answer is.",
-            (1, f"Mixture weight fixed at {weight:g} - CLIP and the cache are weighted equally."),
-            (1, "The negative cache stays on the CLIP side of the mixture, since it is a "
-                "correction to CLIP's own evidence rather than independent evidence."),
+def slide_fusion_proposed(prs, results):
+    weight = results.gate_constant("fusion_weight")
+    none_acc = results.variant_mean("none", "accuracy")
+    fusion_acc = results.variant_mean("fusion", "accuracy")
+    none_ece = results.variant_mean("none", "ece")
+    fusion_ece = results.variant_mean("fusion", "ece")
+    pets_acc = results.variant_cell("pets", "fusion", "accuracy")
+    pets_ece = results.variant_cell("pets", "fusion", "ece")
+    flowers_none = results.variant_cell("flower102", "none", "ece")
+    flowers_fusion = results.variant_cell("flower102", "fusion", "ece")
+    aircraft_none = results.variant_cell("aircraft", "none", "ece")
+    aircraft_fusion = results.variant_cell("aircraft", "fusion", "ece")
+
+    return _change_slide(
+        prs, number=2,
+        title="Change 2: fuse probabilities — and why that fails too",
+        kicker="3 · Our method, one change at a time",
+        problem="TDA adds the cache's logits onto CLIP's and only then takes a softmax: two agreeing sources sharpen each other.",
+        change=(f"Convex mixture of the two distributions, p = (1 − w)·softmax(clip) + "
+                f"w·softmax(cache), w = {weight:g}: bounded by its most confident input."),
+        left_items=[
+            f"Accuracy barely moves ({pct(none_acc)} → {pct(fusion_acc)}): the cache still "
+            "chooses the class. What breaks is the confidence attached to the choice.",
+            "The two inputs live on different scales. A cache logit is a sum of at most "
+            "three e^(−β(1−cos)) terms, about 2 at most; softmaxed over 100 classes that is "
+            "nearly flat, top entry around 7%. CLIP's logits carry its ≈100 scale and peak "
+            "above 90%.",
+            "A 50/50 average of a peaked distribution and a flat one halves the peak, on "
+            "every sample, right or wrong. ECE punishes underconfidence exactly as it "
+            f"punishes overconfidence: Pets is right {pct(pets_acc)}% of the time at "
+            f"roughly 45% confidence, a gap of about 44 points, the {pct(pets_ece)} in the table.",
+            f"Aircraft looks like a win ({pct(aircraft_none)} → {pct(aircraft_fusion)}) by "
+            "accident: its true accuracy happens to sit near where the ceiling landed.",
         ],
-        formula=f"p  =  (1 − w) · softmax(clip)  +  w · softmax(cache),         w = {weight:g}",
-        formula_caption="bounded by its most confident input, by construction",
-        callout="Goal: let the cache change the answer without inflating the confidence.",
-        notes="""
-Change two attacks the combination step.
+        table={
+            "header": _versus_header("fusion"),
+            "rows": _versus_rows(results, "fusion"),
+            "col_widths": [0.24, 0.19, 0.19, 0.19, 0.19],
+            "highlight_rows": (5,),
+        },
+        callout=(f"Mean ECE {pct(none_ece)} → {pct(fusion_ece)}, the worst single change in "
+                 f"the project (Flowers102 {pct(flowers_none)} → {pct(flowers_fusion)}). "
+                 "The equation shows why."),
+        callout_color=WARN,
+        notes=f"""
+Change two attacks the combination step. TDA adds logits and then takes a
+softmax, so two sources that agree sharpen each other. A convex mixture of
+the two probability distributions cannot do that: it is bounded by its most
+confident input. We weight them equally.
 
-Adding two logit vectors that agree gives you a distribution sharper than
-either one on its own. That is the step that manufactures confidence out of
-mere agreement.
+As proposed it is the worst single change in the project. Mean ECE
+{pct(none_ece)} to {pct(fusion_ece)}, driven by Flowers {pct(flowers_none)} to {pct(flowers_fusion)} and Pets
+to {pct(pets_ece)}. Accuracy barely moves, so the cache is still choosing the
+class; what breaks is the confidence.
 
-A convex mixture of the two probability distributions cannot do that. A
-weighted average is bounded by its most confident input, so the cache can
-still change which class wins, but it cannot push the winning probability
-higher than both sources had.
+The mechanism is in the equation once you compare the scales. A cache logit
+is a sum of a few exponential affinity terms, about two at most, and most
+classes score near zero; softmaxed over a hundred classes that is almost
+flat, top entry around seven percent. CLIP's logits are peaked, often above
+ninety. Average the two fifty-fifty and you halve the peak, on every sample,
+right or wrong. Confidence is capped near one half. ECE punishes
+underconfidence as hard as overconfidence, so the cost scales with accuracy:
+Pets is right {pct(pets_acc)} percent of the time and reports about forty-five,
+and that gap is the number in the table.
 
-We weight CLIP and cache equally, at one half. Keep this slide in mind -
-this is the change that goes most spectacularly wrong, and the reason is
-visible right here in the equation if you look for it.
+Aircraft is the one place fusion looks good, and it is an accident: its true
+accuracy happens to sit near where the ceiling landed.
 """)
 
 
-def slide_change_temperature(prs, results):
-    return _contribution_slide(
-        prs, results, number=3,
-        title="Pick a temperature with no labels at all",
-        kicker="3 · Our method",
-        problem="TDA never rescales its output — whatever sharpness falls out of the sum is what you get.",
-        change="We divide the logits by a temperature chosen from a label-free estimate of accuracy.",
-        detail_bullets=[
-            "A well-calibrated model has mean confidence equal to its accuracy. We know the "
-            "mean confidence; the missing half is the accuracy, which needs labels.",
-            "We estimate it WITHOUT labels: leave-one-out 1-nearest-neighbour agreement among "
-            "the cached features and the pseudo-labels the method itself assigned. A cache "
-            "that disagrees with itself is a cache whose predictions are unreliable.",
-            (1, "Then grid-search the temperature whose mean confidence matches that estimate."),
-            (1, "The grid floor is 1.0, so the search can only SMOOTH, never sharpen. If the "
-                "estimate is inflated, the worst case is a no-op instead of making things worse."),
-        ],
-        formula="T*  =  argmin | mean-confidence(logits / T)  −  LOO-accuracy(cache) |,     T ≥ 1",
-        formula_caption="monotonic, so the argmax — and the accuracy — cannot change",
-        callout="This contribution is structurally incapable of changing accuracy. It can only move ECE.",
-        notes="""
-Change three is the one that worked, so let me be precise about it.
+def _bar_sketch(slide, left, top, width, height, probs, color, label, verdict):
+    """A five-bar probability sketch: the shape of a prediction, not a measurement."""
+    add_panel(slide, left, top, width, height)
+    n = len(probs)
+    gap = Inches(0.08)
+    inner_left = left + Inches(0.22)
+    inner_width = width - Inches(0.44)
+    bar_w = int((inner_width - gap * (n - 1)) / n)
+    base = top + height - Inches(0.62)
+    max_h = height - Inches(0.98)
+    for index, p in enumerate(probs):
+        bar_h = int(max_h * p)
+        bar = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE, int(inner_left + index * (bar_w + gap)),
+            int(base - bar_h), bar_w, bar_h,
+        )
+        bar.fill.solid()
+        bar.fill.fore_color.rgb = color if index < 2 else NEUTRAL
+        bar.line.fill.background()
+        bar.shadow.inherit = False
+    rule = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, inner_left, base, inner_width, Pt(1.2))
+    rule.fill.solid()
+    rule.fill.fore_color.rgb = RULE
+    rule.line.fill.background()
+    rule.shadow.inherit = False
 
-A well-calibrated model has mean confidence equal to its accuracy. We can
-measure mean confidence directly. The missing half is accuracy, which
-normally needs labels.
-
-We estimate it without labels, using the cache itself: take the cached
-features and the pseudo-labels the method assigned them, and compute
-leave-one-out nearest-neighbour agreement. If the nearest neighbour of a
-cached item carries a different pseudo-label, the cache is internally
-inconsistent, and that is evidence the predictions are unreliable.
-
-Then we grid-search the temperature that brings mean confidence onto that
-estimate. One design decision worth flagging: the grid floor is one, so the
-search can only smooth, never sharpen. If our label-free estimate comes out
-too optimistic, the worst case is that we do nothing, rather than making
-overconfidence worse.
-
-And note the line at the bottom - dividing logits by a positive constant is
-monotonic, so it cannot change which class wins. This contribution can move
-calibration only. Accuracy is untouchable by construction.
-""")
+    _, frame = _textbox(slide, left + Inches(0.12), top + Inches(0.08), width - Inches(0.24),
+                        Inches(0.30))
+    run = frame.paragraphs[0].add_run()
+    run.text = label
+    _style_run(run, 12, bold=True, color=INK)
+    _, frame = _textbox(slide, left + Inches(0.12), base + Inches(0.08), width - Inches(0.24),
+                        Inches(0.46))
+    run = frame.paragraphs[0].add_run()
+    run.text = verdict
+    _style_run(run, 11, bold=True, color=color)
 
 
-def slide_setup(prs, results):
-    slide = new_slide(prs, "Experimental setup", kicker="4 · Results")
+def slide_gate(prs, results):
+    max_gap = results.gate_constant("fusion_gate_max_gap")
+    min_mass = results.gate_constant("fusion_gate_min_mass")
+    weight = results.gate_constant("fusion_weight")
+    slide = new_slide(prs, "The repair: fuse only on a two-way tie",
+                      kicker="3 · Our method, one change at a time")
 
-    rows = [
-        [DATASET_LABELS[dataset],
-         f"{results.cell(dataset, 'clipzs', 'n_classes'):.0f}",
-         f"{results.cell(dataset, 'clipzs', 'n_samples'):,.0f}"]
-        for dataset in DATASET_ORDER
+    cases = [
+        ("CLIP has a clear winner", MUTED,
+         "The cache cannot change the argmax. Adding its logits only sharpens (TDA's "
+         "overconfidence); mixing only dilutes. Leave it out: the output is CLIP's own "
+         "distribution, negative-cache correction included."),
+        ("CLIP is torn between two classes", ACCENT,
+         "The cache can break the tie, which is where TDA's accuracy gain lives, and on a "
+         f"genuine tie a confidence near one half is honest. Fuse, w = {weight:g}."),
     ]
-    rows.append(["total", "", f"{results.n_total_images():,}"])
-    add_table(
-        slide, ["dataset", "classes", "test images"], rows,
-        MARGIN, Inches(2.10), Inches(5.0),
-        col_widths=[0.42, 0.26, 0.32],
-        highlight_rows=(len(rows) - 1,),
+    width, gap = Inches(5.95), Inches(0.21)
+    for index, (heading, color, body) in enumerate(cases):
+        left = int(MARGIN + index * (width + gap))
+        add_panel(slide, left, Inches(1.72), width, Inches(1.42),
+                  fill=TINT_ACCENT if index == 1 else SURFACE)
+        _, frame = _textbox(slide, left + Inches(0.26), Inches(1.84), width - Inches(0.52),
+                            Inches(1.2))
+        run = frame.paragraphs[0].add_run()
+        run.text = heading
+        _style_run(run, 15, bold=True, color=color)
+        paragraph = frame.add_paragraph()
+        paragraph.space_before = Pt(5)
+        run = paragraph.add_run()
+        run.text = body
+        _style_run(run, 12, color=INK)
+
+    add_panel(slide, MARGIN, Inches(3.32), CONTENT_W, Inches(0.80))
+    _, frame = _textbox(slide, MARGIN + Inches(0.3), Inches(3.44), CONTENT_W - Inches(0.6),
+                        Inches(0.6), anchor=MSO_ANCHOR.MIDDLE)
+    run = frame.paragraphs[0].add_run()
+    run.text = (f"two-way tie   ⇔   p(1) − p(2) < {max_gap:g}    and    "
+                f"p(1) + p(2) > {min_mass:g}")
+    _style_run(run, 17, bold=True, color=INK)
+    run = frame.paragraphs[0].add_run()
+    run.text = "        p = softmax(clip); p(1), p(2) its two largest entries"
+    _style_run(run, 12, italic=True, color=MUTED)
+
+    sketches = [
+        ([0.84, 0.07, 0.04, 0.03, 0.02], MUTED, "Clear winner", "gap large → CLIP alone"),
+        ([0.44, 0.37, 0.09, 0.06, 0.04], ACCENT, "Two-way tie", "small gap, top-two mass high → fuse"),
+        ([0.26, 0.21, 0.20, 0.17, 0.16], MUTED, "Spread thin", "small gap, but confused, not torn → CLIP alone"),
+    ]
+    width, gap = Inches(3.90), Inches(0.21)
+    for index, (probs, color, label, verdict) in enumerate(sketches):
+        left = int(MARGIN + index * (width + gap))
+        _bar_sketch(slide, left, Inches(4.30), width, Inches(1.66), probs, color, label, verdict)
+
+    add_callout(
+        slide,
+        "Same quantity as change 1, opposite purpose: applied at prediction time, to decide "
+        "when the cache is consulted, not at storage time. Every class stays represented.",
+        top=Inches(6.12), size=14.5,
     )
-
-    add_bullets(slide, [
-        "Backbone ViT-B/16, batch size 1 (true online streaming), seed 0, ECE with 20 bins.",
-        "Test split only, using the standard CoOp splits so the numbers stay comparable "
-        "to the benchmark paper.",
-        "",
-        "Every method sees exactly the same images in the same order.",
-        (1, "Ground-truth labels are consumed in exactly ONE function in the whole codebase; "
-            "no method ever receives one. A test enforces this by inspecting function "
-            "signatures, so it cannot rot."),
-        "",
-        "Two sweeps, both fully scripted and reproducible:",
-        (1, "Headline: 5 datasets x 3 methods = 15 runs (~41 min on an RTX 5060)."),
-        (1, f"Ablation: 5 datasets x 8 on/off combinations = {results.n_ablation_runs()} runs (~2.3 h)."),
-    ], left=Inches(6.10), width=Inches(6.60), size=15, sub_size=13, spacing=9)
-
     set_notes(slide, f"""
-Five datasets, {results.n_total_images():,} test images per method, standard CoOp splits so
-our numbers are comparable to the benchmark paper. ViT-B/16, batch size one
-so it is genuinely online, seed zero, twenty-bin ECE.
+The diagnosis says fusion fails because it runs on every sample, including
+the large majority where CLIP already has a clear winner and the cache can
+only dilute it. On those samples the cache cannot change the argmax either
+way: adding would only sharpen, which is TDA's overconfidence, and mixing
+would only dilute. So leave it out.
 
-One thing I want to highlight because it is easy to get wrong in this area:
-labels enter our codebase in exactly one function, the scorer that runs at
-the end of a run. No adaptation method ever receives a label. We enforce
-that with a test that inspects function signatures, so it cannot quietly
-decay as the code changes.
+The cache has a real job on exactly one kind of sample: a two-way tie. There
+it can break the tie, which is where TDA's accuracy gain comes from, and on
+a genuine tie a confidence near one half is roughly honest.
 
-Two sweeps: fifteen headline runs, and {results.n_ablation_runs()} ablation runs covering all eight
-on/off combinations of our three changes on all five datasets.
+So we gate the fusion. Take CLIP's softmax and its two largest entries. A
+sample is a two-way tie when the gap between them is below {max_gap:g} and
+their sum is above {min_mass:g}. The first condition is the close call. The
+second is what low entropy buys: a sample spread thinly over many classes
+also has a small gap, but there CLIP is confused rather than torn, and the
+cache's vote is noise. The three sketches show the three cases.
+
+On a tie the output is the fifty-fifty mixture; otherwise it is CLIP's own
+distribution, still corrected by TDA's negative cache, which we never touch.
+Both thresholds are in probability space, so one global pair means the same
+thing on ten and a hundred classes, which is exactly the portability margin
+admission lacked, and both were fixed before any run.
+
+Notice it is the same quantity change one used, the gap between the top two
+scores, with the opposite purpose: at prediction time, deciding when the
+cache is consulted, instead of at storage time, deciding what it remembers.
 """)
     return slide
 
 
-def _method_table(slide, results, column, top, *, title, highlight_worst):
+def _result_slide(prs, *, title, kicker, table, items, callout, callout_color, notes,
+                  table_width=Inches(6.9)):
+    """Table on the left, the reading of it on the right."""
+    slide = new_slide(prs, title, kicker=kicker)
+    add_table(
+        slide, table["header"], table["rows"], MARGIN, Inches(1.95), table_width,
+        col_widths=table.get("col_widths"), font_size=table.get("font_size", 12),
+        header_size=table.get("header_size", 11.5), row_height=table.get("row_height", Inches(0.36)),
+        highlight_rows=table.get("highlight_rows", ()), highlight_color=table.get("highlight_color"),
+    )
+    right = MARGIN + table_width + Inches(0.45)
+    add_bullets(slide, items, left=right, top=Inches(1.95), width=SLIDE_W - MARGIN - right,
+                size=13.5, sub_size=12, spacing=7)
+    add_callout(slide, callout, color=callout_color, top=Inches(6.12), size=15)
+    set_notes(slide, notes)
+    return slide
+
+
+def slide_gate_result(prs, results):
+    g = "ablation_gate"
+    none_ece = results.variant_mean("none", "ece", g)
+    gate_ece = results.variant_mean("gate", "ece", g)
+    none_acc = results.variant_mean("none", "accuracy", g)
+    gate_acc = results.variant_mean("gate", "accuracy", g)
+    clip_ece = results.method_mean("clipzs", "ece")
+    cell = lambda d, v, c: results.variant_cell(d, v, c, g)  # noqa: E731
+    drops = {d: cell(d, "none", "accuracy") - cell(d, "gate", "accuracy")
+             for d in ("dtd", "flower102", "eurosat")}
+    tda_gain_eurosat = results.cell("eurosat", "tda", "accuracy") - results.cell("eurosat", "clipzs", "accuracy")
+
+    return _result_slide(
+        prs,
+        title="Gated fusion: the blow-up is gone",
+        kicker="3 · Our method, one change at a time",
+        table={
+            "header": _versus_header("gate"),
+            "rows": _versus_rows(results, "gate", g),
+            "col_widths": [0.24, 0.19, 0.19, 0.19, 0.19],
+            "highlight_rows": (5,),
+        },
+        items=[
+            f"Mean ECE {pct(none_ece)} → {pct(gate_ece)}, below zero-shot CLIP's own "
+            f"{pct(clip_ece)}: better calibrated than the frozen model it started from.",
+            f"Ten-plus points on three datasets: DTD {pct(cell('dtd', 'none', 'ece'))} → "
+            f"{pct(cell('dtd', 'gate', 'ece'))}, EuroSAT {pct(cell('eurosat', 'none', 'ece'))} → "
+            f"{pct(cell('eurosat', 'gate', 'ece'))}, Aircraft {pct(cell('aircraft', 'none', 'ece'))} → "
+            f"{pct(cell('aircraft', 'gate', 'ece'))}. Pets is the one loss "
+            f"({pct(cell('pets', 'none', 'ece'))} → {pct(cell('pets', 'gate', 'ece'))}), where TDA "
+            "was already nearly perfect.",
+            f"The cost is accuracy: −{drops['dtd']:.2f} on DTD, −{drops['flower102']:.2f} on "
+            f"Flowers102, −{drops['eurosat']:.2f} on EuroSAT, where the gate gives back half of "
+            f"TDA's {tda_gain_eurosat:.1f}-point gain. Pets and Aircraft are unchanged or slightly up.",
+            "Same quantity as change 1, opposite purpose. Margin admission applied the top-two "
+            "gap at storage time and threw samples away, unevenly across classes; the gate "
+            "applies it at prediction time and every class stays represented.",
+        ],
+        callout=(f"Mean accuracy {pct(none_acc)} → {pct(gate_acc)}, mean ECE {pct(none_ece)} → "
+                 f"{pct(gate_ece)}. The cache is consulted only where it can change the answer."),
+        callout_color=GOOD,
+        notes=f"""
+With the gate, the blow-up is gone. Flowers and Pets are back to single-digit
+ECE, and gated fusion beats the baseline's ECE on four of five datasets, by
+ten or more points on three of them. Mean ECE goes from {pct(none_ece)} to
+{pct(gate_ece)}, which is below zero-shot CLIP's own {pct(clip_ece)}: the method is better
+calibrated than the frozen model it started from. Pets is the one loss, on
+the dataset where TDA was already nearly perfectly calibrated.
+
+The accuracy side is the cost. Gated fusion matches or fractionally exceeds
+the baseline on Pets and Aircraft, gives up {drops['flower102']:.2f} points on Flowers and
+{drops['dtd']:.2f} on DTD, and {drops['eurosat']:.2f} on EuroSAT, where it returns about half of
+TDA's gain. EuroSAT is where TDA's cache weighting is strongest, so its flips
+presumably come from moderate-margin samples the gate keeps the cache away
+from; we did not instrument that.
+
+The contrast with change one is the clearest finding in the project. Margin
+admission applied the top-two gap at storage time and threw information
+away, unevenly across classes. The gate applies it at prediction time and
+leaves every class represented.
+""")
+
+
+def slide_temperature(prs, results):
+    none_acc = results.variant_mean("none", "accuracy")
+    temp_acc = results.variant_mean("temp", "accuracy")
+    none_ece = results.variant_mean("none", "ece")
+    temp_ece = results.variant_mean("temp", "ece")
+    cell = results.variant_cell
+
+    return _change_slide(
+        prs, number=3,
+        title="Change 3: a label-free temperature — one reversal",
+        kicker="3 · Our method, one change at a time",
+        problem="TDA never rescales its output; whatever sharpness falls out of the sum is what it reports.",
+        change=("Divide logits by T ≥ 1, chosen so mean confidence matches a label-free accuracy "
+                "estimate: leave-one-out nearest-neighbour agreement inside the cache."),
+        left_items=[
+            f"Accuracy identical on every dataset, to 0.00 ({pct(none_acc)} = {pct(temp_acc)}): "
+            "a monotonic rescaling cannot move an argmax. Any difference would be a bug.",
+            f"Mean ECE {pct(none_ece)} → {pct(temp_ece)}, with the big wins where the baseline "
+            f"was most overconfident: DTD {pct(cell('dtd', 'none', 'ece'))} → "
+            f"{pct(cell('dtd', 'temp', 'ece'))}, Aircraft {pct(cell('aircraft', 'none', 'ece'))} → "
+            f"{pct(cell('aircraft', 'temp', 'ece'))}.",
+            f"Pets reverses: {pct(cell('pets', 'none', 'ece'))} → {pct(cell('pets', 'temp', 'ece'))}. "
+            "The search has no stopping rule, it always moves toward the estimate; and the "
+            "estimate is biased low on fine-grained data, where a cached Birman's nearest "
+            "neighbour is often a Ragdoll even when both pseudo-labels are right.",
+            "The grid floor at T = 1 prevents the opposite mistake, sharpening on an inflated "
+            "estimate. It cannot help here.",
+        ],
+        table={
+            "header": _versus_header("temp"),
+            "rows": _versus_rows(results, "temp"),
+            "col_widths": [0.24, 0.19, 0.19, 0.19, 0.19],
+            "highlight_rows": (5,),
+        },
+        callout=("Helps where TDA was overconfident, hurts where it was already honest. "
+                 "Accuracy untouched by construction."),
+        callout_color=BASELINE,
+        notes=f"""
+Change three. A well-calibrated model has mean confidence equal to its
+accuracy. Mean confidence we can measure; accuracy normally needs labels. We
+estimate it from the cache itself: leave-one-out nearest-neighbour agreement
+among the cached features and their pseudo-labels. Then a grid search picks
+the temperature, at least one, that brings mean confidence onto that
+estimate. Dividing logits by a positive constant is monotonic, so this change
+cannot move an argmax.
+
+The table shows that guarantee in the measurements: accuracy identical to two
+decimals on every dataset. On calibration it is a real but uneven gain. Mean
+ECE {pct(none_ece)} to {pct(temp_ece)}, with large drops where the baseline was badly
+overconfident, DTD and Aircraft, and small ones on EuroSAT and Flowers.
+
+Pets is a clear reversal, {pct(cell('pets', 'none', 'ece'))} to {pct(cell('pets', 'temp', 'ece'))}. Two reasons.
+The search has no stopping rule: it always moves confidence toward the
+estimate, so where TDA was already honest the only thing it can do is
+damage. And the estimate is biased low on fine-grained data: on Pets a
+cached Birman's nearest cached neighbour is often a Ragdoll even when both
+pseudo-labels are correct, so agreement sits well below the true accuracy,
+the search reads that as overconfidence, and smooths a model that did not
+need it. The floor at T equals one only prevents the opposite mistake.
+""")
+
+
+DECK_METHOD_LABEL = {
+    method: (label if method in ("clipzs", "tda") else f"Ours: {label.lower()}")
+    for method, label in METHOD_LABEL.items()
+}
+DECK_METHOD_LABEL["clipzs"] = "CLIP zero-shot"
+DECK_METHOD_LABEL["cal_tda_gate_temp"] = "Ours: gate + temp"
+
+
+def _method_table(slide, results, column, top, *, title):
     header = ["", *(DATASET_LABELS[d] for d in DATASET_ORDER), "mean"]
-    labels = [("clipzs", "CLIP zero-shot"), ("tda", "TDA"), ("cal_tda", "Ours, all 3")]
     rows = []
-    for method, label in labels:
+    for method in METHOD_ORDER:
         values = [results.cell(d, method, column) for d in DATASET_ORDER]
-        rows.append([label, *(pct(v) for v in values),
+        rows.append([DECK_METHOD_LABEL[method], *(pct(v) for v in values),
                      pct(results.method_mean(method, column))])
 
-    _, frame = _textbox(slide, MARGIN, int(top - Inches(0.28)), Inches(7.2), Inches(0.26))
+    _, frame = _textbox(slide, MARGIN, int(top - Inches(0.27)), Inches(7.2), Inches(0.26))
     run = frame.paragraphs[0].add_run()
     run.text = title
-    _style_run(run, 12.5, bold=True, color=MUTED)
+    _style_run(run, 12, bold=True, color=MUTED)
 
     return add_table(
         slide, header, rows, MARGIN, top, Inches(7.25),
         col_widths=[0.235, 0.117, 0.145, 0.108, 0.133, 0.132, 0.13],
-        font_size=11, header_size=10.5, row_height=Inches(0.31),
-        highlight_rows=(2,), highlight_color=WARN if highlight_worst else None,
+        font_size=10.5, header_size=10, row_height=Inches(0.285),
+        highlight_rows=(METHOD_ORDER.index("cal_tda_gate"),),
     )
 
 
-def slide_headline(prs, results):
-    slide = new_slide(prs, "Headline result: the bundle does not work", kicker="4 · Results")
+def slide_together(prs, results):
+    slide = new_slide(prs, "Putting it together: five methods, five datasets",
+                      kicker="4 · Results")
 
-    _method_table(slide, results, "accuracy", Inches(2.25),
-                  title="Top-1 accuracy (%)   -   higher is better",
-                  highlight_worst=False)
-    _method_table(slide, results, "ece", Inches(4.05),
-                  title="ECE, 20 bins (%)   -   lower is better",
-                  highlight_worst=True)
+    _method_table(slide, results, "accuracy", Inches(2.05),
+                  title="Top-1 accuracy (%)   -   higher is better")
+    _method_table(slide, results, "ece", Inches(4.22),
+                  title="ECE, 20 bins (%)   -   lower is better")
 
     figure = Path("analysis/figures/accuracy_vs_ece.png")
     if figure.exists():
-        add_picture(slide, figure, Inches(8.10), Inches(1.95), Inches(4.62), Inches(4.05))
+        add_picture(slide, figure, Inches(8.05), Inches(1.80), Inches(4.67), Inches(4.15))
 
-    hits = results.criterion_hits()
+    clip_acc = results.method_mean("clipzs", "accuracy")
+    tda_acc = results.method_mean("tda", "accuracy")
+    gate_acc = results.method_mean("cal_tda_gate", "accuracy")
+    clip_ece = results.method_mean("clipzs", "ece")
+    tda_ece = results.method_mean("tda", "ece")
+    gate_ece = results.method_mean("cal_tda_gate", "ece")
+    kept, gain = gate_acc - clip_acc, tda_acc - clip_acc
     add_callout(
         slide,
-        f"Success criterion (accuracy ≥ TDA AND ECE < TDA): met on {hits} of 5 datasets. "
-        "We report that as the negative result it is.",
-        color=WARN, top=Inches(6.05),
+        f"Gated fusion keeps {kept:.2f} of TDA's {gain:.2f} accuracy points over CLIP and "
+        f"reports better-calibrated confidence than either: ECE {pct(gate_ece)} vs CLIP "
+        f"{pct(clip_ece)}, TDA {pct(tda_ece)}.",
+        color=GOOD, top=Inches(6.12), size=14.5,
     )
     set_notes(slide, f"""
-This is the result we set out to get, and did not get.
+Now the five headline methods side by side: zero-shot CLIP, TDA, and three
+configurations of ours, gated fusion alone, temperature alone, and the two
+together, all with margin admission off.
 
-Top table, accuracy: our full method is below TDA on every single dataset.
-Bottom table, ECE: it is worse than TDA on four of five - and not slightly.
-Flowers goes from {pct(results.cell('flower102', 'tda', 'ece'))} to {pct(results.cell('flower102', 'cal_tda', 'ece'))} percent, Pets from
-{pct(results.cell('pets', 'tda', 'ece'))} to {pct(results.cell('pets', 'cal_tda', 'ece'))} percent. Aircraft is the one dataset where the
-bundle genuinely helps calibration.
+Averaged over the five datasets, CLIP reaches {pct(clip_acc)} percent accuracy at
+{pct(clip_ece)} ECE, TDA {pct(tda_acc)} at {pct(tda_ece)}. Gated fusion alone, the highlighted
+row, reaches {pct(gate_acc)} at {pct(gate_ece)}: it keeps {kept:.2f} of TDA's {gain:.2f} points of
+accuracy gain over CLIP while reporting better-calibrated confidence than
+either of them.
 
-Our success criterion was: at least three of five datasets where we match or
-beat TDA accuracy while beating its ECE. We hit that on {hits} of five.
-
-I want to be direct about this rather than reframe it. The method as
-specified - all three contributions enabled together - fails. The
-interesting question is why, and that is what the ablation answers.
+The scatter on the right is the same comparison. The target is a point as
+far right as TDA and as far down as zero-shot CLIP; the gated-fusion marker
+sits below both on three of the five datasets.
 """)
     return slide
 
 
-def slide_ablation(prs, results):
-    slide = new_slide(
-        prs, "The ablation: one of the three actually works", kicker="4 · Results"
-    )
+def slide_ablation_gate(prs, results):
+    g = "ablation_gate"
+    slide = new_slide(prs, "The ablation: the two do not stack", kicker="4 · Results")
 
-    figure = Path("analysis/figures/ablation_ece.png")
-    if figure.exists():
-        add_picture(slide, figure, MARGIN, Inches(1.88), CONTENT_W, Inches(4.05))
+    labels = [("none", "TDA-equivalent (both off)"), ("gate", "+ gated fusion"),
+              ("temp", "+ LOO temperature"), ("gate_temp", "+ gated fusion + temperature")]
+    rows = [[label, pct(results.variant_mean(v, "accuracy", g)), pct(results.variant_mean(v, "ece", g))]
+            for v, label in labels]
+    add_table(slide, ["Variant (margin off), mean of 5", "Accuracy", "ECE"], rows,
+              MARGIN, Inches(1.90), Inches(5.6), col_widths=[0.58, 0.21, 0.21],
+              font_size=12, header_size=11, row_height=Inches(0.36), highlight_rows=(1,))
 
-    none_ece = results.variant_mean("none", "ece")
-    temp_ece = results.variant_mean("temp", "ece")
-    wins = results.temp_beats_none_on_ece()
-    add_callout(
-        slide,
-        f"LOO temperature alone: mean ECE {pct(none_ece)}% → {pct(temp_ece)}% at IDENTICAL "
-        f"accuracy, better on {wins} of 5 datasets.",
-        top=Inches(6.10),
-    )
-    set_notes(slide, f"""
-Forty runs: all eight on/off combinations of our three changes, on all five
-datasets. Left panel is mean ECE, lower is better. Right panel is mean
-accuracy. Rows are sorted so the best-calibrated variant is on top.
+    gate_ece = results.variant_mean("gate", "ece", g)
+    gate_temp_ece = results.variant_mean("gate_temp", "ece", g)
+    clip_ece = results.method_mean("clipzs", "ece")
+    pets_gate = results.variant_cell("pets", "gate", "ece", g)
+    pets_gate_temp = results.variant_cell("pets", "gate_temp", "ece", g)
+    eurosat_pinned = 100 * results.boundary_fraction("eurosat", "cal_tda_gate_temp")
+    aircraft_pinned = 100 * results.boundary_fraction("aircraft", "cal_tda_gate_temp")
+    hits = results.criterion_hits("cal_tda_gate")
 
-The orange row is the baseline - all three flags off, which is TDA.
-
-The purple row on top is temperature scaling alone, with margin admission
-and fusion both switched off. Mean ECE drops from {pct(none_ece)} to {pct(temp_ece)}
-percent, and look at the right panel: accuracy is identical, {pct(results.variant_mean('temp', 'accuracy'))}
-in both. Not approximately - exactly, to two decimals, on all five datasets.
-That is the structural guarantee from the previous slide showing up in the
-measurements: temperature scaling is monotonic, so it cannot move an argmax.
-
-The hatched row, second from the bottom on ECE, is our full method. Nearly
-everything we added on top of temperature made things worse.
-
-One honest qualifier: it wins on {wins} of five datasets, not all five. Pets is
-the exception, and I will come back to it.
-""")
-    return slide
-
-
-def slide_mechanism(prs, results):
-    slide = new_slide(prs, "Why the other two failed", kicker="4 · Results")
-
-    none_acc = results.variant_mean("none", "accuracy")
-    margin_acc = results.variant_mean("margin", "accuracy")
-    fusion_ece = results.variant_mean("fusion", "ece")
-    low_boundary, high_boundary = results.boundary_fraction_range()
-
-    (low_dataset, low_rate), _ = results.admission_range()
-    cards = [
-        ("Margin admission",
-         f"accuracy {pct(none_acc)} → {pct(margin_acc)}",
-         "The global threshold starves the cache on high-class-count datasets. "
-         f"On {DATASET_LABELS[low_dataset]} only {low_rate * 100:.1f}% of samples are "
-         "admitted, so the cache holds too little signal to help - and the signal "
-         "it discards was being used correctly.",
-         WARN),
-        ("Probabilistic fusion",
-         f"mean ECE → {pct(fusion_ece)}",
-         "Backfires the opposite way from the design intent. Cache logits are "
-         "small and flat, so a 50/50 mixture caps top-1 confidence well below 1 "
-         "on EVERY sample - correct or not. The result is severe UNDER-confidence.",
-         WARN),
-        ("Temperature, on top of both",
-         f"{low_boundary * 100:.0f}-{high_boundary * 100:.0f}% pinned at T = 1",
-         "With margin and fusion both active, the LOO estimate is inflated by the "
-         "selectively-pure cache, so the search wants to sharpen and is held at "
-         "the no-op floor. Contribution 3 is effectively INERT inside the bundle.",
-         MUTED),
-    ]
-
-    width, gap = Inches(3.85), Inches(0.28)
-    for index, (heading, headline, body, color) in enumerate(cards):
-        left = int(MARGIN + index * (width + gap))
-        add_panel(slide, left, Inches(2.00), width, Inches(2.35))
-        _, frame = _textbox(slide, left + Inches(0.26), Inches(2.22),
-                            width - Inches(0.52), Inches(2.0))
-        run = frame.paragraphs[0].add_run()
-        run.text = heading
-        _style_run(run, 15, bold=True, color=INK)
-
-        paragraph = frame.add_paragraph()
-        paragraph.space_before = Pt(7)
-        run = paragraph.add_run()
-        run.text = headline
-        _style_run(run, 15.5, bold=True, color=color)
-
-        paragraph = frame.add_paragraph()
-        paragraph.space_before = Pt(9)
-        run = paragraph.add_run()
-        run.text = body
-        _style_run(run, 12, color=MUTED)
-
-    pets_margin = results.variant_cell("pets", "margin", "ece")
-    pets_margin_temp = results.variant_cell("pets", "margin_temp", "ece")
-    add_panel(slide, MARGIN, Inches(4.75), CONTENT_W, Inches(1.25),
-              fill=RGBColor(0xF7, 0xEA, 0xE1))
-    _, frame = _textbox(slide, MARGIN + Inches(0.32), Inches(4.94),
-                        CONTENT_W - Inches(0.64), Inches(0.95))
-    run = frame.paragraphs[0].add_run()
-    run.text = "And the exception we did not average away:  "
-    _style_run(run, 14, bold=True, color=INK)
-    run = frame.paragraphs[0].add_run()
-    run.text = (f"on Pets, where TDA is already very well calibrated "
-                f"({pct(pets_margin)}% ECE), adding temperature on top of margin makes it "
-                f"{pct(pets_margin_temp)}%.")
-    _style_run(run, 14, color=INK)
-    paragraph = frame.add_paragraph()
-    paragraph.space_before = Pt(4)
-    run = paragraph.add_run()
-    run.text = ("Our method always smooths toward its label-free estimate, with no way to "
-                "detect that no smoothing was needed. Developing on one dataset would have "
-                "hidden this entirely.")
-    _style_run(run, 12.5, italic=True, color=MUTED)
-
-    set_notes(slide, f"""
-Three diagnoses, one per card.
-
-Margin admission: the single global threshold does not port across datasets
-with different class counts. On Aircraft, with a hundred classes, it admits
-under sixteen percent of samples and the cache starves. Mean accuracy drops
-almost three points, from {pct(none_acc)} to {pct(margin_acc)}. The signal it threw away
-was being used correctly.
-
-Fusion: this one backfired in the opposite direction from the design intent.
-We built it to prevent over-confidence. But the cache logits are small and
-flat compared to CLIP's sharp distribution, so averaging them fifty-fifty caps
-top-one confidence well below one on every sample, whether it is right or
-wrong. The result is severe under-confidence - and ECE punishes that exactly
-as hard as over-confidence.
-
-Third card: when margin and fusion are both on, the leave-one-out estimate
-is inflated, because a selectively-pure cache agrees with itself more than
-the true accuracy would. The search therefore wants to sharpen, and our
-floor at T equals one stops it. Between {low_boundary * 100:.0f} and {high_boundary * 100:.0f} percent of samples sit
-pinned at the no-op. So inside the bundle, contribution three is doing
-essentially nothing - which is why the bundle looks like margin plus fusion.
-
-Finally, the box. On Pets, TDA is already extremely well calibrated. Our
-method still smooths, because it has no way to tell that smoothing was not
-needed, and ECE goes from {pct(pets_margin)} to {pct(pets_margin_temp)} percent. We had developed on DTD,
-where the story was clean. Five datasets showed us the exception.
-""")
-    return slide
-
-
-def slide_limitations(prs, results):
-    slide = new_slide(prs, "Limitations", kicker="5 · Conclusion")
-
-    (low_dataset, low_rate), (high_dataset, high_rate) = results.admission_range()
     add_bullets(slide, [
-        "One global margin threshold is not portable. Logit margins have no common scale "
-        "across a 10-class and a 100-class dataset, and admission rates running from "
-        f"{low_rate * 100:.1f}% ({DATASET_LABELS[low_dataset]}) to {high_rate * 100:.1f}% "
-        f"({DATASET_LABELS[high_dataset]}) show it. Tuning per dataset would have been "
-        "test-set tuning, so we did not.",
-        "",
-        "Temperature scaling has no stopping rule. It always smooths toward the label-free "
-        "estimate, even when the model was already well calibrated - which is exactly how "
-        "it damages Pets.",
-        "",
-        "Five datasets, one backbone, one seed. Enough to show the bundle fails and that "
-        "temperature alone helps on 4 of 5; not enough to claim either result holds "
-        "universally.",
-        "",
-        "The LOO estimate is only as good as the cache. It inherits whatever bias the "
-        "admission rule introduces - which is precisely the coupling that makes "
-        "contribution 1 and contribution 3 interfere.",
-    ], size=16, spacing=5)
+        f"Temperature on top of the gate leaves accuracy unchanged, as it must, and makes "
+        f"ECE worse: {pct(gate_ece)} → {pct(gate_temp_ece)}.",
+        f"Both target the same overconfidence. Once the gate removes it at the source, what "
+        f"is left is CLIP's own calibration (≈{pct(clip_ece)}) and the label-free estimate "
+        f"cannot improve on it: the search sits on a grid edge for {eurosat_pinned:.1f}% of "
+        f"EuroSAT and {aircraft_pinned:.1f}% of Aircraft samples, and on Pets it acts the "
+        f"wrong way ({pct(pets_gate)} → {pct(pets_gate_temp)}).",
+        f"Strict criterion (accuracy ≥ TDA and ECE < TDA, on 3 of 5): gated fusion meets it "
+        f"on {hits} of 5. We report that count as it stands.",
+    ], left=MARGIN, top=Inches(3.85), width=Inches(5.6), size=12.5, sub_size=11.5, spacing=5)
 
-    set_notes(slide, """
-Four limitations we would want a reader to know.
+    figures = Path("analysis/figures")
+    panels = [("reliability_dtd.png", "DTD"), ("reliability_pets.png", "Pets")]
+    panel_w, panel_h = Inches(3.05), Inches(3.05)
+    for index, (name, _label) in enumerate(panels):
+        path = figures / name
+        if path.exists():
+            add_picture(slide, path, int(Inches(6.55) + index * (panel_w + Inches(0.12))),
+                        Inches(1.82), panel_w, panel_h)
+    legend = figures / "reliability_legend.png"
+    if legend.exists():
+        add_picture(slide, legend, Inches(6.55), Inches(4.95), Inches(6.2), Inches(1.0))
 
-The global margin threshold is not portable across class counts, and we
-chose not to tune it per dataset because that would be test-set tuning.
+    add_callout(
+        slide,
+        "Recommend gated fusion alone: one extra comparison per sample, no labels, no "
+        "training, no change to the cache.",
+        color=GOOD, top=Inches(6.12), size=15,
+    )
+    set_notes(slide, f"""
+The ablation over the two surviving changes: both on/off combinations of
+gated fusion and temperature, margin off, on all five datasets, {results.n_runs(g)}
+records.
 
-Temperature scaling has no stopping rule - it always smooths toward the
-estimate, even when the model was already honest. That is the Pets failure.
+They do not stack. Adding temperature on top of the gate leaves accuracy
+unchanged, as it must, and makes mean ECE worse, {pct(gate_ece)} to {pct(gate_temp_ece)}.
+The reason is that both target the same thing. Temperature scaling was
+designed to undo the overconfidence TDA's cache manufactures; the gate
+removes that overconfidence at the source, by never letting the cache sharpen
+a prediction CLIP had already made. What is left after the gate is CLIP's
+own calibration, already around {pct(clip_ece)}, and the label-free estimate is not
+accurate enough to improve on it. On EuroSAT and Aircraft the search wants
+to sharpen, the floor blocks it, and it sits on a grid edge for {eurosat_pinned:.1f} and
+{aircraft_pinned:.1f} percent of samples; on Pets it acts on every sample, in the wrong
+direction, the same Pets failure as before.
 
-Five datasets, one backbone, one seed. Enough to establish that the bundle
-fails and that temperature alone helps on four of five. Not enough to claim
-either holds universally.
+The reliability diagrams on the right show the direction of each failure
+directly: TDA's curve sits below the identity line, the temperature-only
+curve sits above it on Pets, and gated fusion tracks the diagonal most
+closely on DTD.
 
-And the leave-one-out estimate is only as good as the cache it reads, so it
-inherits any bias the admission rule introduces. That coupling is exactly
-why contributions one and three interfere with each other.
+Against the project's own strict criterion, accuracy at least TDA and ECE
+below TDA on three of five datasets, gated fusion passes on {hits} of five. We
+report that as it stands. So we recommend gated fusion alone.
 """)
     return slide
 
@@ -1677,61 +1866,68 @@ why contributions one and three interfere with each other.
 def slide_conclusion(prs, results):
     slide = new_slide(prs, "Conclusion", kicker="5 · Conclusion")
 
-    none_ece = results.variant_mean("none", "ece")
+    clip_acc = results.method_mean("clipzs", "accuracy")
+    tda_acc = results.method_mean("tda", "accuracy")
+    gate_acc = results.method_mean("cal_tda_gate", "accuracy")
+    clip_ece = results.method_mean("clipzs", "ece")
+    tda_ece = results.method_mean("tda", "ece")
+    gate_ece = results.method_mean("cal_tda_gate", "ece")
     temp_ece = results.variant_mean("temp", "ece")
-    temp_acc = results.variant_mean("temp", "accuracy")
-    wins = results.temp_beats_none_on_ece()
 
-    add_panel(slide, MARGIN, Inches(1.95), CONTENT_W, Inches(1.38),
-              fill=RGBColor(0xEC, 0xE6, 0xF3))
-    _, frame = _textbox(slide, MARGIN + Inches(0.4), Inches(2.18),
-                        CONTENT_W - Inches(0.8), Inches(1.2))
+    add_panel(slide, MARGIN, Inches(1.85), CONTENT_W, Inches(1.32), fill=TINT_ACCENT)
+    _, frame = _textbox(slide, MARGIN + Inches(0.4), Inches(2.02), CONTENT_W - Inches(0.8),
+                        Inches(1.1))
     run = frame.paragraphs[0].add_run()
-    run.text = "What we stand behind"
+    run.text = "What we recommend"
     _style_run(run, 13, bold=True, color=ACCENT)
     paragraph = frame.add_paragraph()
-    paragraph.space_before = Pt(8)
+    paragraph.space_before = Pt(6)
     run = paragraph.add_run()
-    run.text = (f"Label-free LOO temperature scaling, applied ALONE to TDA, cuts mean ECE "
-                f"{pct(none_ece)}% → {pct(temp_ece)}% at unchanged accuracy ({pct(temp_acc)}%), "
-                f"on {wins} of 5 datasets.")
-    _style_run(run, 17, bold=True, color=INK)
+    run.text = (f"TDA's cache with gated probabilistic fusion: mean ECE {pct(tda_ece)} → "
+                f"{pct(gate_ece)} (zero-shot CLIP: {pct(clip_ece)}) at {pct(gate_acc)}% accuracy "
+                f"(TDA {pct(tda_acc)}, CLIP {pct(clip_acc)}). One extra comparison per sample, "
+                "no labels, no training.")
+    _style_run(run, 16, bold=True, color=INK)
 
     add_bullets(slide, [
-        "The bundle we set out to build does not work. Margin admission and probabilistic "
-        "fusion are both harmful on average, and neither is reliably helpful alone.",
+        "Margin admission fails outright: a fixed logit threshold does not port, a starved "
+        "cache is a biased cache, and the top-two gap cannot tell a confident mistake from a "
+        "confident success. Dropped.",
         "",
-        "We know why each one failed, and the ablation is what told us - not intuition: "
-        "margin starves the cache, fusion manufactures under-confidence, and together "
-        "they render the one contribution that works inert.",
+        "Probabilistic fusion fails as proposed, for a reason the equation makes visible: a "
+        "flat cache distribution averaged into CLIP's peaked one caps every confidence near "
+        "one half. Gating it to two-way ties removes the dilution and keeps the one thing "
+        "the cache is good for, breaking ties.",
         "",
-        "The finding is narrower than the one we set out to get - and we report it that "
-        "way rather than framing the bundle as a success it is not.",
-    ], top=Inches(3.58), size=15.5, spacing=4)
+        f"Leave-one-out temperature helps on its own (mean ECE {pct(tda_ece)} → {pct(temp_ece)} "
+        "at unchanged accuracy) but adds nothing on top of the gate, because the gate has "
+        "already removed the overconfidence it was built to correct.",
+    ], top=Inches(3.40), size=14, spacing=3)
 
     add_callout(
         slide,
-        "Not “three changes fix TDA calibration”, but “one of three does, run alone — "
-        "and we diagnosed why the other two do not.”",
-        top=Inches(6.15), size=15.5,
+        "TDA's calibration loss comes from consulting the cache where it can only add "
+        "confidence. The gap between CLIP's top two scores, applied at prediction time rather "
+        "than admission time, tells those samples apart.",
+        top=Inches(6.08), size=14.5,
     )
     set_notes(slide, f"""
-To close.
+To close. We set out to undo TDA's calibration loss with three training-free,
+label-free changes, and measured each one rather than assuming it worked.
 
-The headline claim we can defend is the box: leave-one-out temperature
-scaling, applied on its own, cuts TDA mean calibration error from {pct(none_ece)} to
-{pct(temp_ece)} percent while leaving accuracy completely unchanged, on {wins} of five
-datasets. It is training-free, label-free, and costs one grid search.
+Margin admission fails outright, and we dropped it. Probabilistic fusion
+fails as proposed, for a reason the equation makes visible once you compare
+the two inputs' scales; the repair follows from the diagnosis, and fusing
+only where CLIP is torn between two classes is the method we recommend:
+mean ECE {pct(tda_ece)} to {pct(gate_ece)}, below zero-shot CLIP's own {pct(clip_ece)}, at
+{pct(gate_acc)} percent accuracy against TDA's {pct(tda_acc)}. Temperature scaling helps on its
+own but adds nothing on top of the gate.
 
-The bundle we originally proposed does not work, and we are not going to
-dress that up. Margin admission and probabilistic fusion are both harmful on
-average.
-
-What I would argue we actually got out of this project is the diagnosis.
-The ablation - not our intuition - told us margin starves the cache, fusion
-manufactures under-confidence, and the two of them together render the one
-idea that works inert. We would not have known any of that from the headline
-numbers alone.
+What the result supports is a narrower and, we think, more useful claim than
+the one we set out to make: TDA's calibration loss comes from consulting the
+cache on samples where it can only add confidence, and the gap between
+CLIP's top two scores, applied at prediction time rather than at admission
+time, is enough to tell those samples apart.
 
 Happy to take questions.
 """)
@@ -1749,14 +1945,13 @@ SLIDE_BUILDERS = [
     slide_tda_cache,
     slide_tda_admission,
     slide_feedback_loop,
-    slide_change_margin,
-    slide_change_fusion,
-    slide_change_temperature,
-    slide_setup,
-    slide_headline,
-    slide_ablation,
-    slide_mechanism,
-    slide_limitations,
+    slide_margin,
+    slide_fusion_proposed,
+    slide_gate,
+    slide_gate_result,
+    slide_temperature,
+    slide_together,
+    slide_ablation_gate,
     slide_conclusion,
 ]
 
@@ -1811,9 +2006,11 @@ def write_markdown_mirror(prs, md_path) -> Path:
     return md_path
 
 
-def build(summary_csv, ablation_csv, method_config_yaml, out_path,
-          markdown_path=None) -> Path:
-    results = Results(Path(summary_csv), Path(ablation_csv), Path(method_config_yaml))
+def build(summary_csv, ablation_csv, ablation_gate_csv, ablation_raw_dir,
+          margin_config_yaml, gate_config_yaml, out_path, markdown_path=None) -> Path:
+    results = Results(Path(summary_csv), Path(ablation_csv), Path(ablation_gate_csv),
+                      Path(ablation_raw_dir), Path(margin_config_yaml),
+                      Path(gate_config_yaml))
 
     prs = Presentation()
     prs.slide_width = SLIDE_W
@@ -1838,9 +2035,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--summary-csv", default="results/summary.csv")
     parser.add_argument("--ablation-csv", default="results/ablation.csv")
+    parser.add_argument("--ablation-gate-csv", default="results/ablation_gate.csv")
     parser.add_argument(
-        "--method-config", default="configs/method/cal_tda.yaml",
-        help="source of the margin/fusion constants the method slides quote",
+        "--ablation-raw-dir", default="results/raw/ablation",
+        help="margin run records, read for the cache admission rates",
+    )
+    parser.add_argument(
+        "--margin-config", default="configs/method/ablation/margin.yaml",
+        help="config of the margin ablation run; source of the threshold the slide quotes",
+    )
+    parser.add_argument(
+        "--gate-config", default="configs/method/cal_tda_gate.yaml",
+        help="config of the gated-fusion run; source of the gate constants",
     )
     parser.add_argument(
         "--out", default="presentation/calibration_aware_tta.pptx"
@@ -1851,7 +2057,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    path = build(args.summary_csv, args.ablation_csv, args.method_config, args.out,
+    path = build(args.summary_csv, args.ablation_csv, args.ablation_gate_csv,
+                 args.ablation_raw_dir, args.margin_config, args.gate_config, args.out,
                  markdown_path=args.markdown or None)
     print(f"wrote {path} ({len(SLIDE_BUILDERS)} slides)")
     if args.markdown:

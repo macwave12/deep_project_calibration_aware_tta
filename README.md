@@ -7,8 +7,9 @@
 
 > **Status (2026-10-24):** the current report is `report/main_v2.pdf`, which measures each
 > contribution alone, drops margin admission, repairs probabilistic fusion with a two-way-tie
-> gate, and recommends gated fusion. The **Results** section below and the slide deck still
-> describe the earlier three-contribution bundle and are updated in a follow-up.
+> gate, and recommends gated fusion. The slide deck (`presentation/`) tells the same story.
+> The **Results** section below still describes the earlier three-contribution bundle and is
+> updated in a follow-up.
 
 ---
 
