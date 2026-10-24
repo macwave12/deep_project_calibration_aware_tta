@@ -9,7 +9,8 @@ from online_method.cal_tda import CalTdaConfig
 from online_method.tda import TDA
 
 DATASETS = ["dtd", "flower102", "pets", "eurosat", "aircraft"]
-METHOD_CONFIGS = ["tda", "cal_tda", "tda_equivalent"]
+METHOD_CONFIGS = ["tda", "cal_tda", "tda_equivalent",
+                  "cal_tda_gate", "cal_tda_temp", "cal_tda_gate_temp"]
 
 # Upstream's `--test_sets` keys (mixed-case) for each of our lowercase filenames.
 # This mapping lives here (and in the runner scripts) because upstream's own
@@ -56,6 +57,19 @@ def test_tda_equivalent_config_disables_every_contribution():
     assert config.use_margin_admission is False
     assert config.use_prob_fusion is False
     assert config.use_loo_temperature is False
+
+
+@pytest.mark.parametrize("name,gate,temp", [
+    ("cal_tda_gate", True, False),
+    ("cal_tda_temp", False, True),
+    ("cal_tda_gate_temp", True, True),
+])
+def test_headline_configs_have_margin_off_and_the_named_contributions_on(name, gate, temp):
+    config = CalTdaConfig(**yaml.safe_load(Path(f"configs/method/{name}.yaml").read_text()))
+    assert config.use_margin_admission is False
+    assert config.use_prob_fusion is gate and config.fusion_gate is gate
+    assert config.use_loo_temperature is temp
+    assert (config.fusion_gate_max_gap, config.fusion_gate_min_mass) == (0.2, 0.6)
 
 
 def test_cal_tda_config_enables_every_contribution():

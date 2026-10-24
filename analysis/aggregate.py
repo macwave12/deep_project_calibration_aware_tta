@@ -17,8 +17,11 @@ try:  # running as a script puts analysis/ itself on sys.path
 except ImportError:  # imported as analysis.aggregate (tests, pytest pythonpath=.)
     from analysis.latex_table import wrap_table
 
-# Presentation order: baseline, prior work, ours.
-METHOD_ORDER = ["clipzs", "tda", "cal_tda"]
+# Presentation order: baseline, prior work, then ours -- the two-contribution
+# combination first, then each surviving contribution alone. The recommended
+# method is `cal_tda_gate`; the three-contribution bundle is no longer a
+# headline method (its numbers survive as the first ablation's `all` rows).
+METHOD_ORDER = ["clipzs", "tda", "cal_tda_gate_temp", "cal_tda_gate", "cal_tda_temp"]
 DATASET_ORDER = ["dtd", "flower102", "pets", "eurosat", "aircraft"]
 # Display names for the report table only. The CSV keeps the raw keys, which are
 # what the run records and the CLI flags use.
@@ -26,30 +29,57 @@ DATASET_LABEL = {
     "dtd": "DTD", "flower102": "Flowers102", "pets": "Pets",
     "eurosat": "EuroSAT", "aircraft": "Aircraft",
 }
-# Method names as they appear in the emitted LaTeX *after* escaping (cal_tda -> cal\_tda).
-METHOD_CELLS = frozenset({"clipzs", "tda", r"cal\_tda"})
+# Column headers for the report table. The PDF never names a code identifier,
+# so the method keys (`cal_tda_gate`, `clipzs`, ...) stay in the CSV and the
+# table shows these labels instead; the caption spells them out.
+METHOD_LABEL = {
+    "clipzs": "CLIP",
+    "tda": "TDA",
+    "cal_tda_gate_temp": "Gate+Temp",
+    "cal_tda_gate": "Gate",
+    "cal_tda_temp": "Temp",
+}
+MAIN_TABLE_CAPTION = (
+    "Top-1 accuracy and ECE (\\%, 20 bins) on the five test splits. CLIP is zero-shot "
+    "CLIP; Gate, Temp and Gate+Temp are our method with gated fusion, LOO temperature "
+    "scaling, or both (margin admission off in all three). Mean is the unweighted mean "
+    "over the five datasets."
+)
 
 
-def _texttt_method_headers(tabular: str, names=METHOD_CELLS) -> str:
-    """Wrap the method sub-header cells in \\texttt{}, matching how the prose sets them.
+def summary_table_tex(frame: pd.DataFrame) -> str:
+    """The headline table (`tab:main`) as a LaTeX float, from the aggregated frame."""
+    pivot = frame.pivot(index="dataset", columns="method", values=["accuracy", "ece"])
+    # Present columns baseline -> prior work -> ours, not pandas' alphabetical
+    # order, which would put our method first and read as if it were the
+    # reference point.
+    present = [m for m in METHOD_ORDER if m in pivot.columns.get_level_values(1)]
+    pivot = pivot.reindex(
+        columns=pd.MultiIndex.from_product([["accuracy", "ece"], present])
+    )
+    # Rows in the report's dataset order (the per-contribution tables use the
+    # same one), then the mean the prose quotes, so it can be checked on the page.
+    datasets = [d for d in DATASET_ORDER if d in pivot.index]
+    datasets += sorted(d for d in pivot.index if d not in DATASET_ORDER)
+    pivot = pivot.reindex(index=datasets)
+    pivot.loc["Mean"] = pivot.mean(axis=0).round(2)
+    # Display names, applied only after the reorder above -- renaming first would
+    # leave the reindex looking for "accuracy" in a frame that now says "Accuracy"
+    # and silently produce a table of NaNs. The CSV keeps the raw keys.
+    pivot = pivot.rename(index=DATASET_LABEL)
+    pivot = pivot.rename(columns={"accuracy": "Accuracy", "ece": "ECE"}, level=0)
+    pivot = pivot.rename(columns=METHOD_LABEL, level=1)
+    pivot.index.name = None
+    pivot.columns.names = [None, None]
+    tabular = pivot.to_latex(
+        float_format="%.2f",
+        # Labels and dataset names may carry characters LaTeX treats specially;
+        # pandas >= 2.0 defaults escape=False, so keep escaping explicit.
+        escape=True,
+    )
+    return wrap_table(tabular, caption=MAIN_TABLE_CAPTION, label="tab:main")
 
-    This runs *after* `to_latex`, not before. `escape=True` is mandatory on that
-    call (an unescaped underscore is a subscript operator and breaks the build),
-    and it would turn any backslash injected beforehand into \\textbackslash.
-    """
-    out = []
-    for line in tabular.split("\n"):
-        stripped = line.rstrip()
-        ends_row = stripped.endswith(r"\\")
-        core = stripped[:-2] if ends_row else stripped
-        cells = core.split("&")
-        if sum(1 for c in cells if c.strip() in names) >= len(names):
-            core = "&".join(
-                f" \\texttt{{{c.strip()}}} " if c.strip() in names else c for c in cells
-            )
-            line = core + (r"\\" if ends_row else "")
-        out.append(line)
-    return "\n".join(out)
+
 COLUMNS = [
     "dataset", "method", "accuracy", "ece", "n_samples", "n_classes", "backbone", "seed",
     "admission_rate", "temp_mean", "temp_frac_at_grid_boundary",
@@ -138,39 +168,7 @@ def main() -> None:
     print(f"\nwrote {args.out_csv}")
 
     tex_path = Path(args.out_csv).with_name("summary_table.tex")
-    pivot = frame.pivot(index="dataset", columns="method", values=["accuracy", "ece"])
-    # Present columns baseline -> prior work -> ours, not pandas' alphabetical
-    # cal_tda, clipzs, tda, which puts our method first and reads as if it were
-    # the reference point.
-    present = [m for m in METHOD_ORDER if m in pivot.columns.get_level_values(1)]
-    pivot = pivot.reindex(
-        columns=pd.MultiIndex.from_product([["accuracy", "ece"], present])
-    )
-    # Display names, applied only after the reorder above -- renaming first would
-    # leave the reindex looking for "accuracy" in a frame that now says "Accuracy"
-    # and silently produce a table of NaNs. The CSV keeps the raw keys.
-    #
-    # The report's prose capitalises dataset names and writes ECE as an initialism;
-    # a table whose header reads "ece" and whose rows read "flower102" -- a string
-    # that appears nowhere else in the document -- looks like a CSV dump pasted in
-    # rather than one of the report's own tables.
-    pivot = pivot.rename(index=DATASET_LABEL)
-    pivot = pivot.rename(columns={"accuracy": "Accuracy", "ece": "ECE"}, level=0)
-    tex_path.write_text(
-        wrap_table(
-            _texttt_method_headers(pivot.to_latex(
-                float_format="%.2f",
-                # Method names contain underscores (cal_tda, clipzs). pandas >= 2.0
-                # defaults escape=False, which emits a bare `_` -- a subscript
-                # operator in LaTeX text mode, so the document fails to compile with
-                # "Missing $ inserted". Escaping is required, not cosmetic.
-                escape=True,
-            )),
-            caption="Top-1 accuracy and ECE (\\%, 20 bins) on the five test splits.",
-            label="tab:main",
-        ),
-        encoding="utf-8",
-    )
+    tex_path.write_text(summary_table_tex(frame), encoding="utf-8")
     print(f"wrote {tex_path}")
 
 

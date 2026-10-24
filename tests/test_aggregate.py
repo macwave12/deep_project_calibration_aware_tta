@@ -1,4 +1,6 @@
 import json
+import re
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -46,14 +48,61 @@ def test_metrics_are_stored_as_rounded_percentages(tmp_path):
 def test_rows_are_sorted_by_dataset_then_method_order(tmp_path):
     raw = tmp_path / "raw"
     raw.mkdir()
-    for method in ["cal_tda", "clipzs", "tda"]:
+    for method in ["cal_tda_temp", "cal_tda_gate", "clipzs", "cal_tda_gate_temp", "tda"]:
         _write_record(raw, "pets", method, 0.5, 0.05)
         _write_record(raw, "dtd", method, 0.4, 0.06)
 
     frame = aggregate(raw, tmp_path / "summary.csv")
 
-    assert list(frame["dataset"])[:3] == ["dtd", "dtd", "dtd"]
-    assert list(frame["method"])[:3] == ["clipzs", "tda", "cal_tda"]
+    assert list(frame["dataset"])[:5] == ["dtd"] * 5
+    assert list(frame["method"])[:5] == [
+        "clipzs", "tda", "cal_tda_gate_temp", "cal_tda_gate", "cal_tda_temp"
+    ]
+
+
+HEADLINE = {
+    "clipzs": (0.40, 0.05), "tda": (0.43, 0.09), "cal_tda_gate_temp": (0.42, 0.06),
+    "cal_tda_gate": (0.42, 0.04), "cal_tda_temp": (0.43, 0.07),
+}
+
+
+def _headline_frame(tmp_path):
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    for dataset, shift in [("pets", 0.10), ("dtd", 0.0)]:
+        for method, (acc, ece) in HEADLINE.items():
+            _write_record(raw, dataset, method, acc + shift, ece)
+    return aggregate(raw, tmp_path / "summary.csv")
+
+
+def test_summary_table_shows_display_names_not_code_keys(tmp_path):
+    # The report must not name code identifiers; the column headers are the
+    # one place the method keys used to leak into the PDF.
+    from analysis.aggregate import summary_table_tex
+
+    tex = summary_table_tex(_headline_frame(tmp_path))
+
+    for leaked in ("cal_tda", r"cal\_tda", "clipzs", r"	exttt"):
+        assert leaked not in tex
+    for shown in ("CLIP", "TDA", "Gate+Temp", "Gate", "Temp"):
+        assert shown in tex
+    assert r"\label{tab:main}" in tex
+
+
+def test_summary_table_orders_datasets_as_the_report_does_and_ends_with_a_mean_row(tmp_path):
+    from analysis.aggregate import summary_table_tex
+
+    tex = summary_table_tex(_headline_frame(tmp_path))
+
+    assert tex.index("DTD") < tex.index("Pets") < tex.index("Mean")
+    # clipzs accuracy: dtd 40.00, pets 50.00 -> mean 45.00 in the first numeric column
+    assert re.search(r"^Mean & 45\.00 &", tex, re.M)
+
+
+def test_no_bundle_records_in_headline_dir():
+    # The three-contribution bundle is no longer a headline method; a leftover
+    # record would silently add a sixth row to summary.csv and both figures.
+    assert not list(Path("results/raw").glob("*_cal_tda.json"))
 
 
 def test_empty_results_directory_is_an_explicit_error(tmp_path):

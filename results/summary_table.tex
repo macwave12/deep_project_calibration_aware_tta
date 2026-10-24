@@ -1,18 +1,19 @@
 \begin{table}[htbp]
 \centering
-\begin{tabular}{lrrrrrr}
+\begin{tabular}{lrrrrrrrrrr}
 \toprule
- & \multicolumn{3}{c}{Accuracy} & \multicolumn{3}{c}{ECE} \\
-\cmidrule(lr){2-4}\cmidrule(lr){5-7}
- & \texttt{clipzs} & \texttt{tda} & \texttt{cal\_tda} & \texttt{clipzs} & \texttt{tda} & \texttt{cal\_tda} \\
+ & \multicolumn{5}{c}{Accuracy} & \multicolumn{5}{c}{ECE} \\
+\cmidrule(lr){2-6}\cmidrule(lr){7-11}
+ & CLIP & TDA & Gate+Temp & Gate & Temp & CLIP & TDA & Gate+Temp & Gate & Temp \\
 \midrule
-Aircraft & 23.85 & 24.27 & 23.97 & 5.44 & 15.51 & 8.65 \\
-DTD & 44.39 & 47.04 & 45.63 & 8.27 & 17.41 & 17.72 \\
-EuroSAT & 42.06 & 53.17 & 48.88 & 7.16 & 14.38 & 17.53 \\
-Flowers102 & 67.32 & 69.91 & 68.86 & 2.63 & 6.39 & 32.73 \\
-Pets & 88.20 & 88.77 & 88.74 & 4.37 & 2.52 & 43.98 \\
+DTD & 44.39 & 47.04 & 45.69 & 45.69 & 47.04 & 8.27 & 17.41 & 6.21 & 6.24 & 4.68 \\
+Flowers102 & 67.32 & 69.91 & 69.02 & 69.02 & 69.79 & 2.63 & 6.39 & 5.89 & 4.08 & 4.85 \\
+Pets & 88.20 & 88.77 & 88.77 & 88.77 & 88.74 & 4.37 & 2.52 & 13.90 & 5.68 & 15.54 \\
+EuroSAT & 42.06 & 53.17 & 47.30 & 47.30 & 53.22 & 7.16 & 14.38 & 3.56 & 3.56 & 13.43 \\
+Aircraft & 23.85 & 24.27 & 24.27 & 24.27 & 24.21 & 5.44 & 15.51 & 3.37 & 3.48 & 4.21 \\
+Mean & 53.16 & 56.63 & 55.01 & 55.01 & 56.60 & 5.57 & 11.24 & 6.59 & 4.61 & 8.54 \\
 \bottomrule
 \end{tabular}
-\caption{Top-1 accuracy and ECE (\%, 20 bins) on the five test splits.}
+\caption{Top-1 accuracy and ECE (\%, 20 bins) on the five test splits. CLIP is zero-shot CLIP; Gate, Temp and Gate+Temp are our method with gated fusion, LOO temperature scaling, or both (margin admission off in all three). Mean is the unweighted mean over the five datasets.}
 \label{tab:main}
 \end{table}
