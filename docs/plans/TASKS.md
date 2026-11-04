@@ -47,7 +47,11 @@ Status: `[ ]` open · `[~]` in progress · `[x]` done.
 - [ ] Benchmark citation: wherever 5.70 → 9.21 is quoted, say "fine-grained average,
       CLIP-ResNet-50 (Table 7)"; the full average is 6.07 → 11.53. Our ECE is ViT-B/16, which
       the benchmark does not report.
-- [ ] Add the audit's two sentences (per-dataset α/β provenance; fairness caveat).
+- [ ] Add the audit's provenance sentence (per-dataset α/β come from the official repo, not
+      the paper's ImageNet-only search). **Do not** add its fairness sentence as written: our
+      method is not "single global values" — `cal_tda` inherits TDA's per-dataset β (and α in
+      the additive/temperature variants) via `prepare_model_and_optimization`. Replace with
+      results under the global protocol (E0).
 - [ ] Describe TDA precisely: every image is offered to the cache; 3 lowest-entropy items
       per class are kept; the image is written **before** the cache is read.
 - [ ] Rewrite the proposal's diagnosis: no feedback loop exists (pseudo-labels and entropy
@@ -75,6 +79,17 @@ From saved outputs (`online_results/**/save_results.pt`, local only; `tda` saves
       classes with ≥1 cache entry; `â` and running true accuracy at each step.
 
 ## 4. Experiments (GPU; select on val, final on test, ≥3 seeds)
+
+E0 — Global-hyperparameter protocol (do first; it may change every other conclusion)
+- [ ] TDA's per-dataset α/β were almost certainly chosen with the test sets in view, which
+      is not zero-shot transfer to a new dataset — and `cal_tda` inherits them too. Re-run
+      `clipzs`, `tda`, and every headline `cal_tda` variant with the paper's single
+      ImageNet-val setting **α = 2, β = 5 on all datasets** (TDA supp. Table 6), ≥3 seeds.
+- [ ] Report both protocols: "published" (per-dataset, comparable to the benchmark) and
+      "global" (no test information). Base the headline claim on the global protocol.
+- [ ] Needs a switch so the runner does not overwrite α/β from `TDA.pos_params`
+      (e.g. `hyperparam_protocol: published | global`), applied identically to `tda` and
+      `cal_tda`.
 
 E1 — Self-vote
 - [ ] `read_before_write` flag; TDA with and without self-vote. Tests the corrected
