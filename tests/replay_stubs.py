@@ -66,6 +66,17 @@ class FakeImageDataset(Dataset):
         return self.images[index], self.labels[index].clone()
 
 
+class FakeAugmentedDataset(FakeImageDataset):
+    """Same images, with a random flip and jitter drawn from the global torch RNG
+    per item — as torchvision's RandomResizedCrop / RandomHorizontalFlip do."""
+
+    def __getitem__(self, index):
+        image, label = super().__getitem__(index)
+        if torch.rand(()) < 0.5:
+            image = image.flip(-1)
+        return image + 0.1 * torch.randn(image.shape), label
+
+
 def consume_rng_like_model_init():
     """Stand-in for CLIP's `__init__`: draws from the global RNG, then returns a model."""
     torch.nn.Linear(64, 64)  # kaiming init draws from the global generator

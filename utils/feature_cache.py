@@ -4,9 +4,11 @@ Layout, one folder per dataset (our lowercase keys)::
 
     features/<dataset>/
         test_feats.pt  val_feats.pt  train16_feats.pt   (N, D) image features, dataset order
+        train16_aug_feats.pt                            (views, N, D) raw image_encoder outputs of
+                                                        augmented train16 views (Tip-Adapter)
         text_feats.pt                                   dict, see `TEXT_KEYS`
         perm_test_seed0.pt  perm_test_seed1.pt  ...     (N,) int64 dataset indices, stream order
-        perm_val_seed0.pt
+        perm_val_seed0.pt  perm_val_seed1.pt  ...
         labels_test.pt  labels_val.pt  labels_train16.pt   SCORER / ANALYSIS ONLY
         meta.json                                       written last: its presence marks completion
 
@@ -69,6 +71,7 @@ def labels_name(split: str) -> str:
 
 
 TEXT_NAME = "text_feats.pt"
+TRAIN16_AUG_NAME = "train16_aug_feats.pt"
 META_NAME = "meta.json"
 
 
@@ -135,6 +138,10 @@ class FeatureStore:
                 f"{path} is missing; extract it with --seeds including {seed}"
             )
         return torch.load(path, map_location="cpu", weights_only=True).to(torch.int64)
+
+    def train16_augmented(self) -> torch.Tensor:
+        """(views, N, D) raw (unnormalised) features of augmented train16 views."""
+        return torch.load(self.dir / TRAIN16_AUG_NAME, map_location="cpu", weights_only=True)
 
     def labels(self, split: str) -> torch.Tensor:
         """Ground truth in dataset order. Scorer / analysis code only (RULES §2)."""

@@ -7,9 +7,14 @@ import pytest
 import torch
 from torch.utils.data import DataLoader
 
-from tests.replay_stubs import FakeImageDataset, StubCLIP, consume_rng_like_model_init
+from tests.replay_stubs import (
+    FakeAugmentedDataset,
+    FakeImageDataset,
+    StubCLIP,
+    consume_rng_like_model_init,
+)
 from utils.feature_cache import TEXT_KEYS, FeatureStore, labels_name, stream_order
-from utils.feature_extraction import extract_dataset, stream_permutation
+from utils.feature_extraction import extract_dataset, preflight, stream_permutation
 from utils.tools import set_random_seed
 
 
@@ -76,10 +81,15 @@ def _build_split(name):
     return FakeImageDataset(n=SPLIT_SIZES[name], seed={"test": 7, "val": 8, "train16": 9}[name])
 
 
+def _build_aug_split():
+    return FakeAugmentedDataset(n=SPLIT_SIZES["train16"], seed=9)
+
+
 def _extract(tmp_path, **kw):
     logs = []
+    kw.setdefault("build_split", _build_split)
     meta = extract_dataset(
-        tmp_path, "dtd", build_split=_build_split, build_model=consume_rng_like_model_init,
+        tmp_path, "dtd", build_model=consume_rng_like_model_init,
         device="cpu", autocast=False, log=logs.append, meta_extra={"arch": "stub"}, **kw,
     )
     return meta, logs
@@ -90,7 +100,8 @@ def test_extraction_writes_the_documented_layout(tmp_path):
     folder = tmp_path / "dtd"
     expected = {
         "test_feats.pt", "val_feats.pt", "train16_feats.pt", "text_feats.pt",
-        "perm_test_seed0.pt", "perm_test_seed1.pt", "perm_test_seed2.pt", "perm_val_seed0.pt",
+        "perm_test_seed0.pt", "perm_test_seed1.pt", "perm_test_seed2.pt",
+        "perm_val_seed0.pt", "perm_val_seed1.pt", "perm_val_seed2.pt",
         "labels_test.pt", "labels_val.pt", "labels_train16.pt", "meta.json",
     }
     assert {p.name for p in folder.iterdir()} == expected
@@ -101,7 +112,9 @@ def test_extraction_writes_the_documented_layout(tmp_path):
     assert set(meta["sha256"]) == expected - {"meta.json"}
     assert json.loads((folder / "meta.json").read_text())["dataset"] == "dtd"
     for split in SPLIT_SIZES:
-        assert meta["forward_features_check"][split] == {"dtype_equal": True, "max_abs_diff": 0.0}
+        assert meta["image_half_matches_forward_features"][split] == {"dtype_equal": True, "max_abs_diff": 0.0}
+    assert meta["train16_aug"] is None  # not requested
+    assert meta["skipped_splits"] == {}
 
 
 def test_features_are_in_dataset_order_and_unchanged(tmp_path):
@@ -121,7 +134,7 @@ def test_features_are_in_dataset_order_and_unchanged(tmp_path):
 def test_permutations_match_the_runner_stream(tmp_path):
     _extract(tmp_path)
     store = FeatureStore(tmp_path, "dtd")
-    for split, seed in (("test", 0), ("test", 1), ("test", 2), ("val", 0)):
+    for split, seed in (("test", 0), ("test", 1), ("test", 2), ("val", 0), ("val", 1), ("val", 2)):
         expected = _runner_stream(seed, lambda: _build_split(split), consume_rng_like_model_init)
         assert torch.equal(store.permutation(split, seed), expected)
 
@@ -160,6 +173,91 @@ def test_a_finished_dataset_is_skipped_unless_overwrite(tmp_path):
     assert (tmp_path / "dtd" / "test_feats.pt").stat().st_mtime_ns == stamp
     _, logs = _extract(tmp_path, overwrite=True)
     assert not any("skipping" in line for line in logs)
+
+
+def _mtimes(folder):
+    return {p.name: p.stat().st_mtime_ns for p in folder.glob("*.pt")}
+
+
+def test_resume_extends_a_smaller_extraction_instead_of_skipping(tmp_path):
+    _extract(tmp_path, splits=("test",), test_seeds=(0,), val_seeds=())
+    before = _mtimes(tmp_path / "dtd")
+    meta, logs = _extract(tmp_path, train16_views=2, build_aug_split=_build_aug_split)
+    assert any("extending" in line for line in logs)
+    after = _mtimes(tmp_path / "dtd")
+    # Finished pieces are kept, missing ones added.
+    for name in ("test_feats.pt", "perm_test_seed0.pt", "labels_test.pt", "text_feats.pt"):
+        assert after[name] == before[name]
+    assert {"perm_test_seed1.pt", "perm_val_seed2.pt", "val_feats.pt", "train16_feats.pt",
+            "train16_aug_feats.pt"} <= set(after)
+    assert set(meta["splits"]) == {"test", "val", "train16"}
+    assert [h["mode"] for h in meta["history"]] == ["fresh", "extend"]
+    assert set(meta["sha256"]) == set(after)
+    # The added permutations are the ones a fresh extraction would have drawn.
+    for split, seed in (("test", 1), ("val", 2)):
+        expected = _runner_stream(seed, lambda: _build_split(split), consume_rng_like_model_init)
+        assert torch.equal(FeatureStore(tmp_path, "dtd").permutation(split, seed), expected)
+
+
+def test_resume_redoes_the_folder_when_the_identity_differs(tmp_path):
+    _extract(tmp_path, identity={"torch": "2.11.0+cu128"})
+    _extract(tmp_path, splits=("test",), identity={"torch": "2.11.0+cu128"})  # subset: skip
+    meta, logs = _extract(tmp_path, splits=("test",), test_seeds=(0,),
+                          identity={"torch": "2.12.0+cu128"})
+    assert any("differ in ['torch']" in line for line in logs)
+    assert meta["history"][-1]["mode"] == "fresh" and len(meta["history"]) == 1
+    # Nothing of the old extraction survives a redo.
+    assert {p.name for p in (tmp_path / "dtd").glob("*.pt")} == {
+        "test_feats.pt", "labels_test.pt", "perm_test_seed0.pt", "text_feats.pt"}
+
+
+def test_preflight_skips_unavailable_splits_and_they_are_recorded(tmp_path):
+    def build_split(name):
+        if name == "val":
+            raise FileNotFoundError("images_variant_val.txt")
+        return _build_split(name)
+
+    available, skipped = preflight("aircraft", ["test", "val", "train16"], build_split,
+                                   missing_files=lambda ds: [])
+    assert available == ["test", "train16"]
+    assert "images_variant_val.txt" in skipped["val"]
+
+    _, skipped_missing = preflight("dtd", ["test"], _build_split,
+                                   missing_files=lambda ds: ds.image_list[:2])
+    assert "2 of 48 image files missing" in skipped_missing["test"]
+
+    meta, _ = _extract(tmp_path, build_split=build_split, splits=available, skipped_splits=skipped)
+    assert set(meta["splits"]) == {"test", "train16"}
+    assert "val" in meta["skipped_splits"]
+    assert not any(n.startswith("perm_val") for n in meta["permutations"])
+
+
+def test_augmented_train16_views_are_deterministic_and_raw(tmp_path):
+    meta, _ = _extract(tmp_path / "a", train16_views=3, aug_seed=4, build_aug_split=_build_aug_split)
+    _extract(tmp_path / "b", train16_views=3, aug_seed=4, build_aug_split=_build_aug_split)
+    views = FeatureStore(tmp_path / "a", "dtd").train16_augmented()
+    assert views.shape == (3, SPLIT_SIZES["train16"], 16)
+    assert torch.equal(views, FeatureStore(tmp_path / "b", "dtd").train16_augmented())
+    assert not torch.equal(views[0], views[1])  # each view is a fresh augmentation
+    assert meta["train16_aug"]["labels_equal_train16"] is True
+    assert meta["train16_aug"]["normalized"] is False
+    # Raw image_encoder outputs (Tip-Adapter averages views before normalising).
+    torch.manual_seed(0)
+    assert not torch.allclose(views.norm(dim=-1), torch.ones(3, SPLIT_SIZES["train16"]))
+    # Same seed -> same augmentation draws as a hand-written pass over the same
+    # unshuffled loader (its iterator draws `_base_seed` before the first item).
+    set_random_seed(4)
+    model = StubCLIP()
+    loader = DataLoader(_build_aug_split(), batch_size=1, shuffle=False, num_workers=0)
+    first = torch.cat([model.image_encoder(x) for x, _ in loader])
+    assert torch.equal(views[0], first)
+
+
+def test_free_memory_is_called_for_every_discarded_model(tmp_path):
+    calls = []
+    _extract(tmp_path, free_memory=lambda: calls.append(1))
+    # 6 permutations build 6 models; one is kept for features, then released too.
+    assert len(calls) == 6
 
 
 def test_an_unfinished_folder_is_refused_by_the_reader(tmp_path):
