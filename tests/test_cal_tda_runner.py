@@ -275,11 +275,52 @@ def test_no_admission_summary_before_any_sample_is_processed():
     assert runner.admission_summary() is None
 
 
-def test_dataset_alpha_and_beta_override_the_method_config():
-    args = SimpleNamespace(test_sets="DTD")
+# (protocol, test_sets, expected alpha, expected beta). `None` is an `args`
+# without a `protocol` attribute — every pre-protocol caller — which must keep
+# today's behaviour: the per-dataset TDA table.
+_PROTOCOL_CASES = [
+    (None, "DTD", 2.0, 3.0),
+    ("published", "DTD", 2.0, 3.0),
+    ("published", "eurosat", 4.0, 8.0),
+    ("clean", "DTD", 2.0, 5.0),
+    ("clean", "eurosat", 2.0, 5.0),
+]
+
+
+@pytest.mark.parametrize("protocol,test_sets,alpha,beta", _PROTOCOL_CASES)
+def test_dataset_alpha_and_beta_override_the_method_config(protocol, test_sets, alpha, beta):
+    args = SimpleNamespace(test_sets=test_sets)
+    if protocol is not None:
+        args.protocol = protocol
     runner = CalTDA(_FakeCLIP(*_feature_stream(n_samples=1)), 0,
                     config=CalTdaConfig(alpha=99.0, beta=99.0))
     runner.prepare_model_and_optimization(args)
-    # DTD's TDA-tuned positive-cache values, identical to what `tda` uses.
-    assert runner.config.alpha == 2.0
-    assert runner.config.beta == 3.0
+    # The protocol's positive-cache values, identical to what `tda` uses.
+    assert runner.config.alpha == alpha
+    assert runner.config.beta == beta
+
+    upstream = TDA(_FakeCLIP(*_feature_stream(n_samples=1)), 0)
+    upstream.prepare_model_and_optimization(args)
+    assert (upstream.pos_alpha, upstream.pos_beta) == (alpha, beta)
+    # The negative cache is global in both protocols.
+    assert (upstream.neg_alpha, upstream.neg_beta) == (0.117, 1.0)
+    assert (runner.neg_alpha, runner.neg_beta) == (0.117, 1.0)
+
+
+def test_an_unknown_protocol_is_rejected():
+    runner = TDA(_FakeCLIP(*_feature_stream(n_samples=1)), 0)
+    with pytest.raises(ValueError, match="protocol"):
+        runner.prepare_model_and_optimization(SimpleNamespace(test_sets="DTD", protocol="p2"))
+
+
+def test_published_protocol_reproduces_the_default_stream_exactly():
+    # Passing 'published' explicitly must change nothing compared with an args
+    # object that predates the flag (RULES §8: defaults preserve behaviour).
+    features, text = _feature_stream(n_samples=20)
+    outputs = []
+    for args in (SimpleNamespace(test_sets="Pets"),
+                 SimpleNamespace(test_sets="Pets", protocol="published")):
+        runner = CalTDA(_FakeCLIP(features, text), 0, config=CalTdaConfig())
+        runner.prepare_model_and_optimization(args)
+        outputs.append(torch.cat(_drive(runner, 20, args)))
+    assert torch.equal(outputs[0], outputs[1])

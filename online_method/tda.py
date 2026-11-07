@@ -42,6 +42,19 @@ def update_cache(cache, pred, features_loss, shot_capacity, include_prob_map=Fal
         else:
             cache[pred] = [item]
 
+PROTOCOLS = ('published', 'clean')
+# TDA's ImageNet-val setting (supp. Table 6), used on every dataset under 'clean'.
+CLEAN_PROTOCOL = {'alpha': 2.0, 'beta': 5.0}
+
+
+def resolve_protocol(args):
+    """`args.protocol`, defaulting to 'published' when absent (old callers)."""
+    protocol = getattr(args, 'protocol', None) or 'published'
+    if protocol not in PROTOCOLS:
+        raise ValueError(f"unknown protocol {protocol!r}; expected one of {PROTOCOLS}")
+    return protocol
+
+
 def Entropy(input_):
     bs = input_.size(0)
     epsilon = 1e-5
@@ -68,6 +81,15 @@ class TDA():
 
         self.pos_alpha = self.pos_params['alpha'][args.test_sets]
         self.pos_beta = self.pos_params['beta'][args.test_sets]
+
+        # Hyperparameter protocol (pm/PLAN.md). 'published' (the default) keeps
+        # the per-dataset table above; 'clean' uses TDA's single searched
+        # setting on every dataset, so no test set informed the choice. Only the
+        # positive cache's alpha/beta differ: the negative cache's are global.
+        self.protocol = resolve_protocol(args)
+        if self.protocol == 'clean':
+            self.pos_alpha = CLEAN_PROTOCOL['alpha']
+            self.pos_beta = CLEAN_PROTOCOL['beta']
 
         self.neg_alpha = 0.117
         self.neg_beta = 1.0

@@ -34,7 +34,7 @@ from pathlib import Path
 import yaml
 
 from online_method.clipzs import CLIPZS
-from online_method.tda import TDA
+from online_method.tda import TDA, PROTOCOLS, resolve_protocol
 from online_method.cal_tda import CalTDA, CalTdaConfig
 from utils.evaluation import score_and_save
 from online_method.dmn import DMN
@@ -109,6 +109,7 @@ def record_hyperparams(args, tta_trainer, method_config):
         admission = tta_trainer.admission_summary()
         if admission is not None:
             params['admission'] = admission
+        params['protocol'] = resolve_protocol(args)
         return params
     params = dict(method_config)
     if args.algorithm == 'tda':
@@ -118,6 +119,7 @@ def record_hyperparams(args, tta_trainer, method_config):
             'neg_alpha': tta_trainer.neg_alpha,
             'neg_beta': tta_trainer.neg_beta,
             'shot_capacity': 3,
+            'protocol': resolve_protocol(args),
         })
     return params
 
@@ -466,5 +468,8 @@ if __name__ == '__main__':
                         help='name this run gets in results/raw/<dataset>_<run_name>.json; defaults to --algorithm')
     parser.add_argument('--out-dir', dest='out_dir', type=str, default='results/raw',
                         help='directory the scored run record is written to')
+    parser.add_argument('--protocol', type=str, default='published', choices=PROTOCOLS,
+                        help="tda/cal_tda alpha/beta: 'published' = per-dataset table (default), "
+                             "'clean' = alpha=2, beta=5 on every dataset")
     
     main()
