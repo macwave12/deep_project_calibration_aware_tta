@@ -16,9 +16,10 @@ ARCH="ViT-B/16"
 SEED=0
 RUN_NAME=""
 OUT_DIR=""
+PROTOCOL="published"
 
 usage() {
-    echo "usage: run_one.sh --dataset <key> --method <clipzs|tda|cal_tda> [--config path] [--data-root path] [--arch name] [--seed n] [--run-name name] [--out-dir path]" >&2
+    echo "usage: run_one.sh --dataset <key> --method <clipzs|tda|cal_tda> [--config path] [--data-root path] [--arch name] [--seed n] [--run-name name] [--out-dir path] [--protocol published|clean]" >&2
     exit 1
 }
 
@@ -32,6 +33,7 @@ while [[ $# -gt 0 ]]; do
         --seed) SEED="$2"; shift 2 ;;
         --run-name) RUN_NAME="$2"; shift 2 ;;
         --out-dir) OUT_DIR="$2"; shift 2 ;;
+        --protocol) PROTOCOL="$2"; shift 2 ;;
         *) echo "unknown argument: $1" >&2; usage ;;
     esac
 done
@@ -72,11 +74,21 @@ if [[ -z "$OUT_DIR" ]]; then
     fi
 fi
 
+case "$PROTOCOL" in
+    published|clean) ;;
+    *) echo "unknown protocol '$PROTOCOL'; expected published or clean" >&2; exit 1 ;;
+esac
+# Under P2 tda/cal_tda get a `_clean` suffix on the record name and the checkpoint
+# folder, so neither the P1 record nor its save_results.pt is overwritten.
+if [[ "$PROTOCOL" == "clean" && ( "$METHOD" == "tda" || "$METHOD" == "cal_tda" ) ]]; then
+    RUN_NAME="${RUN_NAME:-$METHOD}_clean"
+fi
+
 CKPT_TAG="${RUN_NAME:-$METHOD}"
 
 ARGS=(online_tta.py --data "$DATA_ROOT" --test_sets "$TEST_SET" -a "$ARCH" -b 1 -j 0 --gpu 0 \
       --ctx_init a_photo_of_a -p 50 --output_dir "online_results/ckps/$CKPT_TAG" \
-      --algorithm "$METHOD" --seed "$SEED" --out-dir "$OUT_DIR")
+      --algorithm "$METHOD" --seed "$SEED" --out-dir "$OUT_DIR" --protocol "$PROTOCOL")
 [[ -n "$CONFIG" ]] && ARGS+=(--config "$CONFIG")
 [[ -n "$RUN_NAME" ]] && ARGS+=(--run-name "$RUN_NAME")
 

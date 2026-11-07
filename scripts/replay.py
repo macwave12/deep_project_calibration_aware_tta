@@ -26,6 +26,7 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from online_method.tda import PROTOCOLS  # noqa: E402
+from online_tta import PROTOCOL_DEPENDENT_ALGORITHMS  # noqa: E402
 from utils.feature_cache import DATASETS  # noqa: E402
 from utils.feature_replay import REPLAYABLE_ALGORITHMS  # noqa: E402
 
@@ -80,7 +81,9 @@ def main(argv=None):
     if args.suite:
         runs = suite_runs(args.suite)
         if args.protocol == "clean":
-            runs = [(a, c, f"{n or a}_clean", d) for a, c, n, d in runs]
+            # clipzs has no alpha/beta: its P2 record would duplicate its P1 one.
+            runs = [(a, c, f"{n or a}_clean", d) for a, c, n, d in runs
+                    if a in PROTOCOL_DEPENDENT_ALGORITHMS]
     else:
         runs = [(args.method, args.config, args.run_name, "")]
 

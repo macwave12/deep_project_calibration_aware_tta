@@ -7,8 +7,9 @@ are the labels loaded, put in stream order, and handed with the probabilities to
 (`<out_dir>/<dataset>_<name>.json`), with `hyperparams` built by the runner's own
 `record_hyperparams`, plus a `replay` block saying where the features came from.
 
-Records of the val split go to `<out_dir>/val/` and seeds other than 0 to
-`.../seed<k>/`, so they never overwrite the test / seed-0 record. Methods the GPU runner does not score (dmn_weak, ecalp, onzeta: their
+Records of `--autocast off` go to `<out_dir>/autocast_off/`, the val split to
+`.../val/` and seeds other than 0 to `.../seed<k>/`, so they never overwrite the
+default test / seed-0 record. Methods the GPU runner does not score (dmn_weak, ecalp, onzeta: their
 outputs were never inspected, see `online_tta.SCORED_ALGORITHMS`) are run and
 their raw outputs saved to `<out_dir>/<dataset>_<name>_outputs.pt`, unscored.
 """
@@ -22,7 +23,13 @@ from types import SimpleNamespace
 
 import torch
 
-from online_tta import SCORED_ALGORITHMS, load_method_config, record_hyperparams, to_probabilities
+from online_tta import (
+    SCORED_ALGORITHMS,
+    default_run_name,
+    load_method_config,
+    record_hyperparams,
+    to_probabilities,
+)
 from utils.evaluation import score_and_save
 from utils.feature_cache import UPSTREAM_SET_ID, FeatureStore
 from utils.feature_replay import (
@@ -35,11 +42,11 @@ from utils.tools import set_random_seed
 
 
 def record_name(algorithm: str, run_name: str | None, protocol: str) -> str:
-    """`run_name` if given; else the algorithm, suffixed `_clean` under P2 so a
-    clean run can never overwrite the published-protocol record of the same method."""
-    if run_name:
-        return run_name
-    return f"{algorithm}_clean" if protocol == "clean" else algorithm
+    """The GPU runner's naming (`online_tta.default_run_name`): `run_name` if given,
+    else the algorithm, suffixed `_clean` under P2 for tda/cal_tda so a clean run
+    never overwrites the published-protocol record. clipzs has no alpha/beta, so
+    its P2 run *is* its P1 run and keeps the plain name."""
+    return default_run_name(algorithm, run_name, protocol) or algorithm
 
 
 def replay_one(features_root, dataset: str, *, algorithm: str, split: str = "test", seed: int = 0,
@@ -68,7 +75,7 @@ def replay_one(features_root, dataset: str, *, algorithm: str, split: str = "tes
         set_random_seed(seed)  # as the runner; the replayed methods draw no random numbers
         trainer = build_trainer(algorithm, model, method_config)
         trainer.prepare_model_and_optimization(args)
-        with torch.no_grad(), cuda_autocast_emulation(autocast == "emulate"):
+        with torch.no_grad(), cuda_autocast_emulation(autocast == "emulate") as op_report:
             outputs = run_stream(trainer, model, order, args)
     seconds = time.time() - started
 
@@ -77,6 +84,9 @@ def replay_one(features_root, dataset: str, *, algorithm: str, split: str = "tes
     # GPU runner), so val and seeds != 0 get sub-folders; test/seed 0 records sit
     # at the same relative paths as their counterparts under results/raw.
     out_dir = Path(out_dir)
+    if autocast == "off":
+        # Plain-fp32 replays are an A/B diagnostic, never a stand-in for the GPU record.
+        out_dir = out_dir / "autocast_off"
     if split != "test":
         out_dir = out_dir / split
     if seed != 0:
@@ -98,6 +108,7 @@ def replay_one(features_root, dataset: str, *, algorithm: str, split: str = "tes
     hyperparams["replay"] = {
         "split": split,
         "autocast": autocast,
+        "autocast_ops": op_report.summary(),
         "n_steps": len(order),
         "full_stream": limit is None,
         "seconds": round(seconds, 2),
