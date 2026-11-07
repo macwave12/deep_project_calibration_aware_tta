@@ -15,6 +15,8 @@ from online_method.cal_tda import CalTDA
 METHOD_FILES = [
     Path("online_method/cal_tda.py"),
     Path("utils/loo_temperature.py"),
+    # T02 replay, method side: the stand-in model and the stream loop.
+    Path("utils/feature_replay.py"),
 ]
 
 # `pseudo_labels` are assigned by the method itself and are explicitly allowed.
@@ -66,3 +68,32 @@ def test_caltda_entry_points_never_receive_labels():
             f"{method.__qualname__} accepts forbidden parameter(s): {leak_params}. "
             "The method must never receive ground truth."
         )
+
+
+def test_replay_entry_points_never_receive_labels():
+    """The CPU replay's method-side entry points (T02) take no label parameter,
+    and the module that drives the stream never touches the labels file."""
+    from utils.feature_replay import FeatureReplayModel, build_trainer, run_stream
+
+    forbidden_param_names = {"target", "labels", "label", "gt", "ground_truth", "true_label"}
+    entry_points = [
+        FeatureReplayModel.__init__,
+        FeatureReplayModel.from_text_dict,
+        FeatureReplayModel.forward_features,
+        FeatureReplayModel.__call__,
+        FeatureReplayModel.seek,
+        build_trainer,
+        run_stream,
+    ]
+    for method in entry_points:
+        leak = set(inspect.signature(method).parameters) & forbidden_param_names
+        assert not leak, f"{method.__qualname__} accepts forbidden parameter(s): {leak}"
+
+    source = Path("utils/feature_replay.py").read_text(encoding="utf-8")
+    assert "labels_" not in source and ".labels(" not in source
+
+
+def test_feature_files_hold_no_labels():
+    """The cache format keeps labels in their own file, read by the scorer only."""
+    source = Path("utils/feature_cache.py").read_text(encoding="utf-8")
+    assert "def labels(" in source and "Scorer / analysis code only" in source
