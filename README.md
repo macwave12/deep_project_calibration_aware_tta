@@ -277,6 +277,48 @@ mark each time, mid-run, with no error in the run's own log and no GPU/process i
 resumed each time by launching only the remaining dataset/variant combinations; all 40
 ablation records are present in the final `results/raw/ablation/`.
 
+## Feature cache and CPU replay
+
+CLIP is frozen and the single-view methods (`clipzs`, `tda`, `cal_tda`, `dmn_weak`,
+`ecalp`, `onzeta`) use one centre-crop view, so every image feature can be computed
+once on the GPU and every later run replayed on CPU through the unchanged method code.
+
+**1. Extract (GPU, once; resumable).** From the repository root, with the venv active:
+
+```powershell
+$env:DATA_ROOT = "D:\second_degree\deep\data_root"
+.\scripts\extract_features.ps1 -DataRoot $env:DATA_ROOT
+```
+
+```bash
+DATA_ROOT=/path/to/data_root bash scripts/extract_features.sh
+```
+
+This writes `features/<dataset>/` for the five datasets: `{test,val,train16}_feats.pt`
+(image features in dataset order, dtype as `forward_features` returns it),
+`text_feats.pt`, the stream orders `perm_test_seed{0,1,2}.pt` / `perm_val_seed0.pt`,
+`labels_<split>.pt` (scorer/analysis only), and `meta.json` (written last; versions,
+git commit, transform, class names, checksums). Format: `utils/feature_cache.py`.
+Re-running skips finished datasets. Do not merge stderr into stdout (`*>&1`) in
+PowerShell 5.1: a PyTorch `FutureWarning` then aborts the job (see the note above).
+
+**2. Replay (CPU).**
+
+```bash
+python scripts/replay.py --suite headline              # the five methods of results/summary.csv
+python scripts/replay.py --suite ablation              # results/ablation.csv's 40 runs
+python scripts/replay.py --dataset dtd --method tda --config configs/method/tda.yaml \
+    --protocol clean --seed 1                          # one run, P2 alpha=2/beta=5, seed 1
+python analysis/compare_replay.py                      # RULES §7 check against results/raw
+```
+
+Records land in `replay_results/raw/` in the GPU runner's format (`val/` and `seed<k>/`
+sub-folders for other splits and seeds). `--protocol clean` (also on `online_tta.py`)
+sets alpha = 2, beta = 5 for `tda` and `cal_tda` on every dataset; the default,
+`published`, keeps upstream's per-dataset table. By default the replay emulates CUDA
+autocast's casts on CPU (fp16 matmuls, fp32 softmax), as the GPU runs had them;
+`--autocast off` runs plain fp32.
+
 ## What we changed
 
 Three independently-switchable, training-free contributions on top of upstream TDA's

@@ -1,6 +1,6 @@
 # T01 — Feature extraction script (the only GPU job)
 
-Status: open · Owner: engineering agent (script), macwave (run) · Depends on: —
+Status: review (script; GPU run by macwave pending) · Owner: engineering agent (script), macwave (run) · Depends on: —
 
 ## Goal
 A script that, run once on a CUDA machine, exports everything the CPU replay needs, so no
