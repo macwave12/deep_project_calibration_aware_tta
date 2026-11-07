@@ -21,9 +21,9 @@ def compute_cache_logits(image_features, cache, alpha, beta, clip_weights, neg_m
         cache_keys = torch.cat(cache_keys, dim=0).permute(1, 0)
         if neg_mask_thresholds:
             cache_values = torch.cat(cache_values, dim=0)
-            cache_values = (((cache_values > neg_mask_thresholds[0]) & (cache_values < neg_mask_thresholds[1])).type(torch.int8)).cuda().float() #.half()
+            cache_values = (((cache_values > neg_mask_thresholds[0]) & (cache_values < neg_mask_thresholds[1])).type(torch.int8)).to(image_features.device).float() #.half()
         else:
-            cache_values = (F.one_hot(torch.Tensor(cache_values).to(torch.int64), num_classes=clip_weights.size(1))).cuda().float() # .half()
+            cache_values = (F.one_hot(torch.Tensor(cache_values).to(torch.int64), num_classes=clip_weights.size(1))).to(image_features.device).float() # .half()
 
         affinity = image_features @ cache_keys
         cache_logits = ((-1) * (beta - beta * affinity)).exp() @ cache_values
