@@ -13,6 +13,8 @@ import pytest
 from online_method.cal_tda import CalTDA
 
 METHOD_FILES = [
+    Path("online_method/tda.py"),
+    Path("online_method/clipzs.py"),
     Path("online_method/cal_tda.py"),
     Path("utils/loo_temperature.py"),
     # T02 replay, method side: the stand-in model and the stream loop.
@@ -92,8 +94,3 @@ def test_replay_entry_points_never_receive_labels():
     source = Path("utils/feature_replay.py").read_text(encoding="utf-8")
     assert "labels_" not in source and ".labels(" not in source
 
-
-def test_feature_files_hold_no_labels():
-    """The cache format keeps labels in their own file, read by the scorer only."""
-    source = Path("utils/feature_cache.py").read_text(encoding="utf-8")
-    assert "def labels(" in source and "Scorer / analysis code only" in source

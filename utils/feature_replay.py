@@ -15,17 +15,20 @@ blocks run matmuls in fp16 (TDA's `logits` are fp16, and its output is
 accumulated in fp16) and softmax/norm/exp/... in fp32. On CPU that context only
 warns and disables itself, so a plain replay computes those logits in fp32.
 `cuda_autocast_emulation()` swaps `torch.cuda.amp.autocast` for a context that
-applies CUDA's cast policy (fp16 list -> fp16 inputs, fp32 list -> fp32 inputs,
-everything else untouched) through a TorchFunctionMode. For the ops inside the
-clipzs/tda/cal_tda autocast blocks (mul, matmul, softmax) that is CUDA's policy
-exactly; the fp16 rounding of a matmul may still differ in the last bit between
-CPU and cuBLAS. CPU's own `torch.autocast('cpu', float16)` is not used because
-its softmax stays fp16.
+applies CUDA's cast policy through a TorchFunctionMode: fp16-list ops take
+fp16-rounded inputs, compute in fp32 and round the result to fp16 once (cuBLAS's
+fp16 GEMM with fp32 compute type); fp32-list ops get fp32 inputs; the rest run
+uncast. For the ops inside the clipzs/tda/cal_tda autocast blocks (mul, matmul,
+softmax) that is CUDA's policy; cuBLAS's summation order can still move a result
+by an fp16 ulp (measured by tests/test_autocast_emulation_gpu.py on a GPU). Ops
+outside the known lists are counted and warned on. CPU's own
+`torch.autocast('cpu', float16)` is not used because its softmax stays fp16.
 """
 
 from __future__ import annotations
 
 import contextlib
+import warnings
 
 import torch
 from torch.nn import functional as F
@@ -152,35 +155,120 @@ def _cast(value, dtype):
     return value
 
 
+# Ops CUDA autocast leaves alone (no cast list): they run in their inputs' dtype
+# with ordinary type promotion, as here. Matched by `__name__`. A floating op in
+# none of the three sets is counted as 'unlisted' and warned on once, because the
+# emulation's claim to match CUDA is unchecked for it.
+_NEUTRAL_NAMES = {
+    'mul', '__mul__', '__rmul__', '__imul__', 'add', '__add__', '__radd__', '__iadd__',
+    'sub', '__sub__', '__rsub__', '__isub__', 'div', '__truediv__', '__rtruediv__',
+    'neg', '__neg__', 'clone', 't', '__getitem__', '__setitem__', 'reshape', 'view',
+    'unsqueeze', 'squeeze', 'permute', 'transpose', 'contiguous', 'detach', 'to', 'type',
+    'float', 'half', 'size', 'dim', 'numel', 'item', 'max', 'min', 'topk', 'argmax',
+    'argmin', 'sort', 'cat', 'stack', 'where', 'zeros_like', 'ones_like', 'eq', '__eq__',
+    'gt', '__gt__', 'lt', '__lt__', 'ge', '__ge__', 'le', '__le__', '__and__', '__or__',
+    'clamp', 'clamp_min', 'abs', 'outer', '__len__', 'expand', 'flatten', '__format__',
+    '__bool__', '__float__', '__index__', 'tolist', 'cpu', 'any', 'all', 'squeeze_',
+    'add_', 'sub_', 'mul_', 'div_', '__rdiv__', '__itruediv__', 'ne', '__ne__',
+}
+
+
+def _round_through_fp16(value):
+    """An fp16-rounded copy of a floating tensor, held in fp32 for the computation."""
+    if isinstance(value, torch.Tensor) and value.is_floating_point():
+        return value.to(torch.float16).to(torch.float32)
+    if isinstance(value, (list, tuple)):
+        return type(value)(_round_through_fp16(v) for v in value)
+    return value
+
+
+def _has_floating_tensor(values) -> bool:
+    for v in values:
+        if isinstance(v, torch.Tensor) and v.is_floating_point():
+            return True
+        if isinstance(v, (list, tuple)) and _has_floating_tensor(v):
+            return True
+    return False
+
+
+class EmulationReport(dict):
+    """Ops seen inside the methods' autocast blocks, by how they were treated."""
+
+    def note(self, kind: str, name: str) -> None:
+        bucket = self.setdefault(kind, {})
+        bucket[name] = bucket.get(name, 0) + 1
+
+    def summary(self) -> dict:
+        """{'fp16' | 'fp32' | 'neutral' | 'unlisted': {op name: count}}"""
+        return {k: dict(sorted(v.items())) for k, v in sorted(self.items())}
+
+
 class _CudaAutocastPolicy(TorchFunctionMode):
+    """CUDA autocast's cast policy on CPU.
+
+    fp16 list: inputs rounded to fp16, the op computed in fp32, the result rounded
+    to fp16 once — cuBLAS's fp16 GEMM with fp32 compute type, and deterministic
+    (CPU fp16 kernels may accumulate differently). fp32 list: inputs cast to fp32.
+    Everything else runs uncast.
+    """
+
+    def __init__(self, report: EmulationReport, warned: set):
+        super().__init__()
+        self.report = report
+        self.warned = warned
+
     def __torch_function__(self, func, types, args=(), kwargs=None):
         kwargs = kwargs or {}
+        name = getattr(func, '__name__', repr(func))
         if func in _FP16_OPS:
-            args, kwargs = _cast(args, torch.float16), {k: _cast(v, torch.float16) for k, v in kwargs.items()}
-        elif func in _FP32_OPS:
+            self.report.note('fp16', name)
+            out = func(*_round_through_fp16(args),
+                       **{k: _round_through_fp16(v) for k, v in kwargs.items()})
+            if isinstance(out, torch.Tensor) and out.is_floating_point():
+                out = out.to(torch.float16)
+            return out
+        if func in _FP32_OPS:
+            self.report.note('fp32', name)
             args = _cast(args, torch.float32)
             kwargs = {k: (_cast(v, torch.float32) if k != 'dtype' else v) for k, v in kwargs.items()}
+            return func(*args, **kwargs)
+        if name != '__get__' and _has_floating_tensor(list(args) + list(kwargs.values())):
+            if name in _NEUTRAL_NAMES:
+                self.report.note('neutral', name)
+            else:
+                self.report.note('unlisted', name)
+                if name not in self.warned:
+                    self.warned.add(name)
+                    warnings.warn(
+                        f"CUDA-autocast emulation: op {name!r} is in no known cast list and "
+                        "ran uncast; CUDA autocast may treat it differently", RuntimeWarning)
         return func(*args, **kwargs)
 
 
 @contextlib.contextmanager
-def _emulated_autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
-    if not enabled:
-        yield
-        return
-    with _CudaAutocastPolicy():
-        yield
-
-
-@contextlib.contextmanager
 def cuda_autocast_emulation(enabled: bool = True):
-    """While active, the methods' `torch.cuda.amp.autocast()` applies CUDA's casts on CPU."""
+    """While active, the methods' `torch.cuda.amp.autocast()` applies CUDA's casts on CPU.
+
+    Yields an `EmulationReport` of the ops that ran under the policy (empty when
+    disabled).
+    """
+    report = EmulationReport()
     if not enabled:
-        yield
+        yield report
         return
+    warned: set = set()
+
+    @contextlib.contextmanager
+    def _emulated_autocast(enabled=True, dtype=torch.float16, cache_enabled=True):
+        if not enabled:
+            yield
+            return
+        with _CudaAutocastPolicy(report, warned):
+            yield
+
     original = torch.cuda.amp.autocast
     torch.cuda.amp.autocast = _emulated_autocast
     try:
-        yield
+        yield report
     finally:
         torch.cuda.amp.autocast = original

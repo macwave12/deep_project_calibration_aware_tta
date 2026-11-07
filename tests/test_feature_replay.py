@@ -83,7 +83,8 @@ PARAMS = [(a, c, e) for a, c in CASES for e in (False, True)] + [(*LOO_CASE, Fal
 @pytest.mark.parametrize("algorithm,config,emulate", PARAMS,
                          ids=[f"{a}{i}-{'cuda-autocast' if e else 'fp32'}" for i, (a, _, e) in enumerate(PARAMS)])
 def test_replay_is_bit_identical_to_running_the_method_directly(algorithm, config, emulate):
-    feats, text, scale, order = _random_store()
+    # The LOO case is O(N^2) on CPU (K18); a shorter stream keeps it quick.
+    feats, text, scale, order = _random_store(n=12 if config is not None and config.use_loo_temperature else 24)
     args = SimpleNamespace(test_sets="DTD", protocol="published")
     with cuda_autocast_emulation(emulate):
         direct = _direct(algorithm, config and CalTdaConfig(**config.as_dict()), feats, text, scale, order, args)
@@ -110,6 +111,37 @@ def test_emulated_autocast_gives_tda_cuda_dtypes():
             outs = run_stream(trainer, model, order, args)
         assert {o.dtype for o in outs} == {dtype}
     assert torch.cuda.amp.autocast.__name__ != "_emulated_autocast"  # restored
+
+
+def test_emulated_matmul_rounds_inputs_to_fp16_and_the_result_once():
+    g = torch.Generator().manual_seed(3)
+    a, b = torch.randn(3, 64, generator=g), torch.randn(64, 7, generator=g)
+    with cuda_autocast_emulation() as report:
+        with torch.cuda.amp.autocast():
+            out = a @ b
+            probs = out.softmax(dim=-1)
+    expected = (a.half().float() @ b.half().float()).half()  # cuBLAS: fp16 in, fp32 compute, fp16 out
+    assert torch.equal(out, expected)
+    assert probs.dtype == torch.float32
+    assert report.summary() == {"fp16": {"matmul": 1}, "fp32": {"softmax": 1}}
+
+
+def test_ops_outside_the_known_lists_are_reported_and_warned_on():
+    x = torch.randn(4, 4)
+    with cuda_autocast_emulation() as report:
+        with torch.cuda.amp.autocast():
+            with pytest.warns(RuntimeWarning, match="'sqrt'"):
+                x.abs().sqrt()
+            x.abs().sqrt()  # warned once per op
+    assert report.summary()["unlisted"] == {"sqrt": 2}
+    assert report.summary()["neutral"] == {"abs": 2}
+
+
+def test_outside_autocast_blocks_nothing_is_cast():
+    x = torch.randn(2, 3)
+    with cuda_autocast_emulation() as report:
+        y = x @ x.t()
+    assert y.dtype == torch.float32 and report.summary() == {}
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a GPU")
@@ -203,6 +235,12 @@ def test_replay_reproduces_the_runner_on_the_extracted_features(
     assert record["reliability"] == ref["reliability"]
     assert record["n_samples"] == 40 and record["seed"] == seed
     assert record["hyperparams"]["replay"]["full_stream"] is True
+    ops = record["hyperparams"]["replay"]["autocast_ops"]
+    if emulate:
+        assert "unlisted" not in ops and ops["fp16"]  # the studied methods are fully covered
+        assert path.parent.name != "autocast_off"
+    else:
+        assert ops == {} and path.parent.name == "autocast_off"
     if algorithm != "clipzs":
         assert record["hyperparams"]["protocol"] == "published"
 
@@ -237,6 +275,18 @@ def test_clean_protocol_is_recorded_and_named_apart(store_root, tmp_path):
     assert (params["protocol"], params["alpha"], params["beta"]) == ("clean", 2.0, 5.0)
     assert record_name("tda", None, "published") == "tda"
     assert record_name("tda", "mine", "clean") == "mine"
+    # clipzs has no alpha/beta: a clean run is the published run, same name.
+    assert record_name("clipzs", None, "clean") == "clipzs"
+
+
+def test_the_gpu_runner_names_clean_runs_the_same_way():
+    from online_tta import default_run_name
+
+    assert default_run_name("tda", None, "clean") == "tda_clean"
+    assert default_run_name("cal_tda", None, "clean") == "cal_tda_clean"
+    assert default_run_name("tda", None, "published") is None
+    assert default_run_name("clipzs", None, "clean") is None
+    assert default_run_name("tda", "x", "clean") == "x"
 
 
 def test_val_split_and_other_seeds_get_their_own_folders(store_root, tmp_path):
@@ -273,6 +323,16 @@ def test_suites_name_existing_configs():
         parse_args(["--method", "tda", "--suite", "headline"])
 
 
+def test_the_clean_suite_has_no_duplicate_clipzs(store_root, tmp_path):
+    from scripts.replay import main
+
+    paths = main(["--features", str(store_root), "--dataset", "dtd", "--suite", "headline",
+                  "--protocol", "clean", "--limit", "3", "--out-dir", str(tmp_path)])
+    names = sorted(p.name for p in paths)
+    assert names == ["dtd_cal_tda_gate_clean.json", "dtd_cal_tda_gate_temp_clean.json",
+                     "dtd_cal_tda_temp_clean.json", "dtd_tda_clean.json"]
+
+
 def test_compare_flags_records_outside_the_tolerance(tmp_path):
     from analysis.compare_replay import compare, main
 
@@ -292,3 +352,22 @@ def test_compare_flags_records_outside_the_tolerance(tmp_path):
     assert main(["--replay", str(tmp_path / "rep"), "--reference", str(tmp_path / "ref")]) == 1
     (tmp_path / "rep/ablation/dtd_none.json").unlink()
     assert main(["--replay", str(tmp_path / "rep"), "--reference", str(tmp_path / "ref")]) == 0
+    # autocast_off/ records are compared with the same GPU reference.
+    write(tmp_path / "rep/autocast_off/dtd_tda.json", 0.4704, 0.1741)
+    rows = {r["record"]: r["status"] for r in compare(tmp_path / "rep", tmp_path / "ref")}
+    assert rows["autocast_off/dtd_tda.json"] == "ok"
+
+
+def test_compare_flags_configuration_differences_but_not_later_fields():
+    from analysis.compare_replay import hyperparam_diff
+
+    old_record = {"use_prob_fusion": True, "beta": 3.0, "inert": ["alpha", "entropy_threshold"],
+                  "temperature": {"mean": 1.2}}
+    replay = {"use_prob_fusion": True, "beta": 3.0, "fusion_gate": False, "protocol": "published",
+              "inert": ["alpha", "entropy_threshold", "fusion_gate_max_gap"],
+              "temperature": {"mean": 1.3}, "replay": {"seconds": 1}}
+    # fusion_gate did not exist yet (default False), protocol is implied, diagnostics ignored.
+    assert hyperparam_diff(old_record, replay) == {}
+    assert hyperparam_diff(old_record, {**replay, "beta": 5.0}) == {"beta": (3.0, 5.0)}
+    assert hyperparam_diff(old_record, {**replay, "fusion_gate": True}) == {"fusion_gate": (None, True)}
+    assert hyperparam_diff(old_record, {**replay, "protocol": "clean"}) == {"protocol": ("published", "clean")}
