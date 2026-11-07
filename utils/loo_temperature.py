@@ -82,3 +82,60 @@ def search_temperature(
         if gap < best_gap:
             best, best_gap = temperature, gap
     return best
+
+
+class RunningConfidence:
+    """Streaming replacement for `search_temperature` over a growing score history.
+
+    `search_temperature(history, a)` needs, for every grid temperature T, the mean
+    over the history of `max softmax(s / T)`. Each sample's term depends only on
+    that sample, so we keep one running sum per grid temperature: `update` costs
+    O(|grid| * C) per sample and `search` O(|grid|), instead of re-scanning the
+    whole history (O(N * |grid| * C)) at every stream step.
+
+    Equivalence with `search_temperature` on the concatenated history:
+    - Per-sample terms are bit-identical: the same float32 division and softmax,
+      row by row (rows of a softmax do not interact).
+    - Sums are kept in float64. A max-softmax value lies in [1/C, 1], so its
+      float32 mantissa spans at most 24 + log2(C) bits; adding N of them in
+      float64 is *exact* while 24 + log2(C) + log2(N) <= 53 (e.g. C = 100 and
+      N < 2**22). The reference instead reduces in float32, so it carries a
+      relative error of order 1e-7. The two can therefore pick different grid
+      points only when two candidates' gaps are within that float32 noise of
+      each other; where they disagree, this class holds the exact answer.
+    - Ties keep the reference's rule: the first (lowest) temperature wins.
+    """
+
+    def __init__(self, grid: list[float] | None = None):
+        self.grid = list(grid) if grid is not None else default_grid()
+        self._grid_tensor = torch.tensor(self.grid, dtype=torch.float32)
+        self._sums = torch.zeros(len(self.grid), dtype=torch.float64)
+        self.count = 0
+
+    def update(self, scores: torch.Tensor) -> None:
+        """Add the (n, C) pre-temperature scores of n new samples to the sums."""
+        scores = scores.detach()
+        if scores.ndim == 1:
+            scores = scores.unsqueeze(0)
+        grid = self._grid_tensor.to(device=scores.device, dtype=scores.dtype)
+        # (G, n, C) / (G, 1, 1): the same elementwise division as `logits / T`.
+        conf = (scores.unsqueeze(0) / grid.view(-1, 1, 1)).softmax(dim=-1).max(dim=-1).values
+        self._sums += conf.to(device="cpu", dtype=torch.float64).sum(dim=1)
+        self.count += scores.shape[0]
+
+    def mean_confidences(self) -> torch.Tensor:
+        """Mean top-1 probability at every grid temperature, as float64 (|grid|,)."""
+        if self.count == 0:
+            raise ValueError("no scores recorded yet")
+        return self._sums / self.count
+
+    def search(self, target_accuracy: float) -> float:
+        """Same contract as `search_temperature` on the full recorded history."""
+        if target_accuracy is None or math.isnan(target_accuracy) or not self.grid:
+            return 1.0
+        if self.count == 0:
+            raise ValueError("no scores recorded yet")
+        gaps = (self.mean_confidences() - target_accuracy).abs()
+        # `argmin` returns the first minimal index, matching the reference's
+        # strict `<` scan from the low end of the grid.
+        return self.grid[int(torch.argmin(gaps))]

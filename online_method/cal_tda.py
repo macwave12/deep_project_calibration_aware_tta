@@ -24,7 +24,7 @@ import torch
 from torch.nn import functional as F
 
 from online_method.tda import TDA, Entropy, compute_cache_logits, update_cache
-from utils.loo_temperature import default_grid, loo_accuracy, search_temperature
+from utils.loo_temperature import RunningConfidence, default_grid, loo_accuracy
 
 
 def margin_score(logits: torch.Tensor) -> torch.Tensor:
@@ -262,7 +262,7 @@ class CalTDA(TDA):
     def __init__(self, model, device, config=None):
         super().__init__(model, device)
         self.config = config or CalTdaConfig()
-        self._score_history = []
+        self._confidence = RunningConfidence()
         self.temperature = 1.0
         self.temperatures = []
         self._n_estimated = 0
@@ -281,7 +281,7 @@ class CalTDA(TDA):
         self.config.alpha = self.pos_alpha
         self.config.beta = self.pos_beta
 
-        self._score_history = []
+        self._confidence = RunningConfidence()
         self.temperature = 1.0
         self.temperatures = []
         self._n_estimated = 0
@@ -376,7 +376,7 @@ class CalTDA(TDA):
         the summary can separate "the search chose 1.0" from "the search never
         ran and 1.0 is the no-op default".
         """
-        if not self.config.use_loo_temperature or not self._score_history:
+        if not self.config.use_loo_temperature or self._confidence.count == 0:
             return 1.0, False
         with torch.no_grad():
             features, pseudo_labels = self._cache_features_and_pseudo_labels()
@@ -386,8 +386,25 @@ class CalTDA(TDA):
             # does not enforce it; unnormalized input silently ranks neighbours
             # by magnitude instead of direction. Normalize at the call site.
             estimate = loo_accuracy(F.normalize(features, dim=-1), pseudo_labels)
-            history = torch.cat(self._score_history, dim=0)
-            return search_temperature(history, estimate), True
+            return self._search_temperature(estimate), True
+
+    def _record_scores(self, scores):
+        """Add one sample's pre-temperature scores to the temperature search state.
+
+        Only running per-temperature sums are kept (`RunningConfidence`), so the
+        search is O(|grid| * C) per step instead of re-scanning the history.
+        """
+        # Only `_estimate_temperature` reads this state, and it returns before
+        # reading when the contribution is off, so skipping the update there is
+        # unobservable and saves O(|grid| * C) per step.
+        if self.config.use_loo_temperature:
+            self._confidence.update(scores)
+
+    def _search_temperature(self, estimate):
+        """The grid temperature whose mean confidence over the history matches
+        `estimate`; equal to `search_temperature(history, estimate)` (see
+        `RunningConfidence` for the float-summation note)."""
+        return self._confidence.search(estimate)
 
     def adaptation_process(self, image, images, args):
         with torch.no_grad():
@@ -471,7 +488,7 @@ class CalTDA(TDA):
         # log-probability space; mixing the two would hand the temperature
         # search a bimodal history and skew its mean-confidence match.
         if not fusion_fallback:
-            self._score_history.append(
+            self._record_scores(
                 pre_temperature_logits(base_logits, cache_logits, config).detach()
             )
 
