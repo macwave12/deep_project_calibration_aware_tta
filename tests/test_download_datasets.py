@@ -475,14 +475,3 @@ def test_real_spec_matches_documented_contract():
 def test_clean_path_handles_windows_trailing_quote():
     assert dd._clean_path('/tmp/data_root/"') == os.path.abspath("/tmp/data_root")
     assert dd._clean_path("/tmp/data_root/") == os.path.abspath("/tmp/data_root")
-
-
-def test_requirements_cpu_in_sync():
-    def pkgs(name):
-        lines = (REPO / name).read_text().splitlines()
-        return [l.strip() for l in lines if l.strip() and not l.strip().startswith(("#", "-"))]
-
-    full = [p for p in pkgs("requirements.txt") if not re.match(r"torch(vision)?\b", p)]
-    cpu = pkgs("requirements-cpu.txt")
-    assert cpu == full
-    assert not any("cu1" in p or p.startswith("torch") for p in cpu)

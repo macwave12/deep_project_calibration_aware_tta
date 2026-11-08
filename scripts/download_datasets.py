@@ -18,10 +18,10 @@ Cross-platform, standard library only (``tqdm`` is used for progress bars when i
 
 Usage::
 
-    python scripts/download_datasets.py --data-root D:\\data_root
+    python scripts/download_datasets.py --data-root /content/data_root
     python scripts/download_datasets.py --datasets dtd eurosat --keep-archives
     python scripts/download_datasets.py --verify-only
-    python scripts/download_datasets.py --with-clip --clip-cache D:\\clip_cache
+    python scripts/download_datasets.py --with-clip --clip-cache /content/clip_cache
 """
 from __future__ import annotations
 
@@ -428,8 +428,8 @@ def parse_drive_confirm(page: str, file_id: str, base_url: str = "https://drive.
     if any(p in low for p in _QUOTA_PATTERNS):
         raise DriveQuotaError(
             f"Google Drive download quota exceeded for file {file_id}. Wait a few hours, or "
-            f"open https://drive.google.com/file/d/{file_id}/view in a browser and save it manually "
-            f"(see docs/LOCAL_CPU_SETUP.md, Troubleshooting).")
+            f"open https://drive.google.com/file/d/{file_id}/view in a browser and save it as "
+            f"<data-root>/_splits/<folder>/<file name>, then rerun (docs/COLAB_EXTRACTION.md).")
     form = _FormParser.parse(page)
     if form:
         action, params = form
