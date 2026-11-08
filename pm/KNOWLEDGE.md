@@ -85,3 +85,8 @@ Established facts, each with its evidence. Add new facts with a source; mark a f
 - K26. CPU `torch.autocast('cpu', float16)` keeps `softmax` in fp16 (CUDA: fp32), so it
   is not a stand-in for CUDA autocast; `utils/feature_replay.cuda_autocast_emulation`
   applies CUDA's cast lists instead. Source: measured on torch 2.15 CPU (T02 handoff).
+- K27. Every `online_tta.py` run leaves `<output_dir>/bs1/<arch>/<test_sets>/save_results.pt`
+  (run_one: `online_results/ckps/<run name>/bs1/ViT-B/16/<TestSet>/`) with per-step `output`
+  and `target` concatenated in stream order; it is overwritten by the next run with the same
+  run name. `utils/recorded_run_check.py` uses it to confirm the extracted stream order
+  exactly. Source: `online_tta.py` L389–402, `concat_dict`.
