@@ -3,10 +3,10 @@
 Updated 2026-11-07.
 
 ## Now
-- Branch `deck/refinement` (based on `plan/reservoir-cache-temperature` = `publish` @ 4def98a
-  + plan docs). PM folder created; plan approved.
-- Phase A (infrastructure) starting: T01, T02, T03, T04 in parallel, CPU-only, synthetic tests.
-- T09 related-work audit: first pass done in `research/related-work.md`; to be completed.
+- `deck/refinement`: T01/T02 (extraction, CPU replay, protocol switch) and T03/T04 (O(N)
+  temperature, trace) merged; suite 250 passed / 14 skipped (CUDA- and data-only tests).
+- In progress: T13 Colab extraction notebook; T10 draft deck v2 (placeholders for evidence).
+- T09 related-work audit: second pass done.
 
 ## Blockers
 - Real features needed for every number in Phases C–F → **GPU job on Colab (T13 notebook), run by Idan**.

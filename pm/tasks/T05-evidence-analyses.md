@@ -17,3 +17,8 @@ by a tested script. Labels are joined here, never in method code.
 | A8 | Gate: firing rate per dataset; calibration of tie vs non-tie rows | table + per-branch reliability | gate slides |
 | A9 | Temperature: â vs true running accuracy over the stream; estimator error; oracle-T (NLL with labels, reported as a ceiling) | curves + table | temperature slides |
 | A10 | NLL, Brier, AURC for every headline run | table | backup |
+
+Prerequisite (lead, 2026-11-08): the CPU replay (`scripts/replay.py`, `utils/replay_runner.py`)
+does not yet write the T04 trace. Wire `--trace` through the replay so every replayed
+cal_tda/tda run can emit `<dataset>_<method>.trace.pt`, with a test that the replayed trace
+equals a direct-run trace on synthetic features.

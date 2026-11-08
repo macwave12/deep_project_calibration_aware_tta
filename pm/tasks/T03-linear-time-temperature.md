@@ -1,6 +1,6 @@
 # T03 — O(N) LOO temperature, results-identical
 
-Status: review · Owner: engineering agent · Depends on: —
+Status: done (merged b24c3ea) · Owner: engineering agent · Depends on: —
 
 ## Goal
 Remove the O(N²) cost of `_estimate_temperature` (it re-scans the whole score history for

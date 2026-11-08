@@ -1,6 +1,6 @@
 # T04 — Label-free per-sample trace
 
-Status: review · Owner: engineering agent · Depends on: —
+Status: done (merged b24c3ea) · Owner: engineering agent · Depends on: —
 
 ## Goal
 Opt-in trace (`trace: true`, default off) so analyses can explain *why* each prediction
