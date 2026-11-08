@@ -27,9 +27,9 @@ def _random_history(generator, n, c, scale):
     return torch.randn(n, c, generator=generator) * scale
 
 
-def _stream(history, generator):
+def _stream(history, generator, **kwargs):
     """Feed `history` in random-size chunks, as the runner feeds single rows."""
-    running = RunningConfidence()
+    running = RunningConfidence(**kwargs)
     start = 0
     while start < history.shape[0]:
         size = int(torch.randint(1, 4, (1,), generator=generator))
@@ -80,29 +80,41 @@ def test_targets_placed_on_reference_grid_points_pick_the_same_temperature():
         assert running.search(target) == search_temperature(history, target)
 
 
-def test_midpoint_targets_agree_except_within_float32_noise():
+def _midpoint_targets(history):
+    means = _reference_means(history)
+    return [float((means[i] + means[i + 1]) / 2) for i in range(0, len(means) - 1, 4)]
+
+
+def test_midpoint_targets_agree_exactly_with_near_tie_rescoring():
     # The hardest case: target halfway between two adjacent grid points' mean
-    # confidences, so both candidates' gaps are (nearly) equal. Any
-    # disagreement must be a pair whose reference gaps differ by no more than
-    # the reference's own float32 error.
+    # confidences, so both candidates' gaps are equal up to float32 noise.
+    # The default mode re-scores such near-ties on the reference's numbers.
     generator = torch.Generator().manual_seed(3)
     history = _random_history(generator, 300, 10, 3.0)
     running = _stream(history, generator)
-    grid = default_grid()
-    means = _reference_means(history)
+    targets = _midpoint_targets(history)
+    for target in targets:
+        assert running.search(target) == search_temperature(history, target)
+    assert running.n_rescored == len(targets)
+
+
+def test_pure_exact_mode_differs_only_within_float32_noise():
+    # Without re-scoring, the exact float64 argmin may round a midpoint tie the
+    # other way from the float32 reference -- but only between candidates
+    # whose reference gaps are within float32 noise of each other.
+    generator = torch.Generator().manual_seed(3)
+    history = _random_history(generator, 300, 10, 3.0)
+    running = _stream(history, generator, reference_tie_tol=None)
     disagreements = 0
-    indices = range(0, len(grid) - 1, 4)
-    for index in indices:
-        target = float((means[index] + means[index + 1]) / 2)
+    for target in _midpoint_targets(history):
         ours, ref = running.search(target), search_temperature(history, target)
         if ours != ref:
             disagreements += 1
             gap_ours = abs(mean_confidence(history, ours) - target)
             gap_ref = abs(mean_confidence(history, ref) - target)
             assert abs(gap_ours - gap_ref) < FLOAT32_MEAN_TOL
-    # Exact midpoints are where the two paths are *expected* to split (about
-    # half the time: each rounds the tie its own way), so no bound on the count.
-    assert disagreements < len(indices)
+    assert running.n_rescored == 0
+    assert disagreements > 0  # documents why the default mode re-scores
 
 
 def test_flat_history_ties_resolve_to_the_first_grid_point():
