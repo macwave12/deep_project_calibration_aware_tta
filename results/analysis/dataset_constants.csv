@@ -1,0 +1,6 @@
+dataset,label,n_classes,n_samples,alpha,beta,p2_alpha,p2_beta,pos_capacity,neg_capacity,neg_alpha,neg_beta,band_lower,band_upper,mask_lower,vote_half_cos,overturn_log_odds,overturn_odds,mixture_overturn_gap,flat_cache_top_p_at_cap
+dtd,DTD,47,1692,2.0,3.0,2.0,5.0,3,2,0.117,1.0,0.2,0.5,0.03,0.769,6.0,403.4,0.2888,0.3039
+flower102,Flowers102,102,2463,1.0,5.0,2.0,5.0,3,2,0.117,1.0,0.2,0.5,0.03,0.8614,3.0,20.1,0.1576,0.1659
+pets,Pets,37,3669,2.0,7.0,2.0,5.0,3,2,0.117,1.0,0.2,0.5,0.03,0.901,6.0,403.4,0.3403,0.3581
+eurosat,EuroSAT,10,8100,4.0,8.0,2.0,5.0,3,2,0.117,1.0,0.2,0.5,0.03,0.9134,12.0,162754.8,0.6562,0.6906
+aircraft,Aircraft,100,3333,2.0,2.0,2.0,5.0,3,2,0.117,1.0,0.2,0.5,0.03,0.6534,6.0,403.4,0.1603,0.1687
