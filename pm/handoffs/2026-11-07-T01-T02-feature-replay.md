@@ -137,7 +137,7 @@ features/extract_features.log
 ### Alternative: extract on a CPU-only Windows machine (`--allow-cpu`, supported)
 
 Use this when no GPU is available. The commands are the same, plus `--allow-cpu`. Environment set-up is
-in `docs/LOCAL_CPU_SETUP.md` (another agent maintains it).
+in `docs/COLAB_EXTRACTION.md` (another agent maintains it).
 
 - **torch build:** the guard expects the CPU build of the pin, **`2.11.0+cpu`**, and prints
   `mode: CPU (fp32, no autocast); expected torch 2.11.0+cpu`. Any other version stops the job
