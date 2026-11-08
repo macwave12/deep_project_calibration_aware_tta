@@ -13,3 +13,5 @@
 | 2026-11-07 | PM folder `pm/` tracked in git is the source of truth for tasks and handoffs | Continuity across machines and agents | Idan |
 | 2026-11-07 | T01/T02 review: no blocking defects; RNG state at loop start verified identical to `online_tta.main()`. Before the GPU job: torch-version guard, split preflight, exact per-sample order check against the original `save_results.pt`, resume fixes, deterministic autocast emulation | One-shot GPU job must be robust and self-verifying | lead (reviewer findings) |
 | 2026-11-07 | GPU job also extracts 10 augmented views per train16 image (Tip-Adapter's official augmentation) and val permutations for seeds 0/1/2 | Faithful few-shot baseline without a second GPU session | lead |
+| 2026-11-08 | Feature extraction runs on macwave's RTX (GPU path); local-CPU setup (T13) parked, partial work kept on its branch as a fallback | Idan will send the job to macwave | Idan |
+| 2026-11-08 | Draft deck v2 built now from existing CSVs; slides needing new evidence carry labelled placeholders until features arrive | Let Idan review structure and content before the evidence phase | Idan, lead |
