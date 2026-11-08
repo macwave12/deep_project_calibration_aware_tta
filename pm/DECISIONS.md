@@ -15,3 +15,4 @@
 | 2026-11-07 | GPU job also extracts 10 augmented views per train16 image (Tip-Adapter's official augmentation) and val permutations for seeds 0/1/2 | Faithful few-shot baseline without a second GPU session | lead |
 | 2026-11-08 | Feature extraction runs on macwave's RTX (GPU path); local-CPU setup (T13) parked, partial work kept on its branch as a fallback | Idan will send the job to macwave | Idan |
 | 2026-11-08 | Draft deck v2 built now from existing CSVs; slides needing new evidence carry labelled placeholders until features arrive | Let Idan review structure and content before the evidence phase | Idan, lead |
+| 2026-11-08 | Extraction on a free Google Colab T4 run by Idan (supersedes waiting for macwave). Notebook clones `deck/refinement`, writes the features zip to Idan's Google Drive; the lead pulls it via the Drive connector | Avoid blocking on macwave; Colab + Drive closes the loop without manual file transfer | Idan, lead |

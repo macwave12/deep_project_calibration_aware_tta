@@ -9,7 +9,7 @@ Updated 2026-11-07.
 - T09 related-work audit: first pass done in `research/related-work.md`; to be completed.
 
 ## Blockers
-- Real features needed for every number in Phases C–F → **GPU job T01 (macwave)**.
+- Real features needed for every number in Phases C–F → **GPU job on Colab (T13 notebook), run by Idan**.
 
 ## Reminders for Idan
 - [ ] When T01's script is merged: send macwave the run command and ask him to upload the
