@@ -5,7 +5,7 @@ Updated 2026-11-07.
 ## Now
 - `deck/refinement`: T01/T02 (extraction, CPU replay, protocol switch) and T03/T04 (O(N)
   temperature, trace) merged; suite 250 passed / 14 skipped (CUDA- and data-only tests).
-- In progress: T13 Colab extraction notebook; T10 draft deck v2 (placeholders for evidence).
+- T13 Colab notebook merged; Colab run in progress (Idan). T10 draft deck v2 merged (36 + 6 backup, placeholders for evidence): awaiting Idan's review and a T11 reviewer pass. Open questions in `handoffs/2026-11-08-T10-deck-v2-draft.md`.
 - T09 related-work audit: second pass done.
 
 ## Blockers
