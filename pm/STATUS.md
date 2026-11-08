@@ -12,8 +12,9 @@ Updated 2026-11-07.
 - Real features needed for every number in Phases C–F → **GPU job on Colab (T13 notebook), run by Idan**.
 
 ## Reminders for Idan
-- [ ] When T01's script is merged: send macwave the run command and ask him to upload the
-      feature files (instructions in `tasks/T01-feature-extraction.md`).
+- [ ] When T01–T04 and T13 are merged and `deck/refinement` is pushed: open the Colab
+      notebook (`docs/COLAB_EXTRACTION.md`), choose a T4 GPU, Run all (~30–40 min). The
+      features zip lands in Google Drive `cal_tta_features/`; the lead pulls it from there.
 - [ ] Push `deck/refinement` from the local clone (Claude cannot push to macwave12).
 - [ ] Decide after T07: headline protocol P1 or P2 (rule in `DECISIONS.md`).
 
