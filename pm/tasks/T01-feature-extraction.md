@@ -1,6 +1,6 @@
 # T01 — Feature extraction script (the only GPU job)
 
-Status: open · Owner: engineering agent (script), macwave (run) · Depends on: —
+Status: review (script; GPU run by macwave pending) · Owner: engineering agent (script), macwave (run) · Depends on: —
 
 ## Goal
 A script that, run once on a CUDA machine, exports everything the CPU replay needs, so no
@@ -36,3 +36,8 @@ Layout: `features/<dataset>/{test,val,train16}_feats.pt`, `text_feats.pt`,
 ## Handoff to macwave
 Command, expected runtime (~10–15 min on an RTX 5060), output folder, and how to share it
 (zip ≈ 60 MB → Google Drive or a release asset; not committed to git).
+
+## Scope additions (lead, 2026-11-07, after review)
+Recorded-run order check against `save_results.pt`; torch-pin guard (`--force`); preflight of
+list files; resume that extends or redoes; val permutations for seeds 0/1/2; 10 augmented
+train16 views for Tip-Adapter (`train16_aug_feats.pt`, raw, (views, N, D)). See the handoff.

@@ -11,10 +11,9 @@ from online_method.cal_tda import (
 )
 from online_method.tda import TDA
 
-requires_cuda = pytest.mark.skipif(
-    not torch.cuda.is_available(),
-    reason="upstream compute_cache_logits calls .cuda() unconditionally",
-)
+# `compute_cache_logits` follows its input's device (it used to hard-code
+# `.cuda()`), so these runner tests run on CPU too, and on the GPU when present.
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class _FakeCLIP:
@@ -45,7 +44,7 @@ def _feature_stream(n_samples=40, n_classes=5, dim=16, seed=0):
     text = torch.randn(n_classes, dim, generator=generator)
     features = features / features.norm(dim=-1, keepdim=True)
     text = text / text.norm(dim=-1, keepdim=True)
-    return features.cuda(), text.cuda()
+    return features.to(DEVICE), text.to(DEVICE)
 
 
 def test_config_round_trips_through_a_dict():
@@ -123,7 +122,7 @@ def test_config_rejects_unknown_fields():
 
 
 def _drive(runner, n_samples, args):
-    dummy = torch.zeros(1, 3, 4, 4).cuda()
+    dummy = torch.zeros(1, 3, 4, 4, device=DEVICE)
     outputs = []
     for _ in range(n_samples):
         runner.pre_adaptation()
@@ -131,7 +130,6 @@ def _drive(runner, n_samples, args):
     return outputs
 
 
-@requires_cuda
 def test_all_flags_off_reproduces_upstream_tda_on_a_stream():
     # The control test, at unit scale: same feature stream, same dataset
     # alpha/beta, every contribution disabled -> the same distribution upstream
@@ -166,7 +164,6 @@ def test_all_flags_off_reproduces_upstream_tda_on_a_stream():
         assert torch.allclose(reference, our_probs, atol=5e-3)
 
 
-@requires_cuda
 def test_margin_admission_keeps_uncertain_samples_out_of_the_cache():
     n_samples = 40
     features, text = _feature_stream(n_samples=n_samples)
@@ -186,7 +183,6 @@ def test_margin_admission_keeps_uncertain_samples_out_of_the_cache():
     assert strict == 0
 
 
-@requires_cuda
 def test_every_returned_output_is_a_valid_distribution():
     # Asserts on the tensor the driver actually scores -- `return_dict['output']`
     # -- not on a side buffer, so this covers the real scoring path.
@@ -203,7 +199,6 @@ def test_every_returned_output_is_a_valid_distribution():
     assert (probs >= 0).all()
 
 
-@requires_cuda
 def test_temperature_summary_records_grid_saturation():
     n_samples = 40
     features, text = _feature_stream(n_samples=n_samples)
@@ -225,7 +220,6 @@ def test_temperature_summary_records_grid_saturation():
     )
 
 
-@requires_cuda
 def test_no_temperature_summary_when_the_contribution_is_disabled():
     features, text = _feature_stream(n_samples=5)
     args = SimpleNamespace(test_sets="DTD")
@@ -236,7 +230,6 @@ def test_no_temperature_summary_when_the_contribution_is_disabled():
     assert runner.temperature_summary() is None
 
 
-@requires_cuda
 def test_admission_summary_counts_offered_and_admitted_samples():
     n_samples = 40
     features, text = _feature_stream(n_samples=n_samples)
@@ -256,7 +249,6 @@ def test_admission_summary_counts_offered_and_admitted_samples():
     assert summary['admission_rate'] == pytest.approx(0.0)
 
 
-@requires_cuda
 def test_admission_rate_is_one_when_margin_admission_is_off():
     # Upstream admits to the positive cache unconditionally; "off" must record
     # that faithfully rather than reading as "nothing happened".
@@ -277,19 +269,58 @@ def test_admission_rate_is_one_when_margin_admission_is_off():
     assert summary['admission_rate'] == pytest.approx(1.0)
 
 
-@requires_cuda
 def test_no_admission_summary_before_any_sample_is_processed():
     features, text = _feature_stream(n_samples=1)
     runner = CalTDA(_FakeCLIP(features, text), 0, config=CalTdaConfig())
     assert runner.admission_summary() is None
 
 
-@requires_cuda
-def test_dataset_alpha_and_beta_override_the_method_config():
-    args = SimpleNamespace(test_sets="DTD")
+# (protocol, test_sets, expected alpha, expected beta). `None` is an `args`
+# without a `protocol` attribute — every pre-protocol caller — which must keep
+# today's behaviour: the per-dataset TDA table.
+_PROTOCOL_CASES = [
+    (None, "DTD", 2.0, 3.0),
+    ("published", "DTD", 2.0, 3.0),
+    ("published", "eurosat", 4.0, 8.0),
+    ("clean", "DTD", 2.0, 5.0),
+    ("clean", "eurosat", 2.0, 5.0),
+]
+
+
+@pytest.mark.parametrize("protocol,test_sets,alpha,beta", _PROTOCOL_CASES)
+def test_dataset_alpha_and_beta_override_the_method_config(protocol, test_sets, alpha, beta):
+    args = SimpleNamespace(test_sets=test_sets)
+    if protocol is not None:
+        args.protocol = protocol
     runner = CalTDA(_FakeCLIP(*_feature_stream(n_samples=1)), 0,
                     config=CalTdaConfig(alpha=99.0, beta=99.0))
     runner.prepare_model_and_optimization(args)
-    # DTD's TDA-tuned positive-cache values, identical to what `tda` uses.
-    assert runner.config.alpha == 2.0
-    assert runner.config.beta == 3.0
+    # The protocol's positive-cache values, identical to what `tda` uses.
+    assert runner.config.alpha == alpha
+    assert runner.config.beta == beta
+
+    upstream = TDA(_FakeCLIP(*_feature_stream(n_samples=1)), 0)
+    upstream.prepare_model_and_optimization(args)
+    assert (upstream.pos_alpha, upstream.pos_beta) == (alpha, beta)
+    # The negative cache is global in both protocols.
+    assert (upstream.neg_alpha, upstream.neg_beta) == (0.117, 1.0)
+    assert (runner.neg_alpha, runner.neg_beta) == (0.117, 1.0)
+
+
+def test_an_unknown_protocol_is_rejected():
+    runner = TDA(_FakeCLIP(*_feature_stream(n_samples=1)), 0)
+    with pytest.raises(ValueError, match="protocol"):
+        runner.prepare_model_and_optimization(SimpleNamespace(test_sets="DTD", protocol="p2"))
+
+
+def test_published_protocol_reproduces_the_default_stream_exactly():
+    # Passing 'published' explicitly must change nothing compared with an args
+    # object that predates the flag (RULES §8: defaults preserve behaviour).
+    features, text = _feature_stream(n_samples=20)
+    outputs = []
+    for args in (SimpleNamespace(test_sets="Pets"),
+                 SimpleNamespace(test_sets="Pets", protocol="published")):
+        runner = CalTDA(_FakeCLIP(features, text), 0, config=CalTdaConfig())
+        runner.prepare_model_and_optimization(args)
+        outputs.append(torch.cat(_drive(runner, 20, args)))
+    assert torch.equal(outputs[0], outputs[1])

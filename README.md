@@ -277,6 +277,58 @@ mark each time, mid-run, with no error in the run's own log and no GPU/process i
 resumed each time by launching only the remaining dataset/variant combinations; all 40
 ablation records are present in the final `results/raw/ablation/`.
 
+## Feature cache and CPU replay
+
+CLIP is frozen and the single-view methods (`clipzs`, `tda`, `cal_tda`, `dmn_weak`,
+`ecalp`, `onzeta`) use one centre-crop view, so every image feature can be computed
+once on the GPU and every later run replayed on CPU through the unchanged method code.
+
+**1. Extract (GPU, once; resumable).** From the repository root, with the venv active:
+
+```powershell
+$env:DATA_ROOT = "D:\second_degree\deep\data_root"
+.\scripts\extract_features.ps1 -DataRoot $env:DATA_ROOT
+```
+
+```bash
+DATA_ROOT=/path/to/data_root bash scripts/extract_features.sh
+```
+
+This writes `features/<dataset>/` for the five datasets: `{test,val,train16}_feats.pt`
+(image features in dataset order, dtype as `forward_features` returns it),
+`train16_aug_feats.pt` (10 Tip-Adapter-augmented views, raw encoder outputs),
+`text_feats.pt`, the stream orders `perm_{test,val}_seed{0,1,2}.pt`, `labels_<split>.pt`
+(scorer/analysis only), and `meta.json` (written last; versions, git commit, transform,
+class names, checksums, skipped splits, the recorded-run check). Format:
+`utils/feature_cache.py`. The job refuses a torch other than the `requirements.txt`
+pin (`--force` overrides), skips splits whose list files or images are missing, and,
+when `online_results/ckps/{clipzs,tda}/**/save_results.pt` exist, checks the extracted
+stream order against them exactly ("stream order matches recorded run: True").
+Without a GPU, add `--allow-cpu --batch-size 32` (expects torch `2.11.0+cpu`; fp32
+features; hours rather than minutes; `--train16-views 0` first, the augmented views in a
+second run). Re-running resumes: finished pieces are kept, missing ones added. The wrappers log to
+`features/extract_features.log`. Do not merge stderr into stdout (`*>&1`) in PowerShell
+5.1: a PyTorch `FutureWarning` then aborts the job (see the note above).
+
+**2. Replay (CPU).**
+
+```bash
+python scripts/replay.py --suite headline              # the five methods of results/summary.csv
+python scripts/replay.py --suite ablation              # results/ablation.csv's 40 runs
+python scripts/replay.py --dataset dtd --method tda --config configs/method/tda.yaml \
+    --protocol clean --seed 1                          # one run, P2 alpha=2/beta=5, seed 1
+python analysis/check_stream_order.py                  # exact per-sample order check vs save_results.pt
+python analysis/compare_replay.py                      # RULES §7 check against results/raw
+```
+
+Records land in `replay_results/raw/` in the GPU runner's format (`val/`, `seed<k>/` and
+`autocast_off/` sub-folders for other splits, seeds and the fp32 A/B). `--protocol clean`
+(also on `online_tta.py` and `run_one.* -Protocol/--protocol`) sets alpha = 2, beta = 5
+for `tda` and `cal_tda` on every dataset and names their records `<name>_clean`; the
+default, `published`, keeps upstream's per-dataset table. By default the replay emulates
+CUDA autocast's casts on CPU (fp16 matmuls with one rounding, fp32 softmax), as the GPU
+runs had them; `--autocast off` runs plain fp32.
+
 ## What we changed
 
 Three independently-switchable, training-free contributions on top of upstream TDA's

@@ -80,7 +80,7 @@ class DMN_WEAK():
     def prepare_model_and_optimization(self, args):
         self.model.eval()
         text_features = self.model.get_text_features()
-        self.mem = MemoryBank(text_features, text_features.shape[0], self.max_len, text_features.shape[1], self.beta, device=self.device)
+        self.mem = MemoryBank(text_features, text_features.shape[0], self.max_len, text_features.shape[1], self.beta, device=text_features.device)
 
     def pre_adaptation(self):
         pass

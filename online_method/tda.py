@@ -21,9 +21,9 @@ def compute_cache_logits(image_features, cache, alpha, beta, clip_weights, neg_m
         cache_keys = torch.cat(cache_keys, dim=0).permute(1, 0)
         if neg_mask_thresholds:
             cache_values = torch.cat(cache_values, dim=0)
-            cache_values = (((cache_values > neg_mask_thresholds[0]) & (cache_values < neg_mask_thresholds[1])).type(torch.int8)).cuda().float() #.half()
+            cache_values = (((cache_values > neg_mask_thresholds[0]) & (cache_values < neg_mask_thresholds[1])).type(torch.int8)).to(image_features.device).float() #.half()
         else:
-            cache_values = (F.one_hot(torch.Tensor(cache_values).to(torch.int64), num_classes=clip_weights.size(1))).cuda().float() # .half()
+            cache_values = (F.one_hot(torch.Tensor(cache_values).to(torch.int64), num_classes=clip_weights.size(1))).to(image_features.device).float() # .half()
 
         affinity = image_features @ cache_keys
         cache_logits = ((-1) * (beta - beta * affinity)).exp() @ cache_values
@@ -41,6 +41,19 @@ def update_cache(cache, pred, features_loss, shot_capacity, include_prob_map=Fal
             cache[pred] = sorted(cache[pred], key=operator.itemgetter(1))
         else:
             cache[pred] = [item]
+
+PROTOCOLS = ('published', 'clean')
+# TDA's ImageNet-val setting (supp. Table 6), used on every dataset under 'clean'.
+CLEAN_PROTOCOL = {'alpha': 2.0, 'beta': 5.0}
+
+
+def resolve_protocol(args):
+    """`args.protocol`, defaulting to 'published' when absent (old callers)."""
+    protocol = getattr(args, 'protocol', None) or 'published'
+    if protocol not in PROTOCOLS:
+        raise ValueError(f"unknown protocol {protocol!r}; expected one of {PROTOCOLS}")
+    return protocol
+
 
 def Entropy(input_):
     bs = input_.size(0)
@@ -68,6 +81,15 @@ class TDA():
 
         self.pos_alpha = self.pos_params['alpha'][args.test_sets]
         self.pos_beta = self.pos_params['beta'][args.test_sets]
+
+        # Hyperparameter protocol (pm/PLAN.md). 'published' (the default) keeps
+        # the per-dataset table above; 'clean' uses TDA's single searched
+        # setting on every dataset, so no test set informed the choice. Only the
+        # positive cache's alpha/beta differ: the negative cache's are global.
+        self.protocol = resolve_protocol(args)
+        if self.protocol == 'clean':
+            self.pos_alpha = CLEAN_PROTOCOL['alpha']
+            self.pos_beta = CLEAN_PROTOCOL['beta']
 
         self.neg_alpha = 0.117
         self.neg_beta = 1.0

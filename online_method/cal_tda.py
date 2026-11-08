@@ -278,6 +278,8 @@ class CalTDA(TDA):
         # fair. `CalTdaConfig`'s own alpha/beta are only defaults for unit tests
         # that construct it directly. Writing them back onto the config means
         # the values recorded in the run's `hyperparams` are the ones used.
+        # `--protocol clean` is resolved in `TDA.prepare_model_and_optimization`
+        # (alpha=2, beta=5), so it reaches `tda` and `cal_tda` identically here.
         self.config.alpha = self.pos_alpha
         self.config.beta = self.pos_beta
 

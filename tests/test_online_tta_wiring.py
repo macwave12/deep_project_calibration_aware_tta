@@ -141,3 +141,16 @@ def test_no_admission_summary_when_the_runner_has_nothing_to_report():
         CalTdaConfig(),
     )
     assert 'admission' not in params
+
+
+def test_the_record_names_the_hyperparameter_protocol():
+    tda_runner = SimpleNamespace(pos_alpha=2.0, pos_beta=5.0, neg_alpha=0.117, neg_beta=1.0)
+    for protocol, expected in ((None, 'published'), ('published', 'published'), ('clean', 'clean')):
+        args = SimpleNamespace(algorithm='tda')
+        if protocol is not None:
+            args.protocol = protocol
+        assert record_hyperparams(args, tda_runner, {})['protocol'] == expected
+
+        args.algorithm = 'cal_tda'
+        params = record_hyperparams(args, _StubRunner(), CalTdaConfig())
+        assert params['protocol'] == expected

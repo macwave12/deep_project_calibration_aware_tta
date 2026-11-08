@@ -34,7 +34,7 @@ from pathlib import Path
 import yaml
 
 from online_method.clipzs import CLIPZS
-from online_method.tda import TDA
+from online_method.tda import TDA, PROTOCOLS, resolve_protocol
 from online_method.cal_tda import CalTDA, CalTdaConfig
 from utils.evaluation import score_and_save
 from online_method.dmn import DMN
@@ -109,6 +109,7 @@ def record_hyperparams(args, tta_trainer, method_config):
         admission = tta_trainer.admission_summary()
         if admission is not None:
             params['admission'] = admission
+        params['protocol'] = resolve_protocol(args)
         return params
     params = dict(method_config)
     if args.algorithm == 'tda':
@@ -118,8 +119,25 @@ def record_hyperparams(args, tta_trainer, method_config):
             'neg_alpha': tta_trainer.neg_alpha,
             'neg_beta': tta_trainer.neg_beta,
             'shot_capacity': 3,
+            'protocol': resolve_protocol(args),
         })
     return params
+
+
+# Methods whose numbers depend on the hyperparameter protocol (pm/PLAN.md).
+PROTOCOL_DEPENDENT_ALGORITHMS = {'tda', 'cal_tda'}
+
+
+def default_run_name(algorithm, run_name, protocol):
+    """`run_name` if given; else None (record named after the algorithm) under
+    'published', and `<algorithm>_clean` under 'clean' for the methods the
+    protocol changes, so a P2 record never overwrites the P1 one. Shared with
+    the CPU replay (`utils.replay_runner`)."""
+    if run_name:
+        return run_name
+    if protocol == 'clean' and algorithm in PROTOCOL_DEPENDENT_ALGORITHMS:
+        return f'{algorithm}_clean'
+    return None
 
 
 def print_args(args):
@@ -169,8 +187,10 @@ def ColourDistortion(s=1.0):
     color_distort = transforms.Compose([rnd_color_jitter, rnd_gray])
     return color_distort
 
-def main():
-    args = parser.parse_args()
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    # A P2 run must never overwrite the P1 record of the same method.
+    args.run_name = default_run_name(args.algorithm, args.run_name, args.protocol)
 
     name_suffix = ''
 
@@ -431,7 +451,8 @@ def main():
             print(print_log)
 
 
-if __name__ == '__main__':
+def build_parser():
+    """The runner's command line (module level so tests can drive `main(argv)`)."""
     parser = argparse.ArgumentParser(description='Test-time Prompt Tuning')
     parser.add_argument('--data', type=str, default='/data', help='path to dataset root')
     parser.add_argument('--test_sets', type=str, default='A/R/V/K/I', help='test dataset (multiple datasets split by slash)')
@@ -466,5 +487,11 @@ if __name__ == '__main__':
                         help='name this run gets in results/raw/<dataset>_<run_name>.json; defaults to --algorithm')
     parser.add_argument('--out-dir', dest='out_dir', type=str, default='results/raw',
                         help='directory the scored run record is written to')
-    
+    parser.add_argument('--protocol', type=str, default='published', choices=PROTOCOLS,
+                        help="tda/cal_tda alpha/beta: 'published' = per-dataset table (default), "
+                             "'clean' = alpha=2, beta=5 on every dataset")
+    return parser
+
+
+if __name__ == '__main__':
     main()

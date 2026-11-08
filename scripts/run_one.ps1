@@ -12,7 +12,8 @@ param(
     [string]$Arch = "ViT-B/16",
     [int]$Seed = 0,
     [string]$RunName = "",
-    [string]$OutDir = ""
+    [string]$OutDir = "",
+    [ValidateSet("published", "clean")][string]$Protocol = "published"
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,6 +49,12 @@ if (-not $testSet) {
     throw "unknown dataset key '$Dataset'; known keys: $($testSetMap.Keys -join ', ')"
 }
 
+# Under P2 (`-Protocol clean`) tda/cal_tda get a `_clean` suffix on both the record
+# name and the checkpoint folder, so neither the P1 record nor its save_results.pt
+# (read by the T01 stream-order check) is overwritten. clipzs has no alpha/beta.
+if ($Protocol -eq "clean" -and ($Method -eq "tda" -or $Method -eq "cal_tda")) {
+    $RunName = if ($RunName) { "${RunName}_clean" } else { "${Method}_clean" }
+}
 $ckptTag = if ($RunName) { $RunName } else { $Method }
 
 $arguments = @(
@@ -63,7 +70,8 @@ $arguments = @(
     "--output_dir", "online_results/ckps/$ckptTag",
     "--algorithm", $Method,
     "--seed", $Seed,
-    "--out-dir", $OutDir
+    "--out-dir", $OutDir,
+    "--protocol", $Protocol
 )
 if ($Config) { $arguments += @("--config", $Config) }
 if ($RunName) { $arguments += @("--run-name", $RunName) }

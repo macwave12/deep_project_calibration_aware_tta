@@ -44,7 +44,7 @@ class OnZeta():
         self.num_class = self.clip_weights.shape[1]
 
         self.w = self.model.get_text_features().t().clone()
-        self.rho = torch.zeros(self.num_class).unsqueeze(0).cuda(self.device)
+        self.rho = torch.zeros(self.num_class).unsqueeze(0).to(self.clip_weights.device)
         
         self.ii = 0
         

@@ -13,6 +13,9 @@ __pycache__/
 # below it from Git even when a later line tries to un-ignore a specific file deeper
 # inside, so each directory level under results/raw/ is explicitly un-ignored too.
 data_root/
+# T01 feature cache (shared via Drive, ~75 MB) and CPU replay records
+features/
+replay_results/
 online_results/
 results/raw/*
 !results/raw/**/
