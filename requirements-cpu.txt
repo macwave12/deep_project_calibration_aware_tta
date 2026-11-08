@@ -1,0 +1,19 @@
+# CPU-only environment (no GPU). Same pins as requirements.txt minus the CUDA lines.
+# torch/torchvision are installed first, from the PyTorch CPU index, by
+# scripts/setup_local_cpu.ps1:
+#   pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cpu
+# then:
+#   pip install -r requirements-cpu.txt
+# tests/test_download_datasets.py checks this list stays in sync with requirements.txt.
+
+numpy>=1.26
+scipy>=1.18
+pandas>=2.2
+matplotlib>=3.8
+pyyaml>=6.0
+ftfy>=6.2
+regex>=2024.5.15
+tqdm>=4.66
+pytest>=8.0
+python-pptx>=1.0.2
+info-nce-pytorch>=0.1.4
