@@ -2,6 +2,9 @@
 
 All five datasets are downloaded, extracted and verified. **You do not need to download anything.**
 
+On a fresh machine, `scripts/download_datasets.py` (or `.ps1`) rebuilds this exact layout and
+checks it against the counts below; see `docs/LOCAL_CPU_SETUP.md`.
+
 ## Local root
 
 ```
