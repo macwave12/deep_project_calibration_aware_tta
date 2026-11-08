@@ -78,6 +78,13 @@ def pinned_torch_version() -> str | None:
     return match.group(1) if match else None
 
 
+def expected_torch_version(pinned: str | None, use_cuda: bool) -> str | None:
+    """The pin on a GPU machine; its CPU build (`<version>+cpu`) on a CPU-only one."""
+    if not pinned:
+        return None
+    return pinned if use_cuda else pinned.split("+")[0] + "+cpu"
+
+
 def missing_files(dataset) -> list:
     """Image files an upstream dataset lists but the disk lacks."""
     files = getattr(dataset, "image_list", None)
@@ -128,7 +135,8 @@ def parse_args(argv=None):
     p.add_argument("--force", action="store_true",
                    help="run even if torch differs from the requirements.txt pin")
     p.add_argument("--allow-cpu", action="store_true",
-                   help="debug only: CPU features are fp32 without autocast and do NOT match the GPU runs")
+                   help="extract on CPU (no GPU): fp32 features without CUDA autocast, so they differ "
+                        "from the GPU runs in the last bits; expects the CPU torch build (2.11.0+cpu)")
     return p.parse_args(argv)
 
 
@@ -144,12 +152,16 @@ def main(argv=None):
     import torch.backends.cudnn as cudnn
 
     pinned = pinned_torch_version()
+    use_cuda = torch.cuda.is_available()
+    expected = expected_torch_version(pinned, use_cuda)
     print("=" * 72)
     print(f"torch {torch.__version__}   (requirements.txt pins {pinned})   "
           f"CUDA {torch.version.cuda}   available: {torch.cuda.is_available()}")
     print("=" * 72, flush=True)
-    if pinned and torch.__version__ != pinned and not args.force:
-        sys.exit(f"torch {torch.__version__} != pinned {pinned}: the stream order and features are only "
+    print(f"mode: {'GPU (CUDA autocast, as the recorded runs)' if use_cuda else 'CPU (fp32, no autocast)'}; "
+          f"expected torch {expected}", flush=True)
+    if expected and torch.__version__ != expected and not args.force:
+        sys.exit(f"torch {torch.__version__} != expected {expected}: the stream order and features are only "
                  "known to match the recorded runs under the same torch. Install the pin, or pass "
                  "--force to proceed anyway (the version is recorded in meta.json).")
 
@@ -160,9 +172,8 @@ def main(argv=None):
     from utils.feature_extraction import extract_dataset, preflight
     from utils.recorded_run_check import check_dataset
 
-    use_cuda = torch.cuda.is_available()
     if not use_cuda and not args.allow_cpu:
-        sys.exit("No CUDA device. This job must run on the GPU (pass --allow-cpu only to debug).")
+        sys.exit("No CUDA device. Pass --allow-cpu to extract on CPU (slower; fp32 features, see the handoff).")
     device = f"cuda:{args.gpu}" if use_cuda else "cpu"
     if use_cuda:
         torch.cuda.set_device(args.gpu)
@@ -207,6 +218,7 @@ def main(argv=None):
         "train16_aug_transform": repr(aug_transform),
         "torch": torch.__version__,
         "torch_pinned": pinned,
+        "torch_expected": expected,
         "cuda": torch.version.cuda,
         "cudnn": torch.backends.cudnn.version() if use_cuda else None,
         "gpu": gpu_name,
@@ -242,7 +254,9 @@ def main(argv=None):
         def post_check(out_dir, seeds, key=key, set_id=set_id):
             autocast = (lambda: torch.cuda.amp.autocast()) if use_cuda else None
             return check_dataset(FeatureStore(out_root, key), set_id, args.recorded_runs, seeds,
-                                 device=device, autocast=autocast)
+                                 device=device, autocast=autocast,
+                                 # CPU features are fp32: compare logits, but judge order by labels.
+                                 logits_must_match=use_cuda)
 
         t0 = time.time()
         meta = extract_dataset(

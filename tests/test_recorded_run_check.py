@@ -119,3 +119,25 @@ def test_the_cpu_script_exit_status(store, tmp_path):
     assert main(["--features", features, "--ckpts", str(ckpts)]) == 1  # nothing to check
     _record_run(ckpts, "clipzs", seed=1)
     assert main(["--features", features, "--ckpts", str(ckpts), "--autocast", "off"]) == 0
+
+
+def test_cpu_extracted_features_judge_the_order_by_labels_only(store, tmp_path):
+    # fp32 CPU features cannot match fp16 GPU logits within 2 ulps; the logit
+    # comparison is still reported, but must not turn a correct order into "False".
+    ckpts = tmp_path / "ckpts"
+    path = _record_run(ckpts, "clipzs", seed=0)
+    saved = torch.load(path, weights_only=False)
+    saved["output"][5, 0] += 0.5
+    torch.save(saved, path)
+    result = check_dataset(store, "DTD", ckpts, [0], logits_must_match=False, log=lambda *_: None)
+    assert result["clipzs"]["clipzs_output"]["within_fp16_tolerance"] is False
+    assert result["clipzs"]["clipzs_output"]["informational"] is True
+    assert result["stream_order_matches_recorded_run"] is True
+
+
+def test_the_torch_guard_expects_the_cpu_build_on_cpu():
+    from scripts.extract_features import expected_torch_version
+
+    assert expected_torch_version("2.11.0+cu128", use_cuda=True) == "2.11.0+cu128"
+    assert expected_torch_version("2.11.0+cu128", use_cuda=False) == "2.11.0+cpu"
+    assert expected_torch_version(None, use_cuda=False) is None

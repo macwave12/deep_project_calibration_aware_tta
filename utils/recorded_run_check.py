@@ -38,13 +38,16 @@ def find_recorded_runs(ckpt_root, algorithm: str, test_set: str) -> list[Path]:
 
 
 def check_recorded_run(save_path, labels, permutations: dict,
-                       clipzs_logits: Callable[[torch.Tensor], torch.Tensor] | None = None) -> dict:
+                       clipzs_logits: Callable[[torch.Tensor], torch.Tensor] | None = None,
+                       logits_must_match: bool = True) -> dict:
     """Compare one recorded run with the extracted labels and permutations.
 
     `labels`: ground truth in dataset order. `permutations`: {seed: perm}.
     `clipzs_logits(perm)`: logits recomputed from the cached features in that
-    stream order (only for a clipzs run). Returns a JSON-able dict whose
-    `stream_order_matches` is the verdict.
+    stream order (only for a clipzs run). `logits_must_match=False` (features
+    extracted on CPU in fp32, not under CUDA autocast) still reports the logit
+    comparison but bases the verdict on the labels alone. Returns a JSON-able
+    dict whose `stream_order_matches` is the verdict.
     """
     saved = torch.load(save_path, map_location="cpu", weights_only=False)
     target = torch.as_tensor(saved["target"]).reshape(-1).to(torch.int64)
@@ -82,7 +85,9 @@ def check_recorded_run(save_path, labels, permutations: dict,
         "argmax_agreement": float(agree),
         "within_fp16_tolerance": bool(diff.max() <= FP16_LOGIT_ATOL),
     }
-    result["stream_order_matches"] = result["clipzs_output"]["within_fp16_tolerance"]
+    result["clipzs_output"]["informational"] = not logits_must_match
+    result["stream_order_matches"] = (result["clipzs_output"]["within_fp16_tolerance"]
+                                      if logits_must_match else True)
     return result
 
 
@@ -106,7 +111,7 @@ def clipzs_logits_fn(image_features, text_features, logit_scale, device="cpu",
 
 
 def check_dataset(store, test_set: str, ckpt_root, seeds, *, device="cpu", autocast=None,
-                  log=print) -> dict:
+                  logits_must_match: bool = True, log=print) -> dict:
     """Run the check for every checked algorithm with a recorded run; summarise.
 
     Needs only the feature, text, label and permutation files (not meta.json),
@@ -125,7 +130,8 @@ def check_dataset(store, test_set: str, ckpt_root, seeds, *, device="cpu", autoc
             text = store.text()
             fn = clipzs_logits_fn(store.image_features("test"), text["text_features"],
                                   text["logit_scale"], device=device, autocast=autocast)
-        out[algorithm] = check_recorded_run(runs[0], labels, perms, clipzs_logits=fn)
+        out[algorithm] = check_recorded_run(runs[0], labels, perms, clipzs_logits=fn,
+                                            logits_must_match=logits_must_match)
     verdicts = [r["stream_order_matches"] for r in out.values() if r is not None]
     out["stream_order_matches_recorded_run"] = all(verdicts) if verdicts else None
     if verdicts:
