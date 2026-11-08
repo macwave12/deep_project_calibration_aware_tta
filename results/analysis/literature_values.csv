@@ -1,0 +1,7 @@
+key,value,unit,source,location,note
+illusion_rn50_finegrained_clip_ece,5.70,%,"Sheng et al., The Illusion of Progress? (NeurIPS'25), arXiv:2506.24000",Table 7,"ResNet-50; average ECE over the benchmark's fine-grained datasets; zero-shot CLIP (KNOWLEDGE K3)"
+illusion_rn50_finegrained_tda_ece,9.21,%,"Sheng et al., The Illusion of Progress? (NeurIPS'25), arXiv:2506.24000",Table 7,"ResNet-50; average ECE over the benchmark's fine-grained datasets; TDA (KNOWLEDGE K3)"
+illusion_rn50_all_clip_ece,6.07,%,"Sheng et al., The Illusion of Progress? (NeurIPS'25), arXiv:2506.24000",Table 7,"ResNet-50; average ECE over all datasets; zero-shot CLIP (KNOWLEDGE K3)"
+illusion_rn50_all_tda_ece,11.53,%,"Sheng et al., The Illusion of Progress? (NeurIPS'25), arXiv:2506.24000",Table 7,"ResNet-50; average ECE over all datasets; TDA (KNOWLEDGE K3)"
+clip_logit_scale,100,,"OpenAI CLIP ViT-B/16 checkpoint",logit_scale.exp(),"model constant: CLIP's learned logit scale (saturated at its clamp of 100)"
+tip_adapter_shots,16,,pm/DECISIONS.md (2026-11-07),T08,"few-shot reference: labeled images per class"
