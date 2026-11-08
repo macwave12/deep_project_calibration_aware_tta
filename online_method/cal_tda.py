@@ -23,8 +23,9 @@ from dataclasses import asdict, dataclass, fields, replace
 import torch
 from torch.nn import functional as F
 
+from online_method.cal_tda_trace import TraceRecorder
 from online_method.tda import TDA, Entropy, compute_cache_logits, update_cache
-from utils.loo_temperature import default_grid, loo_accuracy, search_temperature
+from utils.loo_temperature import RunningConfidence, default_grid, loo_accuracy
 
 
 def margin_score(logits: torch.Tensor) -> torch.Tensor:
@@ -119,6 +120,12 @@ class CalTdaConfig:
     beta: float = 5.0
     shot_capacity: int = 3
 
+    # Instrumentation, not a method knob: record a label-free per-sample trace
+    # (`online_method/cal_tda_trace.py`). Off by default; outputs are identical
+    # either way. Left out of `as_record_dict` while off, so records of runs
+    # without a trace are unchanged.
+    trace: bool = False
+
     def as_dict(self) -> dict:
         return asdict(self)
 
@@ -157,6 +164,8 @@ class CalTdaConfig:
         """
         inert = self.inert_fields()
         data = {k: v for k, v in self.as_dict().items() if k not in inert}
+        if not data.get('trace'):
+            data.pop('trace', None)
         data['inert'] = inert
         return data
 
@@ -262,7 +271,9 @@ class CalTDA(TDA):
     def __init__(self, model, device, config=None):
         super().__init__(model, device)
         self.config = config or CalTdaConfig()
-        self._score_history = []
+        self._confidence = RunningConfidence()
+        self._last_estimate = None
+        self.trace = TraceRecorder() if self.config.trace else None
         self.temperature = 1.0
         self.temperatures = []
         self._n_estimated = 0
@@ -283,7 +294,9 @@ class CalTDA(TDA):
         self.config.alpha = self.pos_alpha
         self.config.beta = self.pos_beta
 
-        self._score_history = []
+        self._confidence = RunningConfidence()
+        self._last_estimate = None
+        self.trace = TraceRecorder() if self.config.trace else None
         self.temperature = 1.0
         self.temperatures = []
         self._n_estimated = 0
@@ -378,7 +391,8 @@ class CalTDA(TDA):
         the summary can separate "the search chose 1.0" from "the search never
         ran and 1.0 is the no-op default".
         """
-        if not self.config.use_loo_temperature or not self._score_history:
+        self._last_estimate = None
+        if not self.config.use_loo_temperature or self._confidence.count == 0:
             return 1.0, False
         with torch.no_grad():
             features, pseudo_labels = self._cache_features_and_pseudo_labels()
@@ -388,8 +402,26 @@ class CalTDA(TDA):
             # does not enforce it; unnormalized input silently ranks neighbours
             # by magnitude instead of direction. Normalize at the call site.
             estimate = loo_accuracy(F.normalize(features, dim=-1), pseudo_labels)
-            history = torch.cat(self._score_history, dim=0)
-            return search_temperature(history, estimate), True
+            self._last_estimate = estimate  # â, kept for the trace only
+            return self._search_temperature(estimate), True
+
+    def _record_scores(self, scores):
+        """Add one sample's pre-temperature scores to the temperature search state.
+
+        Only running per-temperature sums are kept (`RunningConfidence`), so the
+        search is O(|grid| * C) per step instead of re-scanning the history.
+        """
+        # Only `_estimate_temperature` reads this state, and it returns before
+        # reading when the contribution is off, so skipping the update there is
+        # unobservable and saves O(|grid| * C) per step.
+        if self.config.use_loo_temperature:
+            self._confidence.update(scores)
+
+    def _search_temperature(self, estimate):
+        """The grid temperature whose mean confidence over the history matches
+        `estimate`; equal to `search_temperature(history, estimate)` (see
+        `RunningConfidence` for the float-summation note)."""
+        return self._confidence.search(estimate)
 
     def adaptation_process(self, image, images, args):
         with torch.no_grad():
@@ -415,15 +447,22 @@ class CalTDA(TDA):
         # to a name so `admission_summary()` can report on it.
         admit = not self.config.use_margin_admission or admit_to_cache(logits, self.config)
         self._n_admit_offered += 1
+        trace = self.trace
+        in_pos_cache = in_neg_cache = False
         if admit:
             self._n_admit_admitted += 1
             update_cache(
                 self.pos_cache, pred0, [image_features, ent0], self.config.shot_capacity
             )
+            if trace is not None:
+                in_pos_cache = trace.track_write('pos', self.pos_cache, pred0, image_features)
 
         # Negative cache: untouched upstream behaviour (normalized-entropy band).
-        if 0.2 < ent0 / math.log2(num_classes) and ent0 / math.log2(num_classes) < 0.5:
+        neg_band = bool(0.2 < ent0 / math.log2(num_classes) and ent0 / math.log2(num_classes) < 0.5)
+        if neg_band:
             update_cache(self.neg_cache, pred0, [image_features, ent0, softmax0], 2, True)
+            if trace is not None:
+                in_neg_cache = trace.track_write('neg', self.neg_cache, pred0, image_features)
 
         # --- CLIP evidence, corrected by the negative cache -------------------
         # The negative cache carries its own fixed alpha and is a correction to
@@ -431,11 +470,13 @@ class CalTDA(TDA):
         # positive cache is computed *unscaled* (alpha=1.0) because
         # `finalize_probs` applies `config.alpha` itself in the additive branch.
         base_logits = logits.clone()
+        neg_logits = None
         if self.use_neg_cache and len(self.neg_cache) > 0:
-            base_logits -= compute_cache_logits(
+            neg_logits = compute_cache_logits(
                 image_features, self.neg_cache, self.neg_alpha, self.neg_beta,
                 text_features.unsqueeze(0), (0.03, 1.0),
             )
+            base_logits -= neg_logits
 
         has_cache = self.use_pos_cache and len(self.pos_cache) > 0
         if has_cache:
@@ -473,10 +514,51 @@ class CalTDA(TDA):
         # log-probability space; mixing the two would hand the temperature
         # search a bimodal history and skew its mean-confidence match.
         if not fusion_fallback:
-            self._score_history.append(
+            self._record_scores(
                 pre_temperature_logits(base_logits, cache_logits, config).detach()
+            )
+
+        if trace is not None:
+            self._record_trace_step(
+                trace, logits, pred0, ent0, admit, in_pos_cache, neg_band, in_neg_cache,
+                has_cache, base_logits, cache_logits, neg_logits, config, fusion_fallback, probs,
             )
 
         # `output` is already a probability vector; the driver must not softmax
         # it again. Top-1 accuracy is unaffected — softmax is rank-preserving.
         return {'output': probs}
+
+    # --- T04: label-free trace (read-only; never changes an output) -----------
+    def _record_trace_step(self, trace, logits, pred0, ent0, admit, in_pos_cache, neg_band,
+                           in_neg_cache, has_cache, base_logits, cache_logits, neg_logits,
+                           config, fusion_fallback, probs):
+        gate_fired = None
+        if config.use_prob_fusion and config.fusion_gate:
+            gate_fired = bool(is_two_way_tie(
+                base_logits, config.fusion_gate_max_gap, config.fusion_gate_min_mass,
+            ).reshape(-1)[0])
+        trace.record_step(
+            clip_logits=logits, pred0=pred0, entropy=float(ent0.reshape(-1)[0]),
+            admitted=admit, in_pos_cache=in_pos_cache, neg_band=neg_band,
+            in_neg_cache=in_neg_cache, has_pos_cache=has_cache,
+            cache_logits=cache_logits, neg_logits=neg_logits, gate_fired=gate_fired,
+            fusion_fallback=fusion_fallback, a_hat=self._last_estimate,
+            temperature=self.temperature, probs=probs,
+            pos_cache=self.pos_cache, neg_cache=self.neg_cache,
+        )
+
+    def trace_dict(self):
+        """The recorded trace as a plain dict (None when tracing is off)."""
+        if self.trace is None:
+            return None
+        data = self.trace.to_dict(self.pos_cache, self.neg_cache)
+        data['config'] = self.config.as_dict()
+        return data
+
+    def save_trace(self, path):
+        """Write the trace with `torch.save`; returns the path, or None when off."""
+        data = self.trace_dict()
+        if data is None:
+            return None
+        torch.save(data, path)
+        return path

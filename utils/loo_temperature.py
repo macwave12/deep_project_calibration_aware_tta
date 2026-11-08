@@ -82,3 +82,97 @@ def search_temperature(
         if gap < best_gap:
             best, best_gap = temperature, gap
     return best
+
+
+# Half-width of the band in which `RunningConfidence` defers to the reference's
+# own float32 means. The reference's float32 reduction error on a mean of
+# values in [0, 1] is ~log2(N) * 6e-8 for torch's cascaded CPU sum (< 1e-6 for
+# N < 2**16); a gap difference can carry twice that. 1e-5 leaves a >5x margin.
+REFERENCE_TIE_TOL = 1e-5
+
+
+class RunningConfidence:
+    """Streaming replacement for `search_temperature` over a growing score history.
+
+    `search_temperature(history, a)` needs, for every grid temperature T, the mean
+    over the history of `max softmax(s / T)`. Each sample's term depends only on
+    that sample, so we keep one running sum per grid temperature: `update` costs
+    O(|grid| * C) per sample and `search` O(|grid|), instead of re-scanning the
+    whole history (O(N * |grid| * C)) at every stream step.
+
+    Equivalence with `search_temperature` on the concatenated history:
+    - Per-sample terms are bit-identical: the same float32 division and softmax,
+      row by row (rows of a softmax do not interact).
+    - Sums are kept in float64. A max-softmax value lies in [1/C, 1], so its
+      float32 mantissa spans at most 24 + log2(C) bits; adding N of them in
+      float64 is *exact* while 24 + log2(C) + log2(N) <= 53 (e.g. C = 100 and
+      N < 2**22). The reference instead reduces in float32 (relative error
+      ~1e-7), so on its own the exact argmin can differ from the reference's
+      when two candidates' gaps are within that noise. On an 8,100-step
+      synthetic stream this happened at 1 step.
+    - `reference_tie_tol` closes that gap. When it is set (the default), the
+      history is kept as well, and whenever more than one candidate's exact gap
+      lies within `tol` of the minimum, those candidates (and only those) are
+      re-scored with the reference's own `mean_confidence` on the full history
+      and the reference's rule picks among them. Every other candidate's
+      reference gap exceeds the winner's by more than `tol` minus twice the
+      reference's float32 error, so it cannot win there either. The result then
+      equals `search_temperature` exactly, provided that error stays below
+      tol / 2 (see `REFERENCE_TIE_TOL`). Re-scoring is rare and touches a
+      handful of temperatures, not the whole grid. `None` gives the pure exact
+      argmin with O(1) memory per temperature.
+    - Ties keep the reference's rule: the first (lowest) temperature wins.
+    """
+
+    def __init__(self, grid: list[float] | None = None, reference_tie_tol: float | None = REFERENCE_TIE_TOL):
+        self.grid = list(grid) if grid is not None else default_grid()
+        self._grid_tensor = torch.tensor(self.grid, dtype=torch.float32)
+        self._sums = torch.zeros(len(self.grid), dtype=torch.float64)
+        self.count = 0
+        self.reference_tie_tol = reference_tie_tol
+        self._history = [] if reference_tie_tol is not None else None
+        self.n_rescored = 0  # searches that deferred to the reference's means
+
+    def update(self, scores: torch.Tensor) -> None:
+        """Add the (n, C) pre-temperature scores of n new samples to the sums."""
+        scores = scores.detach()
+        if scores.ndim == 1:
+            scores = scores.unsqueeze(0)
+        grid = self._grid_tensor.to(device=scores.device, dtype=scores.dtype)
+        # (G, n, C) / (G, 1, 1): the same elementwise division as `logits / T`.
+        conf = (scores.unsqueeze(0) / grid.view(-1, 1, 1)).softmax(dim=-1).max(dim=-1).values
+        self._sums += conf.to(device="cpu", dtype=torch.float64).sum(dim=1)
+        self.count += scores.shape[0]
+        if self._history is not None:
+            self._history.append(scores)
+
+    def mean_confidences(self) -> torch.Tensor:
+        """Mean top-1 probability at every grid temperature, as float64 (|grid|,)."""
+        if self.count == 0:
+            raise ValueError("no scores recorded yet")
+        return self._sums / self.count
+
+    def search(self, target_accuracy: float) -> float:
+        """Same contract and result as `search_temperature` on the full recorded history."""
+        if target_accuracy is None or math.isnan(target_accuracy) or not self.grid:
+            return 1.0
+        if self.count == 0:
+            raise ValueError("no scores recorded yet")
+        gaps = (self.mean_confidences() - target_accuracy).abs()
+        # `argmin` returns the first minimal index, matching the reference's
+        # strict `<` scan from the low end of the grid.
+        best = int(torch.argmin(gaps))
+        if self.reference_tie_tol is None:
+            return self.grid[best]
+        near = torch.nonzero(gaps - gaps[best] <= self.reference_tie_tol).flatten().tolist()
+        if len(near) == 1:
+            return self.grid[best]
+        # Near-tie: settle it exactly as the reference would, on its own numbers.
+        self.n_rescored += 1
+        history = torch.cat(self._history, dim=0)
+        choice, choice_gap = None, float("inf")
+        for index in near:  # ascending grid order, strict `<`: first minimum wins
+            gap = abs(mean_confidence(history, self.grid[index]) - target_accuracy)
+            if gap < choice_gap:
+                choice, choice_gap = index, gap
+        return self.grid[choice]

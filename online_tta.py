@@ -89,7 +89,10 @@ def load_method_config(args):
         with open(args.config, 'r', encoding='utf-8') as handle:
             data = yaml.safe_load(handle) or {}
     if args.algorithm == 'cal_tda':
-        return CalTdaConfig.from_dict(data)
+        config = CalTdaConfig.from_dict(data)
+        if getattr(args, 'trace', False):
+            config.trace = True  # --trace: record the label-free trace (T04)
+        return config
     return data
 
 
@@ -449,6 +452,9 @@ def main(argv=None):
             args.out_file.write(print_log + '\n')
             args.out_file.flush()
             print(print_log)
+            if args.algorithm == 'cal_tda' and tta_trainer.trace is not None:
+                trace_path = tta_trainer.save_trace(record_path.with_suffix('.trace.pt'))
+                print("=> wrote trace: {}".format(trace_path))
 
 
 def build_parser():
@@ -490,6 +496,8 @@ def build_parser():
     parser.add_argument('--protocol', type=str, default='published', choices=PROTOCOLS,
                         help="tda/cal_tda alpha/beta: 'published' = per-dataset table (default), "
                              "'clean' = alpha=2, beta=5 on every dataset")
+    parser.add_argument('--trace', action='store_true',
+                        help='cal_tda only: write a label-free per-sample trace next to the run record')
     return parser
 
 

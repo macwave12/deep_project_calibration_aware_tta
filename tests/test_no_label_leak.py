@@ -11,11 +11,13 @@ from pathlib import Path
 import pytest
 
 from online_method.cal_tda import CalTDA
+from online_method.cal_tda_trace import TraceRecorder
 
 METHOD_FILES = [
     Path("online_method/tda.py"),
     Path("online_method/clipzs.py"),
     Path("online_method/cal_tda.py"),
+    Path("online_method/cal_tda_trace.py"),
     Path("utils/loo_temperature.py"),
     # T02 replay, method side: the stand-in model and the stream loop.
     Path("utils/feature_replay.py"),
@@ -94,3 +96,19 @@ def test_replay_entry_points_never_receive_labels():
     source = Path("utils/feature_replay.py").read_text(encoding="utf-8")
     assert "labels_" not in source and ".labels(" not in source
 
+def test_trace_entry_points_never_receive_labels():
+    """The T04 trace records what the method saw; labels are joined later in
+    `analysis/trace_join.py`, never passed in here."""
+    forbidden = {"target", "labels", "label", "gt", "ground_truth", "true_label"}
+    for method in (TraceRecorder.__init__, TraceRecorder.record_step,
+                   TraceRecorder.track_write, TraceRecorder.snapshot, TraceRecorder.to_dict,
+                   CalTDA.save_trace, CalTDA.trace_dict, CalTDA._record_trace_step):
+        leak = set(inspect.signature(method).parameters) & forbidden
+        assert not leak, f"{method.__qualname__} accepts {leak}"
+
+
+@pytest.mark.parametrize("path", METHOD_FILES, ids=lambda p: str(p))
+def test_method_code_never_imports_the_label_joiner_or_scorer(path):
+    source = path.read_text(encoding="utf-8")
+    assert "analysis" not in re.findall(r"^\s*(?:from|import)\s+(\w+)", source, re.M)
+    assert "utils.evaluation" not in source
