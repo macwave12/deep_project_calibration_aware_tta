@@ -22,5 +22,7 @@ Workflow:
    only then is it `done`.
 5. The lead updates `STATUS.md` and, for anything that changes scope, `DECISIONS.md`.
 
+Research ideas and their status: `research/BACKLOG.md`.
+
 Earlier planning documents (pre-PM): `docs/plans/2026-11-04-reservoir-cache-label-free-temperature.md`,
 `docs/plans/TASKS.md` (backlog for *after* the wrap-up), `docs/baseline_hyperparameter_audit.md`.
