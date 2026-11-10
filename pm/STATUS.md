@@ -1,8 +1,17 @@
 # Status
 
-Updated 2026-11-07.
+Updated 2026-11-10.
 
 ## Now
+- Local env `caltta` (conda, CPU torch 2.11.0) set up on Idan's Windows machine: 301 passed /
+  14 skipped / 1 failed (`test_real_spec_matches_documented_contract`: `read_text()` without
+  `encoding="utf-8"` under the cp1255 locale; passes with `PYTHONUTF8=1`). Features unzipped;
+  headline replay smoke test (179 s) + `compare_replay.py`: 18/25 within tolerance, same misses
+  as K34/K35 (EuroSAT gate/TDA, temperature ECE). Locale test fixed: suite 310 passed / 14 skipped.
+- Seed statistics tool `analysis/seed_stats.py` done (review): headline seeds 0/1/2 replayed,
+  CSVs in `results/analysis/seed_stats_headline_*.csv`. Gate vs TDA (mean of 5): acc −1.82
+  (0/3), ECE −6.60 (3/3). See `handoffs/2026-11-10-local-setup-seed-stats.md` (MAE definition
+  needs Idan's OK).
 - `deck/refinement`: T01/T02 (extraction, CPU replay, protocol switch) and T03/T04 (O(N)
   temperature, trace) merged; suite 250 passed / 14 skipped (CUDA- and data-only tests).
 - T13 Colab notebook merged; Colab run in progress (Idan). T10 draft deck v2 merged (36 + 6 backup, placeholders for evidence): awaiting Idan's review and a T11 reviewer pass. Open questions in `handoffs/2026-11-08-T10-deck-v2-draft.md`.
