@@ -1,0 +1,89 @@
+record                                    acc ref   replay      d  ece ref   replay      d  status
+--------------------------------------------------------------------------------------------------
+ablation/aircraft_all.json                  23.97    23.97  +0.00     8.65     8.68  +0.04  ok
+ablation/aircraft_fusion.json               24.42    24.24  -0.18     9.16     9.01  -0.15  ok
+ablation/aircraft_fusion_temp.json          24.42    24.24  -0.18     9.20     9.05  -0.15  ok
+ablation/aircraft_margin.json               18.96    18.99  +0.03    32.64    32.34  -0.30  OUT OF TOLERANCE
+ablation/aircraft_margin_fusion.json        23.97    23.97  +0.00     8.65     8.68  +0.04  ok
+ablation/aircraft_margin_temp.json          18.96    18.99  +0.03    32.52    32.24  -0.28  ok
+ablation/aircraft_none.json                 24.21    24.30  +0.09    15.56    15.48  -0.07  ok
+ablation/aircraft_temp.json                 24.21    24.30  +0.09     4.21     4.70  +0.48  OUT OF TOLERANCE
+ablation/dtd_all.json                       45.63    45.69  +0.06    17.72    17.81  +0.09  ok
+ablation/dtd_fusion.json                    45.80    45.57  -0.24    17.69    17.49  -0.21  OUT OF TOLERANCE
+ablation/dtd_fusion_temp.json               45.80    45.57  -0.24    18.13    17.93  -0.20  OUT OF TOLERANCE
+ablation/dtd_margin.json                    44.86    44.98  +0.12    20.11    20.26  +0.15  ok
+ablation/dtd_margin_fusion.json             45.63    45.69  +0.06    17.42    17.50  +0.09  ok
+ablation/dtd_margin_temp.json               44.86    44.98  +0.12    17.30    17.24  -0.06  ok
+ablation/dtd_none.json                      47.04    46.93  -0.12    17.41    17.52  +0.11  ok
+ablation/dtd_temp.json                      47.04    46.93  -0.12     4.68     4.54  -0.14  ok
+ablation/eurosat_all.json                   48.88    46.79  -2.09    17.53    14.97  -2.56  OUT OF TOLERANCE
+ablation/eurosat_fusion.json                50.12    47.53  -2.59    19.62    16.61  -3.01  OUT OF TOLERANCE
+ablation/eurosat_fusion_temp.json           50.12    47.53  -2.59    19.63    16.62  -3.01  OUT OF TOLERANCE
+ablation/eurosat_margin.json                48.91    48.83  -0.09    26.38    26.29  -0.08  ok
+ablation/eurosat_margin_fusion.json         48.88    46.79  -2.09    17.51    14.95  -2.56  OUT OF TOLERANCE
+ablation/eurosat_margin_temp.json           48.91    48.83  -0.09    25.98    25.99  +0.01  ok
+ablation/eurosat_none.json                  53.22    52.95  -0.27    14.43    14.72  +0.29  OUT OF TOLERANCE
+ablation/eurosat_temp.json                  53.22    52.95  -0.27    13.43    13.65  +0.23  OUT OF TOLERANCE
+ablation/flower102_all.json                 68.86    68.94  +0.08    32.73    32.91  +0.18  ok
+ablation/flower102_fusion.json              68.90    68.94  +0.04    32.46    32.62  +0.16  ok
+ablation/flower102_fusion_temp.json         68.90    68.94  +0.04    32.94    33.10  +0.16  ok
+ablation/flower102_margin.json              67.19    67.19  +0.00     8.63     8.62  -0.01  ok
+ablation/flower102_margin_fusion.json       68.86    68.94  +0.08    32.37    32.57  +0.19  ok
+ablation/flower102_margin_temp.json         67.19    67.19  +0.00     6.38     6.26  -0.11  ok
+ablation/flower102_none.json                69.79    69.87  +0.08     6.51     6.46  -0.05  ok
+ablation/flower102_temp.json                69.79    69.87  +0.08     4.85     5.19  +0.33  OUT OF TOLERANCE
+ablation/pets_all.json                      88.74    88.80  +0.05    43.98    44.03  +0.06  ok
+ablation/pets_fusion.json                   88.77    88.80  +0.03    43.78    43.81  +0.03  ok
+ablation/pets_fusion_temp.json              88.77    88.80  +0.03    44.00    44.03  +0.03  ok
+ablation/pets_margin.json                   88.42    88.33  -0.08     2.53     2.68  +0.15  ok
+ablation/pets_margin_fusion.json            88.74    88.80  +0.05    43.77    43.83  +0.06  ok
+ablation/pets_margin_temp.json              88.42    88.33  -0.08    14.79    14.92  +0.14  ok
+ablation/pets_none.json                     88.74    88.66  -0.08     2.48     2.69  +0.21  ok
+ablation/pets_temp.json                     88.74    88.66  -0.08    15.54    15.55  +0.01  ok
+ablation_gate/aircraft_gate.json            24.27    24.21  -0.06     3.48     3.63  +0.15  ok
+ablation_gate/aircraft_gate_temp.json       24.27    24.21  -0.06     3.37     3.56  +0.19  ok
+ablation_gate/aircraft_none.json            24.21    24.30  +0.09    15.56    15.48  -0.07  ok
+ablation_gate/aircraft_temp.json            24.21    24.30  +0.09     4.21     4.70  +0.48  OUT OF TOLERANCE
+ablation_gate/dtd_gate.json                 45.69    45.57  -0.12     6.24     6.45  +0.21  ok
+ablation_gate/dtd_gate_temp.json            45.69    45.57  -0.12     6.21     5.77  -0.44  OUT OF TOLERANCE
+ablation_gate/dtd_none.json                 47.04    46.93  -0.12    17.41    17.52  +0.11  ok
+ablation_gate/dtd_temp.json                 47.04    46.93  -0.12     4.68     4.54  -0.14  ok
+ablation_gate/eurosat_gate.json             47.30    45.09  -2.21     3.56     2.13  -1.43  OUT OF TOLERANCE
+ablation_gate/eurosat_gate_temp.json        47.30    45.09  -2.21     3.56     2.13  -1.43  OUT OF TOLERANCE
+ablation_gate/eurosat_none.json             53.22    52.95  -0.27    14.43    14.72  +0.29  OUT OF TOLERANCE
+ablation_gate/eurosat_temp.json             53.22    52.95  -0.27    13.43    13.65  +0.23  OUT OF TOLERANCE
+ablation_gate/flower102_gate.json           69.02    68.94  -0.08     4.08     4.07  -0.00  ok
+ablation_gate/flower102_gate_temp.json      69.02    68.94  -0.08     5.89     5.65  -0.24  ok
+ablation_gate/flower102_none.json           69.79    69.87  +0.08     6.51     6.46  -0.05  ok
+ablation_gate/flower102_temp.json           69.79    69.87  +0.08     4.85     5.19  +0.33  OUT OF TOLERANCE
+ablation_gate/pets_gate.json                88.77    88.80  +0.03     5.68     5.71  +0.03  ok
+ablation_gate/pets_gate_temp.json           88.77    88.80  +0.03    13.90    13.99  +0.09  ok
+ablation_gate/pets_none.json                88.74    88.66  -0.08     2.48     2.69  +0.21  ok
+ablation_gate/pets_temp.json                88.74    88.66  -0.08    15.54    15.55  +0.01  ok
+aircraft_cal_tda_gate.json                  24.27    24.21  -0.06     3.48     3.63  +0.15  ok
+aircraft_cal_tda_gate_temp.json             24.27    24.21  -0.06     3.37     3.56  +0.19  ok
+aircraft_cal_tda_temp.json                  24.21    24.30  +0.09     4.21     4.70  +0.48  OUT OF TOLERANCE
+aircraft_clipzs.json                        23.85    23.85  +0.00     5.44     5.46  +0.02  ok
+aircraft_tda.json                           24.27    24.33  +0.06    15.51    15.45  -0.05  ok
+dtd_cal_tda_gate.json                       45.69    45.57  -0.12     6.24     6.45  +0.21  ok
+dtd_cal_tda_gate_temp.json                  45.69    45.57  -0.12     6.21     5.77  -0.44  OUT OF TOLERANCE
+dtd_cal_tda_temp.json                       47.04    46.93  -0.12     4.68     4.54  -0.14  ok
+dtd_clipzs.json                             44.39    44.33  -0.06     8.27     8.24  -0.04  ok
+dtd_tda.json                                47.04    46.93  -0.12    17.41    17.52  +0.11  ok
+eurosat_cal_tda_gate.json                   47.30    45.09  -2.21     3.56     2.13  -1.43  OUT OF TOLERANCE
+eurosat_cal_tda_gate_temp.json              47.30    45.09  -2.21     3.56     2.13  -1.43  OUT OF TOLERANCE
+eurosat_cal_tda_temp.json                   53.22    52.95  -0.27    13.43    13.65  +0.23  OUT OF TOLERANCE
+eurosat_clipzs.json                         42.06    41.91  -0.15     7.16     7.31  +0.16  ok
+eurosat_tda.json                            53.17    52.96  -0.21    14.38    14.60  +0.23  OUT OF TOLERANCE
+flower102_cal_tda_gate.json                 69.02    68.94  -0.08     4.08     4.07  -0.00  ok
+flower102_cal_tda_gate_temp.json            69.02    68.94  -0.08     5.89     5.65  -0.24  ok
+flower102_cal_tda_temp.json                 69.79    69.87  +0.08     4.85     5.19  +0.33  OUT OF TOLERANCE
+flower102_clipzs.json                       67.32    67.32  +0.00     2.63     2.91  +0.28  ok
+flower102_tda.json                          69.91    69.91  +0.00     6.39     6.37  -0.01  ok
+pets_cal_tda_gate.json                      88.77    88.80  +0.03     5.68     5.71  +0.03  ok
+pets_cal_tda_gate_temp.json                 88.77    88.80  +0.03    13.90    13.99  +0.09  ok
+pets_cal_tda_temp.json                      88.74    88.66  -0.08    15.54    15.55  +0.01  ok
+pets_clipzs.json                            88.20    88.17  -0.03     4.37     4.36  -0.01  ok
+pets_tda.json                               88.77    88.63  -0.14     2.52     2.81  +0.28  ok
+
+60/85 compared records within tolerance (accuracy 0.2 pts, ECE 0.3 pts); 0 without reference

@@ -1,6 +1,6 @@
 # T02 — CPU feature replay
 
-Status: review (real-data acceptance pending T01 run) · Owner: engineering agent · Depends on: T01 format (not its data)
+Status: done (real-data acceptance 2026-11-10, K34–K35) · Owner: engineering agent · Depends on: T01 format (not its data)
 
 ## Goal
 Run any single-view method (clipzs, tda, cal_tda variants, dmn_weak, ecalp, onzeta) on CPU

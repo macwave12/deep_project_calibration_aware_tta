@@ -8,6 +8,10 @@ Updated 2026-11-07.
 - T13 Colab notebook merged; Colab run in progress (Idan). T10 draft deck v2 merged (36 + 6 backup, placeholders for evidence): awaiting Idan's review and a T11 reviewer pass. Open questions in `handoffs/2026-11-08-T10-deck-v2-draft.md`.
 - T09 related-work audit: second pass done.
 
+- Features received (Colab T4) and placed in `features/` (git-ignored). T02 real-data
+  acceptance done: see KNOWLEDGE K33–K35. Evidence phase (T05–T08) can start after Idan's
+  deck review.
+
 ## Blockers
 - Real features needed for every number in Phases C–F → **GPU job on Colab (T13 notebook), run by Idan**.
 

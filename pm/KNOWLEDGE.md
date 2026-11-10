@@ -110,3 +110,17 @@ Established facts, each with its evidence. Add new facts with a source; mark a f
   `results/analysis/literature_values.csv`.
 - K32. Gated fusion's mean confidence is within 3.6 points of CLIP's on every dataset
   (`results/analysis/reliability_stats.csv`), i.e. the gate returns to CLIP's calibration.
+
+## Replay validation (T02 real-data acceptance, 2026-11-10)
+- K33. Features extracted on a Colab Tesla T4, torch 2.11.0+cu128, CUDA autocast, commit 2a021cc
+  (`features/*/meta.json`, `colab_run.json`). Image features fp32 (as K22 predicted); augmented
+  train16 views fp16. Aircraft val is a distinct split (features and labels differ from test).
+- K34. CPU replay vs recorded GPU runs: 60/85 records within tolerance (0.2 acc / 0.3 ECE pts).
+  CLIP and TDA reproduce within ~0.15 acc on DTD, Flowers, Pets, Aircraft. Misses: EuroSAT
+  fusion-family runs (gate −2.21, fusion −2.59, all/margin+fusion −2.09 acc), EuroSAT TDA
+  (−0.21 acc), and temperature runs' ECE (up to +0.48). Table: `results/analysis/replay_vs_gpu.txt`.
+- K35. The EuroSAT misses are within the method's own stream-order variance: replay seeds 0/1/2
+  give TDA 52.96 / 55.54 / 52.41 and gate 45.09 / 47.30 / 46.60 accuracy; fp32 (`--autocast off`)
+  gate gives 45.64. TDA-family online caches are path-dependent: a last-bit difference early in
+  the stream changes cache contents and the trajectory. Single-seed EuroSAT numbers carry
+  ±1.5–3 pts of noise; temperature ECE is sensitive because 1-NN LOO choices flip.
