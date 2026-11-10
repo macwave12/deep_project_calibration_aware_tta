@@ -53,7 +53,7 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._send(200, FIXTURES.joinpath("quota_exceeded.html").read_bytes(), "text/html")
             if fid in srv.direct_ids:
                 return self._send(200, srv.drive[fid], "application/json")
-            page = FIXTURES.joinpath("virus_scan_form.html").read_text()
+            page = FIXTURES.joinpath("virus_scan_form.html").read_text(encoding="utf-8")
             page = page.replace("https://drive.usercontent.google.com/download",
                                 f"http://127.0.0.1:{srv.server_port}/download")
             page = re.sub(r'name="id" value="[^"]*"', f'name="id" value="{fid}"', page)
@@ -242,7 +242,7 @@ def test_full_pipeline_produces_documented_layout(server, tmp_path):
     left = sorted(p.name for p in (root / "_archives").iterdir())
     assert left == ["imagelabels.mat", "setid.mat"]
 
-    report = {r["dataset"]: r for r in json.loads((root / "_state" / "verify.json").read_text())}
+    report = {r["dataset"]: r for r in json.loads((root / "_state" / "verify.json").read_text(encoding="utf-8"))}
     assert all(r["ok"] for r in report.values())
     assert report["eurosat"]["splits"]["test"] == {"count": 4, "missing": 0, "reference": 8100,
                                                    "first_missing": []}
@@ -258,7 +258,7 @@ def test_layout_matches_upstream_loader_paths(server, tmp_path):
     from data.datautils import ID_to_DIRNAME
     assert ID_to_DIRNAME["eurosat"] == sources["eurosat"].folder
     assert ID_to_DIRNAME["aircraft"] == sources["aircraft"].folder
-    src = (REPO / "data" / "fewshot_datasets.py").read_text()
+    src = (REPO / "data" / "fewshot_datasets.py").read_text(encoding="utf-8")
     assert '"eurosat": ["2750"' in src
     assert "images_variant_{:s}.txt" in src
 
@@ -374,7 +374,7 @@ FID = "1u3_QfB467jqHgNXC00UIzbLZRQCg2S7x"
 
 
 def test_parse_drive_form_interstitial():
-    url = dd.parse_drive_confirm(FIXTURES.joinpath("virus_scan_form.html").read_text(), FID)
+    url = dd.parse_drive_confirm(FIXTURES.joinpath("virus_scan_form.html").read_text(encoding="utf-8"), FID)
     u = urllib.parse.urlsplit(url)
     q = dict(urllib.parse.parse_qsl(u.query))
     assert f"{u.scheme}://{u.netloc}{u.path}" == "https://drive.usercontent.google.com/download"
@@ -384,7 +384,7 @@ def test_parse_drive_form_interstitial():
 
 def test_parse_drive_legacy_confirm_link():
     fid = "1Ip7yaCWFi0eaOFUGga0lUdVi_DDQth1o"
-    url = dd.parse_drive_confirm(FIXTURES.joinpath("legacy_confirm_link.html").read_text(), fid)
+    url = dd.parse_drive_confirm(FIXTURES.joinpath("legacy_confirm_link.html").read_text(encoding="utf-8"), fid)
     assert url == f"https://drive.google.com/uc?export=download&confirm=Xy3_9-Qz&id={fid}"
 
 
@@ -396,7 +396,7 @@ def test_parse_drive_cookie_token():
 
 def test_parse_drive_quota_and_unknown():
     with pytest.raises(dd.DriveQuotaError):
-        dd.parse_drive_confirm(FIXTURES.joinpath("quota_exceeded.html").read_text(), FID)
+        dd.parse_drive_confirm(FIXTURES.joinpath("quota_exceeded.html").read_text(encoding="utf-8"), FID)
     with pytest.raises(dd.DownloadError, match="unrecognised"):
         dd.parse_drive_confirm("<html><body>something else</body></html>", FID)
 
@@ -406,7 +406,7 @@ def test_drive_download_follows_interstitial(server, tmp_path):
     dest = tmp_path / "s.json"
     dd.drive_download(FID, str(dest), url_template=server.base + "/uc?export=download&id={id}",
                       fallback_template=None, json_keys=("train", "val", "test"))
-    assert json.loads(dest.read_text())["test"] == [["a.jpg", 0, "a"]]
+    assert json.loads(dest.read_text(encoding="utf-8"))["test"] == [["a.jpg", 0, "a"]]
     assert [p for _, p, _ in server.log] == ["/uc", "/download"]
 
 
@@ -449,7 +449,7 @@ def test_verify_reports_missing_files_and_wrong_counts(server, tmp_path):
     assert not r["ok"] and r["splits"]["test"]["missing"] == 1
     r = dd.verify_dataset(dataclasses.replace(sources["aircraft"], expected_test=3333), str(root))
     assert not r["ok"] and any("contract 3333" in p for p in r["problems"])
-    with open(root / "fgvc_aircraft" / "images_variant_test.txt", "a") as f:
+    with open(root / "fgvc_aircraft" / "images_variant_test.txt", "a", encoding="utf-8") as f:
         f.write("0005 NotAVariant\n")
     r = dd.verify_dataset(sources["aircraft"], str(root))
     assert not r["ok"] and "not in variants" in " ".join(r["problems"])
@@ -458,7 +458,7 @@ def test_verify_reports_missing_files_and_wrong_counts(server, tmp_path):
 
 
 def test_real_spec_matches_documented_contract():
-    doc = (REPO / "docs" / "DATASETS.md").read_text()
+    doc = (REPO / "docs" / "DATASETS.md").read_text(encoding="utf-8")
     contract = {"dtd": 1692, "flower102": 2463, "pets": 3669, "eurosat": 8100, "aircraft": 3333}
     assert {k: s.expected_test for k, s in dd.SOURCES.items()} == contract
     for spec in dd.SOURCES.values():
