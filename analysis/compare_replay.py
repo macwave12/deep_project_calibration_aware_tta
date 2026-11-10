@@ -18,6 +18,10 @@ import json
 import sys
 from pathlib import Path
 
+_REPO = Path(__file__).resolve().parent.parent
+if str(_REPO) not in sys.path:  # runnable as `python analysis/compare_replay.py`
+    sys.path.insert(0, str(_REPO))
+
 ACC_TOL = 0.2  # points
 ECE_TOL = 0.3  # points
 
