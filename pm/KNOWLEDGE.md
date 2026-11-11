@@ -168,3 +168,24 @@ Established facts, each with its evidence. Add new facts with a source; mark a f
   UCF101, Food101-10k). Per dataset vs TDA: ImageNetV2 −0.03 / −11.87, UCF101 +0.10 / −6.30,
   Food101 +0.08 / +0.04, Caltech101 −0.19 / +1.83. CLIP ImageNetV2 60.89% (published level),
   confirming the ImageNetV2 relabel.
+- K44. Fig. 3 analogue (test, P2, 3 seeds, mean of 5; `results/analysis/story/summary_test.csv`): CLIP 53.12 / 5.65,
+  negative cache only 54.52 / 4.75, positive cache only 56.04 / 11.05, TDA 56.81 / 10.91, gate 56.72 / 5.51. The
+  positive cache brings all the overconfidence; the negative cache gives about 40% of TDA's accuracy gain (1.4 of
+  3.7) with better calibration than CLIP. Corrects K39's "about half" for the test sets.
+- K45. Prior art (verified): ZAEC (arXiv 2608.05945, Aug 2026), a post-hoc entropy-anchored temperature, reaches a
+  similar headline on TDA. Our re-implementation on our traces gives TDA + ZAEC 56.81 / 5.95 (test) and
+  76.79 / 3.70 (dev), against the gate's 56.72 / 5.51 and 76.78 / 3.30, and gate + ZAEC 5.27 on the test sets
+  (`pm/research/related-work.md`, third pass).
+- K46. ImageNet-val (fresh, 50,000 images, Colab T4 features, P2, 3 seeds; `results/analysis/t16/imagenet_val_records.csv`):
+  CLIP 66.72 / 1.95, TDA 68.28 ± 0.06 / 6.25 ± 0.11, gate 68.22 ± 0.04 / 1.93 ± 0.13; paired Δ −0.06 accuracy,
+  −4.31 ECE (3/3). For reference, ZAEC reports TDA 68.42 / 6.12 → 2.05 with its correction (its Table 3; different run).
+- K47. Read-before-write TDA (`configs/method/tda_read_first.yaml`, the exact no-self-vote variant; caches end identical to
+  TDA's, only the read timing changes): val 56.03 / 8.30 vs TDA 56.29 / 11.19; test 56.57 / 8.77 vs 56.81 / 10.91 (P2,
+  3 seeds; `results/analysis/t16/read_first_val_test.csv`). Removing the self-vote removes about 40% of TDA's excess ECE
+  over CLIP (test 5.26 → 3.12) at about −0.25 accuracy, and lowers the agreement share from 58% to 45% (val). The rest
+  is the broader echo: the gate takes TDA to 5.78 (val) / 5.51 (test) at TDA's accuracy. Gate on top of read-first:
+  55.99 / 5.96 (val), no better.
+- K48. Negative-cache ablation under the gate (P2, 3 seeds, mean of 5; `results/analysis/t16/negative_cache_ablation_gated.csv`):
+  gated positive cache alone 55.61 / 6.20 (val), 56.04 / 5.83 (test); adding the negative cache (= the gate)
+  56.38 / 5.78 (val), 56.72 / 5.51 (test): +0.77 / −0.42 on val, +0.68 / −0.32 on test. The negative cache helps both
+  metrics; the method keeps it.
