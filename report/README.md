@@ -1,48 +1,25 @@
 # Report
 
-`main.tex` plus `sections/*.tex` and `refs.bib`. Every results table and every figure is
-generated, not hand-written:
+`main.tex` and `refs.bib`: the course report (about 4 pages of main text, then references and appendix).
+Nothing in it is hand-typed data:
 
-- `tables/ablation.tex` &mdash; `analysis/make_ablation_table.py`
-- `tables/ablation_gate.tex` &mdash; `analysis/make_ablation_table.py --study gate`
-- `tables/{margin,fusion,gate,temp}_vs_none.tex` &mdash; `analysis/make_contribution_tables.py`
-- `../results/summary_table.tex` &mdash; `analysis/aggregate.py`
-- `figures/*.png` &mdash; `analysis/make_figures.py`, copied here from `analysis/figures/`
-  (copied, never symlinked; kept in sync by `scripts/run_all.ps1` / `.sh`)
+- `generated/numbers.tex` (one `\newcommand` per number in the prose) and `generated/tab_*.tex` (all tables):
+  `analysis/report_assets.py`, from tracked CSVs only (its docstring lists them).
+- `figures/paper_*.png`: `analysis/paper_figures.py` (copied here from `analysis/figures/`). Diagnosis figures
+  are from the val splits, results figures from the test splits (or the development / fresh tiers), and every
+  caption says which.
 
-Editing those files directly is pointless: re-running the analysis overwrites them.
+Editing the generated files is pointless: re-running the scripts overwrites them.
 
 ## Building `main.pdf`
 
 ```powershell
+python analysis/paper_figures.py; python analysis/report_assets.py
 .\scripts\build_report.ps1
 ```
 
-Requires MiKTeX (`winget install MiKTeX.MiKTeX`) or TeX Live. The script runs
-pdflatex &rarr; bibtex &rarr; pdflatex &rarr; pdflatex, which is the minimum that resolves
-citations and cross-references &mdash; a single pass leaves `??` in place of every Section,
-Table and Figure number &mdash; and then fails loudly if the log contains an error, an
-undefined reference, or an undefined citation.
+The build uses Tectonic (`conda create -n tex -c conda-forge tectonic`) and fails on LaTeX errors and on
+undefined references or citations.
 
-`-JobName <name>` writes to `<name>.pdf` instead, so an older build can be kept alongside a
-new one for comparison.
-
-Two things about the setup are load-bearing and easy to break:
-
-- The bibliography style must stay one of natbib's own (`plainnat`). The text uses `\citet`,
-  which plain BibTeX's `plain` renders as "Author undefined" without failing the build.
-- `\usepackage[numbers]{natbib}` is what numbers the reference list and shows the number at
-  each citation site. The `.bst` does not control that.
-
-## Checking it without building
-
-```powershell
-python report/verify_report.py
-```
-
-A structural check that runs in a second and needs no TeX distribution: every
-`\input`, `\includegraphics` and `\cite` target resolves to a real file or key; braces and
-`\begin`/`\end` pairs balance; and every `\command` used is provided by base LaTeX, by a
-loaded package, or by the document itself. That last check is the useful one &mdash; it
-catches a macro used without its package (`\argmin`, `\mathbb`, `\citet`) before a build
-does, and it is cheap enough to run on every edit.
+`tables/` and the older `figures/*.png` are still written by the v2 pipeline (`scripts/run_all.*`);
+`main.tex` no longer uses them.

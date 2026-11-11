@@ -1,0 +1,89 @@
+dataset,method,seed,accuracy,ece
+imagenet,agreement gate,0,68.214,2.0821
+imagenet,CLIP,0,66.72,1.9457
+imagenet,TDA,0,68.228,6.3364
+imagenet,agreement gate,1,68.184,1.8702
+imagenet,TDA,1,68.266,6.1288
+imagenet,agreement gate,2,68.26,1.8447
+imagenet,TDA,2,68.352,6.2733
+cars,agreement gate,0,64.6934,2.8004
+cars,CLIP,0,63.6985,3.0853
+cars,TDA,0,65.0044,4.3608
+cifar100,agreement gate,0,69.34,10.2104
+cifar100,CLIP,0,68.42,12.1639
+cifar100,TDA,0,69.42,4.9516
+cifar10,agreement gate,0,91.01,5.995
+cifar10,CLIP,0,90.08,5.3312
+cifar10,TDA,0,90.96,2.4453
+gtsrb,agreement gate,0,38.9311,7.9931
+gtsrb,CLIP,0,35.1781,10.5378
+gtsrb,TDA,0,38.7965,6.7675
+imagenet_a,agreement gate,0,49.4133,8.0733
+imagenet_a,CLIP,0,47.8667,8.3049
+imagenet_a,TDA,0,49.3867,14.7971
+imagenet_r,agreement gate,0,75.3833,3.6904
+imagenet_r,CLIP,0,73.9833,3.5303
+imagenet_r,TDA,0,75.3233,1.6049
+imagenet_sketch,agreement gate,0,48.7925,4.7163
+imagenet_sketch,CLIP,0,46.1141,4.8595
+imagenet_sketch,TDA,0,48.653,12.1322
+stl10,agreement gate,0,98.275,2.0364
+stl10,CLIP,0,98.375,2.1486
+stl10,TDA,0,98.3125,0.9587
+voc2007,agreement gate,0,76.4223,6.8696
+voc2007,CLIP,0,78.352,5.7299
+voc2007,TDA,0,76.5558,7.6667
+cars,agreement gate,1,64.7308,3.1892
+cars,CLIP,1,63.6985,3.0853
+cars,TDA,1,64.5691,4.7788
+cifar100,agreement gate,1,69.13,9.9528
+cifar100,CLIP,1,68.42,12.1639
+cifar100,TDA,1,69.14,4.6845
+cifar10,agreement gate,1,90.94,5.8572
+cifar10,CLIP,1,90.08,5.3312
+cifar10,TDA,1,90.96,2.5234
+gtsrb,agreement gate,1,37.9256,8.9249
+gtsrb,CLIP,1,35.1781,10.5378
+gtsrb,TDA,1,37.9256,8.4029
+imagenet_a,agreement gate,1,49.16,8.3592
+imagenet_a,CLIP,1,47.8667,8.3049
+imagenet_a,TDA,1,49.0533,15.2313
+imagenet_r,agreement gate,1,75.35,3.6521
+imagenet_r,CLIP,1,73.9833,3.5303
+imagenet_r,TDA,1,75.3233,1.5735
+imagenet_sketch,agreement gate,1,48.875,4.5804
+imagenet_sketch,CLIP,1,46.1141,4.8595
+imagenet_sketch,TDA,1,48.7335,12.0322
+stl10,agreement gate,1,98.4125,2.1554
+stl10,CLIP,1,98.375,2.1486
+stl10,TDA,1,98.45,1.1035
+voc2007,agreement gate,1,76.9565,6.5446
+voc2007,CLIP,1,78.352,5.7299
+voc2007,TDA,1,77.0232,7.268
+cars,agreement gate,2,64.967,3.4698
+cars,CLIP,2,63.6985,3.0853
+cars,TDA,2,65.2406,4.2495
+cifar100,agreement gate,2,69.13,9.9315
+cifar100,CLIP,2,68.42,12.1639
+cifar100,TDA,2,69.08,4.4483
+cifar10,agreement gate,2,90.81,5.8018
+cifar10,CLIP,2,90.08,5.3312
+cifar10,TDA,2,90.8,2.4395
+gtsrb,agreement gate,2,38.2898,8.5606
+gtsrb,CLIP,2,35.1781,10.5378
+gtsrb,TDA,2,38.1394,7.7989
+imagenet_a,agreement gate,2,49.2533,8.6343
+imagenet_a,CLIP,2,47.8667,8.3049
+imagenet_a,TDA,2,49.24,15.2504
+imagenet_r,agreement gate,2,75.2333,3.5371
+imagenet_r,CLIP,2,73.9833,3.5303
+imagenet_r,TDA,2,75.1933,1.3989
+imagenet_sketch,agreement gate,2,48.8947,4.4823
+imagenet_sketch,CLIP,2,46.1141,4.8595
+imagenet_sketch,TDA,2,48.7748,11.8583
+stl10,agreement gate,2,98.3,2.1067
+stl10,CLIP,2,98.375,2.1486
+stl10,TDA,2,98.375,1.0305
+voc2007,agreement gate,2,76.9631,6.6566
+voc2007,CLIP,2,78.352,5.7299
+voc2007,TDA,2,77.0566,7.4593

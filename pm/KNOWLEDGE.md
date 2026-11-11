@@ -176,16 +176,34 @@ Established facts, each with its evidence. Add new facts with a source; mark a f
   similar headline on TDA. Our re-implementation on our traces gives TDA + ZAEC 56.81 / 5.95 (test) and
   76.79 / 3.70 (dev), against the gate's 56.72 / 5.51 and 76.78 / 3.30, and gate + ZAEC 5.27 on the test sets
   (`pm/research/related-work.md`, third pass).
-- K46. ImageNet-val (fresh, 50,000 images, Colab T4 features, P2, 3 seeds; `results/analysis/t16/imagenet_val_records.csv`):
+- K46. ImageNet-val (fresh, 50,000 images, Colab T4 features, P2, 3 seeds; `results/analysis/t16/fresh.csv`):
   CLIP 66.72 / 1.95, TDA 68.28 ± 0.06 / 6.25 ± 0.11, gate 68.22 ± 0.04 / 1.93 ± 0.13; paired Δ −0.06 accuracy,
   −4.31 ECE (3/3). For reference, ZAEC reports TDA 68.42 / 6.12 → 2.05 with its correction (its Table 3; different run).
 - K47. Read-before-write TDA (`configs/method/tda_read_first.yaml`, the exact no-self-vote variant; caches end identical to
   TDA's, only the read timing changes): val 56.03 / 8.30 vs TDA 56.29 / 11.19; test 56.57 / 8.77 vs 56.81 / 10.91 (P2,
-  3 seeds; `results/analysis/t16/read_first_val_test.csv`). Removing the self-vote removes about 40% of TDA's excess ECE
+  3 seeds; `results/analysis/t16/read_first_val_test.csv`, scratch code; the test numbers are reproduced by the tested `comparison.csv`). Removing the self-vote removes about 40% of TDA's excess ECE
   over CLIP (test 5.26 → 3.12) at about −0.25 accuracy, and lowers the agreement share from 58% to 45% (val). The rest
   is the broader echo: the gate takes TDA to 5.78 (val) / 5.51 (test) at TDA's accuracy. Gate on top of read-first:
   55.99 / 5.96 (val), no better.
-- K48. Negative-cache ablation under the gate (P2, 3 seeds, mean of 5; `results/analysis/t16/negative_cache_ablation_gated.csv`):
+- K48. Negative-cache ablation under the gate (P2, 3 seeds, mean of 5; `gpos_*` columns of `results/analysis/story/summary_{val,test}.csv`; val gpos 55.60 / 6.19, test 56.04 / 5.81 after the tie-break alignment (DECISIONS)):
   gated positive cache alone 55.61 / 6.20 (val), 56.04 / 5.83 (test); adding the negative cache (= the gate)
   56.38 / 5.78 (val), 56.72 / 5.51 (test): +0.77 / −0.42 on val, +0.68 / −0.32 on test. The negative cache helps both
   metrics; the method keeps it.
+
+## T16: comparison, fresh sets, where it helps (2026-11-11)
+- K49. Comparison on the 5 test sets (P2, seeds 0/1/2, mean of 5, paired to TDA; `results/analysis/t16/comparison*.csv`,
+  tested `analysis/comparison.py`): TDA 56.81 / 10.90; gate 56.72 / 5.51; read-first TDA 56.57 / 8.77 (removes 41% of TDA's
+  excess ECE over CLIP); TDA + T (val-fitted, 1.54) 56.81 / 6.98; TDA + ZAEC 56.81 / 5.95; gate + ZAEC 56.72 / 5.27;
+  DMN-weak 56.96 / 13.95; ECALP 58.34 / 32.32 (most accurate, by far the worst calibrated). Per dataset the val temperature wins on DTD and Aircraft, ZAEC on Flowers, plain TDA on Pets, the gate on EuroSAT.
+- K50. Lemma 2 vs the gate's test (`story/summary_val.csv`, `agree_neg_moved`, `agree_tda_flips`): the gate tests
+  argmax c = CLIP's top-1, the lemma needs argmax c = argmax(z − n). They differ on 6.6% of agreeing val samples (the
+  negative cache moved CLIP's top-1); TDA flips 5.5% of agreeing decisions, with no net accuracy gain (67.66 → 67.56).
+- K51. Fresh sets (P2, 3 seeds; `results/analysis/t16/fresh.csv`, all 10 sets): accuracy kept everywhere (|Δ| ≤ 0.14).
+  ECE better than TDA on ImageNet-Sketch (−7.42), ImageNet (−4.31), ImageNet-A (−6.74), Cars (−1.31),
+  VOC2007 (−0.77); worse on CIFAR-100 (+5.34), CIFAR-10 (+3.42), ImageNet-R (+2.10), STL-10 (+1.07), GTSRB (+0.84); fresh mean ΔECE −0.78 (TDA 6.27 → gate 5.49), 5/10 wins. CLIP is underconfident on
+  CIFAR-100 (conf − acc −12.2), CIFAR-10 (−5.3), ImageNet-R (−3.5), STL-10 (−2.1): TDA's echo corrects it, the gate removes that correction.
+- K52. Where it helps (`where_it_helps*.csv`, record ΔECE on every tier): over 19 datasets ΔECE tracks CLIP's own
+  confidence − accuracy gap (label-based diagnostic), Spearman −0.89 (−0.73 test+dev, −0.87 fresh). The label-free signals on
+  the first 500 samples are weaker: mean confidence +0.57, share > 0.6 +0.55, no-flip share +0.44, and weak on the fresh
+  tier alone (+0.44 / +0.16). Exceptions to the tendency: GTSRB (CLIP +0.2, gate loses), Food101 (−0.5, loses slightly),
+  VOC2007 / Cars / ImageNet (mildly underconfident, gate wins).

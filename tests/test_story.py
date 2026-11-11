@@ -61,3 +61,18 @@ def test_summary_table_and_figures(tmp_path):
     assert set(sig.columns) == {"share", "over06", "conf"} and len(sig) == 3
     fig_step5(runs, {"test": per_dataset(runs)}, tmp_path / "f.png")
     assert all((tmp_path / f).stat().st_size > 0 for f in ("a.png", "b.png", "c.png", "d.png", "e.png", "f.png"))
+
+
+def test_gated_positive_cache_is_the_gate_without_the_negative_cache():
+    r = _run()
+    d = derive(r)
+    open_ = ~d["agree"]
+    # where the gate is closed, gpos is plain CLIP and the gate is CLIP + negative cache
+    assert torch.equal(d["gpos_pred"][~open_], d["clip_pred"][~open_])
+    assert torch.equal(d["gate_pred"][~open_], d["base_pred"][~open_])
+
+
+def test_agreeing_decisions_change_only_where_the_negative_cache_moved_clip():
+    data = {"dtd": [derive(_run())]}
+    row = summary_table(data).iloc[0]
+    assert row["agree_tda_flips"] <= row["agree_neg_moved"] + 1e-9

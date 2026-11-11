@@ -1,51 +1,259 @@
-\documentclass[11pt]{article}
-\usepackage[margin=1in]{geometry}
-\usepackage{graphicx,booktabs,amsmath,amssymb,hyperref,caption,subcaption}
-% [numbers] puts natbib in numeric mode: the reference list is numbered [1], [2],
-% ... and every citation in the text shows its number. \citet still works -- it
-% renders as "Karmanov et al. [2]" rather than dropping the number -- so the
-% author-year phrasing in the prose survives the switch.
+\documentclass[10pt]{article}
+\usepackage[margin=0.8in]{geometry}
+\usepackage{graphicx,booktabs,amsmath,amssymb,amsthm,hyperref,caption,subcaption}
 \usepackage[numbers]{natbib}
 \graphicspath{{figures/}}
-\DeclareMathOperator*{\argmin}{arg\,min}
+\captionsetup{font=small,labelfont=bf}
+\setlength{\textfloatsep}{8pt plus 2pt minus 2pt}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\input{generated/numbers}
 
-\title{Calibration-Aware Test-Time Adaptation for CLIP}
+\title{Agreement-Gated TDA: the cache that echoes CLIP, and a parameter-free fix}
 \author{Gal Machlin (207627811) \and Idan Yehuda (207016270)}
-% Empty, not omitted: dropping \date entirely makes \maketitle print today's
-% date, which is the opposite of what is wanted here.
 \date{}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-Test-time adaptation (TTA) methods such as TDA~\cite{karmanov2024tda} use only forward
-passes and a feature cache to recover much of the accuracy CLIP loses out of distribution, but
-a 2025 benchmark~\cite{sheng2025illusion} showed that the gain comes with a hidden cost: TDA's
-cache rewards confident predictions whether or not they are correct, so its accuracy gain arrives
-bundled with worse calibration (the benchmark reports average ECE rising 5.70\%
-$\rightarrow$ 9.21\% across its suite). We propose three training-free, label-free changes to
-TDA's cache loop -- margin-based cache admission, probabilistic fusion, and leave-one-out (LOO)
-temperature scaling -- and measure each one on five datasets (\texttt{ViT-B/16}, test split
-only) against a TDA-equivalent baseline. Margin admission fails and is dropped: its fixed
-threshold starves the cache on hard datasets and biases it toward easy classes. Fusion fails as
-proposed, because a nearly flat cache distribution averaged into CLIP's peaked one caps every
-prediction's confidence near one half; but \emph{gating} the fusion to samples where CLIP is
-torn between two classes, and leaving the cache out elsewhere, repairs it. Gated fusion alone
-lowers mean ECE from TDA's 11.24\% to 4.61\%, below zero-shot CLIP's own 5.57\%, at a mean
-accuracy of 55.01\% against TDA's 56.63\% and CLIP's 53.16\%. LOO temperature scaling helps on
-its own (mean ECE 8.54\% at unchanged accuracy) but does not stack on the gate, since both
-remove the same overconfidence. The method we recommend is TDA's cache with gated fusion:
-one extra comparison per sample, no labels, no training.
+TDA~\cite{karmanov2024tda} adapts CLIP at test time with a cache of past test features labelled by CLIP's own
+pseudo-labels, and gains accuracy at the cost of calibration. We trace the calibration loss to a mechanism: the cache
+is written before it is read, and is filled with CLIP's own decisions, so on most samples it \emph{echoes} CLIP. We prove
+that wherever the cache's top class agrees with the top class of CLIP plus TDA's negative cache, the positive cache
+cannot change the decision and can only raise confidence. The fix follows: use the positive cache only when its top
+class differs from CLIP's. The \emph{agreement gate} has no parameters and costs one comparison per sample. On five test
+sets (CLIP ViT-B/16, \mainSeeds{} stream orders) it keeps TDA's accuracy (\mainGateAcc{} vs \mainTdaAcc{}) and halves its
+ECE (\mainGateEce{} vs \mainTdaEce{}). On \genAllN{} further datasets never used in its design it keeps accuracy
+everywhere and lowers ECE on \genAllEceWins{} of them; on the fresh tier the mean ECE moves only from
+\genFreshMeanTdaEce{} to \genFreshMeanGateEce{}, because where CLIP is underconfident TDA's echo happens to correct it. Across \rhoN{} datasets the gate's
+ECE change tends to follow CLIP's own calibration gap (Spearman $\rho = \rhoGapAll$).
 \end{abstract}
 
-\input{sections/introduction}
-\input{sections/related_work}
-\input{sections/method}
-\input{sections/experiments}
-\input{sections/results}
-\input{sections/conclusion}
+\section{Introduction}
+Zero-shot CLIP~\cite{radford2021clip} is reasonably calibrated, but test-time adaptation (TTA) makes it overconfident:
+a recent benchmark~\cite{sheng2025illusion} shows that TTA methods, TDA among them, raise accuracy and ECE together.
+TDA is the natural object of study: it is training-free, backpropagation-free and fast, and it is the method later
+cache-based TTA work builds on. On our five test sets TDA adds \mainTdaOverClipAcc{} accuracy points to CLIP and
+\mainTdaOverClipEce{} ECE points (Table~\ref{tab:main}).
+
+\textbf{Contributions.} (1) A \emph{diagnosis}: TDA's positive cache, filled with CLIP's pseudo-labels and read after the
+current sample is written, echoes CLIP. We show the echo empirically (the self-vote, \S\ref{sec:diag}) and formally
+(Lemmas~\ref{lem:noflip}--\ref{lem:agree}): agreement can only inflate confidence. (2) The \emph{agreement gate}, a
+cause-level fix: a parameter-free rule that uses the cache only where it can change the decision. (3) Evidence on
+\totalDatasets{} datasets in three tiers (design, development, fresh), with matched and post-hoc baselines, including where
+the gate does \emph{not} help (mostly where CLIP is underconfident).
+\textbf{Relation to ZAEC.} ZAEC~\cite{jiang2026zaec} observed empirically that adapted VLMs sharpen predictions they do not
+change, and corrects this post hoc with a per-sample entropy-matching temperature. We explain \emph{why} a pseudo-label
+cache does this and remove the cause inside the cache; the two act at different points and combine
+(Table~\ref{tab:comparison}). The gate is an inference-time instance of the principle ``update only on disagreement''
+of \citet{malach2017decoupling}; Lemma~\ref{lem:noflip} is a simple margin bound in the spirit of MARC~\cite{tamim2026marc}.
+
+\section{Background: TDA}
+For an image feature $f(x)$, CLIP gives logits $z$ (class-prompt cosines times CLIP's logit scale) and a pseudo-label
+$\hat y_0=\arg\max_k z_k$. TDA keeps two caches of at most $S=3$ features per class. The \emph{positive} cache stores
+low-entropy samples under $\hat y_0$; the \emph{negative} cache stores mid-entropy samples with a mask of the classes CLIP
+finds unlikely. Each sample is first \emph{written} (if admitted) and then \emph{read}. The output logits are
+\begin{equation}
+o(x) = \underbrace{z(x) - n(x)}_{b(x)} + \alpha\, c(x), \qquad
+c_k(x) = \sum_{i \in \mathcal{C}_k} \exp\!\big(-\beta\,(1 - \langle f(x), f_i\rangle)\big) \in [0, S],
+\label{eq:tda}
+\end{equation}
+where $n$ is the negative-cache term and $\mathcal C_k$ the positive cache of class $k$. We use one setting for every
+dataset, $\alpha = 2$, $\beta = 5$ (``P2''); the published per-dataset settings (``P1'') are in Appendix~\ref{app:p1}
+and change none of the conclusions.
+
+\section{Diagnosis: the cache echoes CLIP}\label{sec:diag}
+All diagnosis is on the val splits of the five core datasets, where the method was designed; test numbers appear only
+in \S\ref{sec:results}.
+
+\textbf{The self-vote.} Because a sample is written before it is read, an admitted sample finds itself in the cache:
+$\langle f(x), f(x)\rangle = 1$ adds exactly $1$ to $c_{\hat y_0}(x)$, while every other cached item adds less than $1$.
+This term carries no information about the true label. It is frequent (\valSelfMin--\valSelfMax\% of the stream) and
+almost decides agreement: the cache's top class equals CLIP's for \valAgreeSelfMin--\valAgreeSelfMax\% of self-voting
+samples against \valAgreeNoSelfMin--\valAgreeNoSelfMax\% of the others (Fig.~\ref{fig:diag}a). Removing only the self
+term lowers TDA's val ECE from \valTdaEce{} to \valNoSelfEce{} (Fig.~\ref{fig:diag}b; accuracy \valTdaAcc{} $\to$
+\valNoSelfAcc{}). The self-vote is the most visible case of a broader echo, which the next two results make precise.
+
+\begin{lemma}[no-flip region]\label{lem:noflip}
+If $z_{\hat y_0}(x) - z_j(x) > \alpha S + \max_k n_k(x) - \min_k n_k(x)$ for all $j \neq \hat y_0$, then
+$\arg\max o(x) = \hat y_0$ whatever the cache holds.
+\end{lemma}
+
+\begin{lemma}[agreement]\label{lem:agree}
+Let $\hat y = \arg\max_k b_k(x)$. If also $\hat y = \arg\max_k c_k(x)$, then $\arg\max o(x) = \hat y$, every margin
+$o_{\hat y} - o_j$ is at least $b_{\hat y} - b_j$, and $\max \mathrm{softmax}(o) \ge \max \mathrm{softmax}(b)$.
+\end{lemma}
+\noindent\emph{Proof.} $o_{\hat y} - o_j = (b_{\hat y} - b_j) + \alpha(c_{\hat y} - c_j) \ge b_{\hat y} - b_j > 0$, and the
+top softmax probability $1/\sum_j e^{-(o_{\hat y}-o_j)}$ is increasing in every margin. Lemma~\ref{lem:noflip} follows the same
+way from $0 \le c_k \le S$. Full statements and proofs: Appendix~\ref{app:proofs}. $\square$
+
+\textbf{From the lemma to the data.} The gate (\S\ref{sec:method}) tests the observable condition
+$\arg\max c = \hat y_0$ (CLIP's top class), while Lemma~\ref{lem:agree} needs $\arg\max c = \arg\max b$. The two differ
+only where the negative cache has moved CLIP's top class, which on val is \valAgreeNegMoved\% of the agreeing samples;
+TDA changes the decision on \valAgreeTdaFlips\% of them, with no net accuracy gain (below). So on the agreeing samples
+the positive cache mostly adds confidence, and its accuracy gain comes from the disagreeing ones.
+
+The data show how large the inflation is (Fig.~\ref{fig:diag}c,d). On val, the cache agrees with CLIP on
+\valAgreeShare\% of samples. There, the positive cache moves accuracy from \valAgreeBaseAcc{} to \valAgreeTdaAcc{} but the
+confidence$-$accuracy gap from \valAgreeBaseGap{} to \valAgreeTdaGap{} points. On disagreeing samples it carries the gain
+(\valDisagreeBaseAcc{} $\to$ \valDisagreeTdaAcc{}) at a small change of gap (\valDisagreeBaseGap{} $\to$
+\valDisagreeTdaGap{}). How much confidence the echo adds is not tied to how calibrated CLIP was, so on most datasets it
+overshoots; where CLIP is underconfident on the agreeing samples (Pets), the echo happens to help.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.49\linewidth]{paper_selfvote_val.png}\hfill
+\includegraphics[width=0.49\linewidth]{paper_agreement_val.png}
+\caption{Diagnosis on \textbf{val} (P2). (a) The self-vote makes the cache agree with CLIP; (b) removing it
+lowers TDA's ECE. (c, d) Adding TDA's positive cache to CLIP + negative cache; where the cache agrees it adds
+almost no accuracy and much confidence (Lemma~\ref{lem:agree}); where it disagrees it gives the gain.}
+\label{fig:diag}
+\end{figure}
+
+\section{Method: the agreement gate}\label{sec:method}
+Use the positive cache only where it can change the decision:
+\begin{equation}
+o(x) = b(x) + \alpha(x)\,c(x), \qquad \alpha(x) = \alpha \cdot \mathbf{1}\big[\arg\max_k c_k(x) \neq \hat y_0(x)\big].
+\end{equation}
+Caches, admission and the negative cache are TDA's, unchanged. The rule compares with CLIP's pseudo-label $\hat y_0$, the
+label the cache is filled with; it has no parameter, needs no label, and costs one $\arg\max$ comparison. It was fixed
+on val before any test, development or fresh result of the gate was computed.
+
+\section{Results}\label{sec:results}
+\textbf{Setup.} CLIP ViT-B/16, CoOp splits~\cite{zhou2022coop}. Three tiers: the five core datasets (val: diagnosis and
+design; test: results), four development sets never used for design (ImageNetV2, Caltech101, UCF101, a 10k Food101
+subset), and \genFreshN{} fresh sets examined only after the method was frozen (\freshNames). Each seed is a stream
+order; ECE uses 20 bins. Runs are exact CPU replays from cached features (Appendix~\ref{app:p1}). Paired differences
+are per seed, with 90\% $t$-intervals for 10 seeds.
+
+\begin{table}[t]
+\centering\small
+\caption{Five test sets, P2, \mainSeeds{} seeds (mean $\pm$ std over stream orders). Gate $-$ TDA: accuracy
+\mainDAcc{} [\mainDAccLo, \mainDAccHi], ECE \mainDEce{} [\mainDEceLo, \mainDEceHi] (90\% CI), ECE lower on
+\mainDEceWins{} seeds.}
+\label{tab:main}
+\input{generated/tab_main}
+\end{table}
+
+\textbf{Main result} (Table~\ref{tab:main}). The gate keeps TDA's accuracy (\mainDAcc{} points) and lowers ECE by
+\mainDEce{} points on every seed, reaching \mainGateEce{}, below CLIP's \mainClipEce{} on the mean. Per dataset, it is
+far better on DTD, Flowers, EuroSAT and Aircraft, and worse on Pets, where CLIP is underconfident and TDA's echo
+happened to correct it. The comparison is not an artefact of the operating point: along TDA's own $\alpha$-curve, the
+best ECE TDA reaches at the gate's accuracy is \matchedTdaEce{}.
+
+\begin{table}[t]
+\centering\small
+\caption{Comparison on the five test sets (P2, 3 seeds, mean of 5). $\Delta$: paired difference to TDA.
+TDA + T: one temperature fitted on the val splits with labels. ZAEC~\cite{jiang2026zaec}: our re-implementation of its
+per-sample entropy rule (soften only) on the same runs. DMN-weak~\cite{zhang2024dmn}, ECALP~\cite{li2025ecalp}:
+zero-shot, single view.}
+\label{tab:comparison}
+\input{generated/tab_comparison}
+\end{table}
+
+\textbf{Comparison} (Table~\ref{tab:comparison}, Fig.~\ref{fig:res}a; 3 seeds, so TDA's numbers differ slightly from
+Table~\ref{tab:main}). Removing only the self-vote (read-before-write TDA) removes \readFirstExcessShare\% of TDA's excess
+ECE over CLIP: the self-vote is part of the echo, not all of it. A global temperature fitted on val with labels
+(\cmpTdaTEce{}) and the label-free ZAEC (\cmpTdaZaecEce{}) both calibrate TDA post hoc; on the mean the gate does better
+than either without a calibration step (\cmpGateEce{}), though the val temperature wins on DTD and Aircraft
+(Appendix~\ref{app:perds}), and the two mechanisms compose: gate + ZAEC reaches \cmpGateZaecEce{}. The other memory-based
+methods have higher ECE than TDA: DMN-weak \cmpDmnAcc/\cmpDmnEce{}, and ECALP, the most accurate method here, at
+\cmpEcalpAcc/\cmpEcalpEce.
+
+\textbf{Cache ablation} (test; the analogue of TDA's Fig.~3 with ECE). The negative cache alone moves CLIP
+(\ablClipAcc/\ablClipEce) to \ablBaseAcc/\ablBaseEce; the gated positive cache alone to \ablGposAcc/\ablGposEce; both
+(= the gate) to \ablGateAcc/\ablGateEce, against TDA's \ablTdaAcc/\ablTdaEce. The negative cache improves both metrics; the
+gated positive cache adds accuracy at a small ECE cost, far below the ungated one's. The method keeps both.
+
+\begin{table}[t]
+\centering\small
+\caption{Generalization (P2, 3 seeds): development sets and fresh sets, never used for design. Bold: gate ECE below TDA's.}
+\label{tab:gen}
+\input{generated/tab_generalization}
+\end{table}
+
+\textbf{Generalization} (Table~\ref{tab:gen}). On the \genDevN{} development sets the gate changes ECE by \genDevDEce{}
+and accuracy by \genDevDAcc{} points on average; on the \genFreshN{} fresh sets by \genFreshDEce{} and \genFreshDAcc{}.
+Accuracy is kept everywhere (largest loss \genWorstDAcc{} points). ECE is mixed: the gate is much better on ImageNet-val
+(TDA \inetTdaAcc/\inetTdaEce{} $\to$ \inetGateAcc/\inetGateEce), ImageNetV2, ImageNet-A and ImageNet-Sketch, but worse on CIFAR-10/100, ImageNet-R, STL-10
+and GTSRB (largest increase \genWorstDEce{} points). On CIFAR-10/100, ImageNet-R and STL-10 CLIP is \emph{underconfident}, and TDA's echo,
+by raising confidence, happens to move it towards calibration.
+
+\textbf{Where it helps} (Fig.~\ref{fig:res}b). On agreeing samples the echo only adds confidence
+(Lemma~\ref{lem:agree}), so removing it should help when CLIP is calibrated or overconfident and hurt when CLIP is
+underconfident. Across all \rhoN{} datasets the gate's $\Delta$ECE tends to follow CLIP's own confidence$-$accuracy gap
+(Spearman $\rho = \rhoGapAll$; \rhoGapSeen{} on test + dev, \rhoGapFresh{} on the fresh sets). The relation is a tendency,
+not a rule: GTSRB (CLIP slightly overconfident) and Food101 lose a little, and VOC2007, Cars and ImageNet gain although
+CLIP is mildly underconfident there. This variable uses labels, so it explains rather than drives the method. Label-free
+proxies on the first \signalHead{} stream samples are weaker ($\rho = \rhoConfAll$ for CLIP's mean confidence,
+\rhoOverAll{} for the share above \confCut, \rhoShareAll{} for the no-flip share): confidence is not calibration
+(CIFAR-100 is unconfident \emph{and} underconfident). The gate is reported always on, with this as its stated condition.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.49\linewidth]{paper_plane_test.png}\hfill
+\includegraphics[width=0.49\linewidth]{paper_where_all.png}
+\caption{(a) \textbf{Test}: accuracy vs ECE of every method in Table~\ref{tab:comparison} (mean of the five test sets).
+(b) \textbf{All tiers}: ECE change of the gate against CLIP's own confidence$-$accuracy gap (a label-based diagnostic).
+Negative $\Delta$ECE: the gate is better.}
+\label{fig:res}
+\end{figure}
+
+\section{Limitations}
+(i) \emph{Underconfident CLIP.} Where CLIP is underconfident (Pets, Caltech101, CIFAR-10/100, ImageNet-R, STL-10) the echo happens to
+correct it and the gate is worse than TDA; GTSRB and Food101 also lose slightly without that explanation. We found no
+label-free signal that separates these cases reliably, so we do not fit a switch. A natural follow-up is to control the
+echo's \emph{size} rather than remove it, e.g.\ with a post-hoc temperature that can also sharpen (ZAEC only softens).
+(ii) The gated branch is still overconfident on the hardest sets (e.g.\ DTD); ZAEC on top helps. (iii) One backbone
+(ViT-B/16) and one cache method; the echo argument applies to any cache filled with the model's own pseudo-labels
+(e.g.\ DMN), which we did not test. (iv) The gate was chosen on the val splits of the five core datasets after earlier
+attempts, some explored on test (Appendix~\ref{app:earlier}); the development and fresh tiers are the clean evidence.
+
+\section{Conclusion}
+TDA's positive cache echoes CLIP: where it agrees with CLIP, it cannot change a decision and only adds confidence. Gating
+it on disagreement keeps TDA's accuracy everywhere and halves TDA's ECE on the design-tier test sets and on ImageNet. On
+the fresh tier the gain is smaller on average and not uniform (large on ImageNet-A and -Sketch, losses elsewhere), mostly because CLIP is underconfident on several of those
+sets; removing the echo is the right move when CLIP is not underconfident, and controlling its size is the open problem.
 
 \bibliographystyle{plainnat}
 \bibliography{refs}
+
+\appendix
+\section{Proofs}\label{app:proofs}
+\textbf{Lemma 1.} Write $b = z - n$ and $\hat y_0 = \arg\max z$. For $j \ne \hat y_0$,
+$b_{\hat y_0} - b_j = (z_{\hat y_0} - z_j) - (n_{\hat y_0} - n_j) \ge (z_{\hat y_0} - z_j) - (\max n - \min n) > \alpha S$.
+Since $0 \le c_k \le S$, $o_{\hat y_0} - o_j = (b_{\hat y_0} - b_j) + \alpha(c_{\hat y_0} - c_j) > \alpha S - \alpha S = 0$. $\square$
+
+\textbf{Lemma 2.} As in the main text; strictness of $b_{\hat y} - b_j > 0$ holds for the unique $\arg\max$. The top softmax
+probability is $\big(1 + \sum_{j \ne \hat y} e^{-(o_{\hat y} - o_j)}\big)^{-1}$, increasing in each margin, and each margin
+of $o$ is at least the corresponding margin of $b$. $\square$
+
+\textbf{The self-vote bound.} If $x$ was admitted under $\hat y_0$ before the read, $c_{\hat y_0}(x) \ge e^{0} = 1$, and each
+of the other at most $S$ terms of any class is at most $1$. A disagreement needs another class with kernel mass above
+$c_{\hat y_0}(x) \ge 1$, i.e.\ at least two close neighbours of one other class.
+
+\section{Protocol P1 and replay}\label{app:p1}
+P1 uses TDA's published per-dataset $(\alpha, \beta)$; P2 uses $\alpha=2$, $\beta=5$ everywhere. Our GPU run reproduces the
+published CLIP and TDA accuracies of the benchmark~\cite{sheng2025illusion} (its Table~14) within \reproMaxDelta{} points per dataset, and the CPU replay used for every number here reproduces the GPU run. Mean of the five test sets:
+
+\begin{center}\small\input{generated/tab_p1}\end{center}
+
+\section{Earlier attempts}\label{app:earlier}
+Before the diagnosis we tried three changes to TDA's cache loop; each is a negative or partial result, with its mechanism.
+Margin admission starves the cache on hard datasets. Probability fusion averages a nearly flat cache distribution into
+CLIP's and caps confidence. Gating fusion to two-way ties fixes calibration but loses accuracy. A
+leave-one-out temperature calibrates TDA partly at unchanged accuracy. Test, P2, 10 seeds where available, paired to TDA:
+
+\begin{center}\small\input{generated/tab_earlier}\end{center}
+
+\section{Comparison per dataset}\label{app:perds}
+ECE on each test set (P2, 3 seeds), every method of Table~\ref{tab:comparison}:
+
+\begin{center}\small\input{generated/tab_comparison_per_dataset}\end{center}
+
+\section{Selection history}
+Per-dataset settings and the earlier attempts were explored on test before the clean protocol was adopted; the gate was
+then designed on val only; a dataset-level switch (``use TDA when CLIP is confident'') was considered, pre-registered
+and dropped in favour of the always-on gate before the fresh sets were evaluated.
 \end{document}

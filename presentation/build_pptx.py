@@ -1,41 +1,31 @@
-"""Generate draft deck v2 (structure review, before the evidence phase).
+"""Generate deck v3: agreement-gated TDA, diagnosis first (at most 20 main slides + backup).
 
-Outline: `pm/PLAN.md` (Deck outline). Review checklist it answers:
-`pm/research/deck-review-2026-11-07.md`. Slides whose evidence does not exist
-yet (T05 A1-A10, T06, T07, T08) carry a labelled placeholder box where the
-figure or table will go, so the narrative can be reviewed now.
+Outline: `pm/research/T16-wrapup-plan.md` §10. Diagnosis and design slides use the val splits; results
+slides use the test splits (and the development / fresh tiers); every figure says its split.
 
-Every number on a slide or in the notes is READ from tracked files at build
-time and formatted through `Results.num` (or `Results.illus` for the clearly
-labelled illustrative examples), which records it. `tests/test_build_pptx.py`
-scans every slide and every note for numerals and fails on any that did not
-pass through those formatters, so a hand-typed number cannot reach the deck.
+Every number on a slide or in the notes is READ from tracked files at build time and formatted through
+`Results.num` (or `Results.illus` for the labelled illustrative values), which records it.
+`tests/test_build_pptx.py` scans every slide and note for numerals and fails on any that did not pass
+through those formatters, so a hand-typed number cannot reach the deck.
 
-Sources
-  results/summary.csv, results/ablation.csv, results/ablation_gate.csv
-  results/analysis/reliability_stats.csv, results/analysis/dataset_constants.csv
-      (written by `analysis/deck_evidence.py` from results/raw/**.json, configs/)
-  results/analysis/literature_values.csv  (published numbers, with their source)
-  results/raw/ablation/*_margin.json       (admission rates)
-  configs/method/ablation/margin.yaml, configs/method/cal_tda_gate.yaml
-  utils/loo_temperature.default_grid       (the temperature grid)
+Sources: the tracked CSVs that `analysis/report_assets.py` reads (same numbers as the report),
+`configs/method/cal_tda_agree.yaml` (alpha, beta, shot capacity), figures from
+`analysis/paper_figures.py` and `analysis/story.py`, and the TDA paper's Fig. 1 and Fig. 2
+(arXiv 2403.18293 source, `presentation/assets/tda_paper/`, cited on the slides).
 
-    python analysis/deck_evidence.py && python presentation/build_pptx.py
+    python analysis/paper_figures.py && python presentation/build_pptx.py
 
-Writes `presentation/calibration_aware_tta.pptx` (16:9) and the generated
-speaker-notes mirror `presentation/slides.md`.
+Writes `presentation/calibration_aware_tta.pptx` (16:9) and the speaker-notes mirror `presentation/slides.md`.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
-import math
 import re
 import sys
 from pathlib import Path
 
-import pandas as pd
 import yaml
 from pptx import Presentation
 from pptx.dml.color import RGBColor
@@ -47,15 +37,16 @@ from pptx.util import Emu, Inches, Pt
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
-from analysis.aggregate import DATASET_LABEL, DATASET_ORDER  # noqa: E402
-from analysis.deck_evidence import flat_cache_top_probability  # noqa: E402
-from analysis.make_contribution_tables import _admission_rates  # noqa: E402
+from analysis import report_assets as ra  # noqa: E402
+from analysis.story import CONF_CUT, NAMES, SIGNAL_HEAD  # noqa: E402
 
 ROOT = _ROOT
 ASSETS = ROOT / "presentation" / "assets"
 FIGURES = ROOT / "analysis" / "figures"
+TDA_FIGS = ASSETS / "tda_paper"
+CORE = ("dtd", "flower102", "pets", "eurosat", "aircraft")
 
-# --- Theme (same palette as deck v1 and the figures) ---------------------------
+# --- Theme ---------------------------------------------------------------------
 INK = RGBColor(0x1A, 0x1F, 0x2B)
 MUTED = RGBColor(0x55, 0x5C, 0x6B)
 ACCENT = RGBColor(0x7D, 0x5B, 0xA6)       # ours
@@ -72,8 +63,6 @@ HEADER_FILL = RGBColor(0xE7, 0xE2, 0xD8)
 TINT_ACCENT = RGBColor(0xEC, 0xE6, 0xF3)
 TINT_WARN = RGBColor(0xF7, 0xEA, 0xE1)
 TINT_CLIP = RGBColor(0xE4, 0xEB, 0xF5)
-PENDING_FILL = RGBColor(0xFF, 0xF6, 0xD9)
-PENDING_LINE = RGBColor(0xB8, 0x8A, 0x1B)
 
 FONT = "Calibri"
 BODY = 20          # main bullets
@@ -98,44 +87,18 @@ def number_tokens(text: str) -> list[str]:
     return [token.rstrip(",") for token in NUMBER_RE.findall(text)]
 
 
-# Inputs of the illustrative examples. These are NOT results: every slide that
-# uses one says "Illustrative" on it, and the test checks that it does.
-ILLUSTRATIVE = {
-    "toy_p": (0.60, 0.30, 0.10),              # CLIP's distribution, 3 classes
-    "toy_q_agree": (0.60, 0.30, 0.10),        # a cache that agrees
-    "toy_q_disagree": (0.10, 0.30, 0.60),     # a cache that disagrees
-    "we_classes": ("Birman", "Ragdoll", "Siamese"),
-    "we_text_cos": (0.300, 0.290, 0.250),     # cosine of x to each class prompt
-    "we_cache_cos": ((0.90, 0.85), (0.80,), ()),  # cosines of x to cached items, per class
-    "scale_cos": 0.80,                        # a typical cached-neighbour cosine
-    "peaked_clip_top": 0.90,                  # a confident CLIP top-1 probability
-    "sketch_clear": (0.84, 0.07, 0.04, 0.03, 0.02),
-    "sketch_tie": (0.44, 0.37, 0.09, 0.06, 0.04),
-    "sketch_spread": (0.26, 0.21, 0.20, 0.17, 0.16),
-}
-
-
 # --- Data ----------------------------------------------------------------------
 class Results:
     """Every number the deck shows, read from tracked files, formatted and recorded."""
 
     def __init__(self, root: Path = ROOT):
         root = Path(root)
-        self.summary = pd.read_csv(root / "results/summary.csv")
-        self.ablation = pd.read_csv(root / "results/ablation.csv")
-        self.ablation_gate = pd.read_csv(root / "results/ablation_gate.csv")
-        self.rel = pd.read_csv(root / "results/analysis/reliability_stats.csv")
-        self.const = pd.read_csv(root / "results/analysis/dataset_constants.csv").set_index("dataset")
-        self.lit = pd.read_csv(root / "results/analysis/literature_values.csv").set_index("key")
-        self.admission = _admission_rates(root / "results/raw/ablation")
-        self.margin_cfg = yaml.safe_load((root / "configs/method/ablation/margin.yaml").read_text(encoding="utf-8"))
-        self.gate_cfg = yaml.safe_load((root / "configs/method/cal_tda_gate.yaml").read_text(encoding="utf-8"))
-        from utils.loo_temperature import default_grid
-        self.grid = default_grid()
+        self.d = ra.load(root)
+        self.cfg = yaml.safe_load((root / "configs/method/cal_tda_agree.yaml").read_text(encoding="utf-8"))
+        self.gen = ra.generalization(self.d)
         self.emitted: set[str] = set()
         self.illustrative: set[str] = set()
 
-    # formatting -------------------------------------------------------------
     def _record(self, text: str, bucket: set) -> str:
         bucket.update(number_tokens(text))
         return text
@@ -147,61 +110,38 @@ class Results:
         elif sign:
             text = f"{value:+.{digits}f}".replace("-", "−")
         else:
-            text = f"{value:.{digits}f}"
-            if value < 0:
-                text = text.replace("-", "−")
+            text = f"{value:.{digits}f}".replace("-", "−")
         return self._record(text, self.emitted)
 
     def illus(self, value, digits=2) -> str:
-        """Format an illustrative (non-result) value; its slide must say so."""
         text = f"{value:.{digits}f}"
         return self._record(text, self.illustrative)
 
-    # lookups ----------------------------------------------------------------
-    def s(self, dataset, method, column):
-        row = self.summary[(self.summary.dataset == dataset) & (self.summary.method == method)]
-        if row.empty:
-            raise KeyError((dataset, method))
-        return float(row.iloc[0][column])
+    # lookups (P2 throughout) --------------------------------------------------
+    def main(self, method, metric, dataset="mean", col="mean"):
+        return ra.prot(self.d, dataset, method, metric, col)
 
-    def s_mean(self, method, column):
-        return float(self.summary[self.summary.method == method][column].mean())
+    def pair(self, method, metric, reference="tda", dataset="mean"):
+        return ra.paired(self.d, method, metric, reference, dataset)
 
-    def r(self, study, dataset, variant, column):
-        row = self.rel[(self.rel.study == study) & (self.rel.dataset == dataset) & (self.rel.variant == variant)]
-        if row.empty:
-            raise KeyError((study, dataset, variant))
-        return float(row.iloc[0][column])
+    def comp(self, method, metric, dataset="mean"):
+        return ra.comp(self.d, method, metric, dataset)
 
-    def r_mean(self, study, variant, column):
-        frame = self.rel[(self.rel.study == study) & (self.rel.variant == variant)]
-        return float(frame[column].mean())
+    def comp_pair(self, method, metric, dataset="mean"):
+        return ra.comp_paired(self.d, method, metric, dataset)
 
-    def v(self, dataset, variant, column, study="ablation"):
-        frame = self.ablation if study == "ablation" else self.ablation_gate
-        row = frame[(frame.dataset == dataset) & (frame.variant == variant)]
-        if row.empty:
-            raise KeyError((study, dataset, variant))
-        return float(row.iloc[0][column])
+    def val(self, column, dataset="mean"):
+        t = self.d["val"]
+        return float(t[t.dataset == dataset].iloc[0][column])
 
-    def v_mean(self, variant, column, study="ablation"):
-        frame = self.ablation if study == "ablation" else self.ablation_gate
-        return float(frame[frame.variant == variant][column].mean())
+    def test(self, column, dataset="mean"):
+        t = self.d["test"]
+        return float(t[t.dataset == dataset].iloc[0][column])
 
-    def c(self, dataset, column):
-        return self.const.loc[dataset, column]
+    def rho(self, signal="conf", datasets="all"):
+        t = self.d["rho"]
+        return t[(t.signal == signal) & (t.datasets == datasets)].iloc[0]
 
-    def litv(self, key):
-        return float(self.lit.loc[key, "value"])
-
-    def n_bins(self):
-        values = set(self.rel["n_bins"])
-        if len(values) != 1:
-            raise ValueError(f"records disagree on the number of ECE bins: {values}")
-        return int(values.pop())
-
-    def total_images(self):
-        return int(self.summary.groupby("dataset")["n_samples"].first().sum())
 
 
 # --- Low-level drawing helpers ---------------------------------------------------
@@ -465,7 +405,7 @@ def add_footer(slide, index, total, label=None):
     box, frame = textbox(slide, MARGIN, Inches(7.06), Inches(8.0), Inches(0.3))
     box.name = "footer"
     run = frame.paragraphs[0].add_run()
-    run.text = "Calibration-aware TTA for CLIP  ·  draft v2 for review"
+    run.text = "Calibration-aware TTA for CLIP  ·  deck v3"
     _style(run, 12, color=MUTED)
     box, frame = textbox(slide, SLIDE_W - MARGIN - Inches(1.4), Inches(7.06), Inches(1.4), Inches(0.3))
     box.name = "footer"
@@ -515,33 +455,135 @@ def add_equation(slide, tex, left, top, *, size=24, color="#1A1F2B", center_widt
     return height
 
 
-def render_vote_figure(results: Results, out_path: Path) -> Path:
-    """Positive-cache vote weight exp(-beta (1 - cos)) for each dataset's beta."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import numpy as np
 
-    colors = ["#C44E52", "#937860", "#DA8BC3", "#4D4D4D", "#17BECF"]
-    cos = np.linspace(0.5, 1.0, 200)
-    fig, ax = plt.subplots(figsize=(5.4, 4.1))
-    for color, dataset in zip(colors, DATASET_ORDER):
-        beta = float(results.c(dataset, "beta"))
-        ax.plot(cos, np.exp(-beta * (1 - cos)), color=color, linewidth=2.4,
-                label=f"{DATASET_LABEL[dataset]} (β = {beta:g})")
-    ax.axhline(0.5, color="#999999", linewidth=1, linestyle=":")
-    ax.set_xlabel("cosine between test and cached feature", fontsize=14)
-    ax.set_ylabel("vote weight", fontsize=14)
-    ax.tick_params(labelsize=12)
-    ax.set_xlim(0.5, 1.0)
-    ax.set_ylim(0, 1.02)
-    ax.grid(alpha=0.25)
-    ax.legend(fontsize=12, frameon=False, loc="upper left")
-    fig.tight_layout()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=200)
-    plt.close(fig)
-    return out_path
+# --- Slides -----------------------------------------------------------------------
+# Each builder: (prs, r) -> slide. Notes are spoken English; numbers via r.num.
+
+def slide_title(prs, r):
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    slide.background.fill.solid()
+    slide.background.fill.fore_color.rgb = BG_DARK
+    band = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, SLIDE_H - Inches(0.14), SLIDE_W, Inches(0.14))
+    band.fill.solid()
+    band.fill.fore_color.rgb = ACCENT
+    band.line.fill.background()
+    light, lavender, soft = RGBColor(0xF5, 0xF2, 0xFA), RGBColor(0xB9, 0xA6, 0xD6), RGBColor(0xC8, 0xC2, 0xD8)
+    add_text(slide, Inches(1.1), Inches(1.6), Inches(11.2), Inches(0.4),
+             [("TAU  ·  DEEP LEARNING  ·  FINAL PROJECT", 16, True, lavender)])
+    add_text(slide, Inches(1.1), Inches(2.15), Inches(11.2), Inches(1.8),
+             [("The cache that echoes CLIP: agreement-gated test-time adaptation", 40, True, light)])
+    add_text(slide, Inches(1.1), Inches(4.25), Inches(11.2), Inches(1.6), [
+        ("Gal Machlin   ·   Idan Yehuda", 22, False, light),
+        ("Why TDA's accuracy gain makes CLIP overconfident, a proof of where it happens, "
+         "and a parameter-free fix.", 20, False, soft),
+    ], spacing=14)
+    set_notes(slide, """
+Hello everyone. This talk is about test-time adaptation of CLIP, and in particular about TDA, a
+popular training-free method that improves CLIP's accuracy but makes its confidence less
+trustworthy. We first diagnose exactly where that comes from, prove it, and then show a fix
+that needs no parameters and keeps TDA's accuracy while halving its calibration error.
+""")
+    return slide
+
+
+def slide_agenda(prs, r):
+    slide = new_slide(prs, "Roadmap", kicker="Overview")
+    entries = [
+        ("1", "The task and CLIP", "zero-shot classification of an unlabeled test stream"),
+        ("2", "Test-time adaptation and TDA", "episodic vs online methods; how TDA's caches work"),
+        ("3", "Calibration and TDA's catch", "what ECE measures; TDA gains accuracy but becomes overconfident"),
+        ("4", "Diagnosis and method", "the cache echoes CLIP (with a proof); the agreement gate"),
+        ("5", "Results and limits", "test sets, baselines, unseen datasets, where it helps and where not"),
+    ]
+    top = Inches(1.8)
+    for index, (number, heading, detail) in enumerate(entries):
+        row_top = top + index * Inches(0.9)
+        chip = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, MARGIN, int(row_top), Inches(0.62), Inches(0.62))
+        chip.fill.solid()
+        chip.fill.fore_color.rgb = ACCENT if index == 3 else HEADER_FILL
+        chip.line.fill.background()
+        chip.shadow.inherit = False
+        chip.text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+        p = chip.text_frame.paragraphs[0]
+        p.alignment = PP_ALIGN.CENTER
+        run = p.add_run()
+        run.text = number
+        _style(run, 20, bold=True, color=SURFACE if index == 3 else MUTED)
+        add_text(slide, MARGIN + Inches(0.9), row_top, Inches(11.0), Inches(0.62), [[
+            (heading, 22, True, INK), ("      " + detail, SUB, False, MUTED)]], anchor=MSO_ANCHOR.MIDDLE)
+    set_notes(slide, """
+Five parts. First the task: classifying images with CLIP when we only know the class names and the
+test images arrive one by one without labels. Second, test-time adaptation, the family of methods that
+uses that stream to adapt, and TDA, the method we study, in some detail. Third, calibration, and why TDA
+makes CLIP overconfident. Fourth, our diagnosis of where that comes from, with a short proof, and the
+fix it suggests. Fifth, the results, including where the fix does not help.
+""")
+    return slide
+
+
+def slide_task(prs, r):
+    slide = new_slide(prs, "The task: classify a stream with nothing but the class names", kicker="1 · Task and CLIP")
+    add_bullets(slide, [
+        "Given: the names of the classes (e.g. the breeds of Oxford Pets) and a pretrained vision-language model.",
+        "Given: unlabeled test images that arrive one at a time.",
+        "Not given: any labeled image, for training or for tuning.",
+        "Each prediction is final before the next image arrives (online), and should come with an honest "
+        "confidence: right as often as it claims.",
+    ], width=Inches(7.3), spacing=14)
+    add_panel(slide, Inches(8.25), Inches(1.75), Inches(4.48), Inches(3.9))
+    add_text(slide, Inches(8.5), Inches(1.95), Inches(4.0), Inches(3.6), [
+        ("Our evaluation", SUB, True, ACCENT),
+        ("CLIP ViT-B/16, one prompt template", SUB, False, INK),
+        ("Five core datasets: DTD, Flowers, Pets, EuroSAT, Aircraft (val splits for design, test splits for results)",
+         SUB, False, INK),
+        ("Development and fresh datasets for generalization (ImageNet and others)", SUB, False, INK),
+        ("Each stream order is a seed", SUB, False, INK),
+    ], spacing=10)
+    add_callout(slide, "Zero-shot: no labels anywhere. Labels are read only by the final scorer.")
+    set_notes(slide, """
+Let me state the task precisely. We are given the class names and a pretrained model, CLIP, and a
+stream of test images without labels. There is no labeled data at all, not even for tuning. Each image
+gets a prediction before the next one arrives. And we want two things: the right class, and a
+confidence we can believe. On the right is how we evaluate: five core datasets whose validation splits
+we used for design and whose test splits we use for results, plus further datasets for generalization.
+""")
+    return slide
+
+
+def slide_clip(prs, r):
+    slide = new_slide(prs, "Zero-shot CLIP: compare the image with a prompt per class", kicker="1 · Task and CLIP")
+    top1, top2, h = Inches(1.8), Inches(3.25), Inches(1.0)
+    flow_box(slide, MARGIN, top1, Inches(2.3), h, "test image x", fill=SURFACE)
+    arrow(slide, MARGIN + Inches(2.38), top1 + Inches(0.34), Inches(0.5), Inches(0.32))
+    flow_box(slide, MARGIN + Inches(2.95), top1, Inches(3.3), h, "image encoder f", "frozen",
+             fill=TINT_CLIP, border=CLIPBLUE)
+    flow_box(slide, MARGIN, top2, Inches(2.3), h, "class name k", fill=SURFACE)
+    arrow(slide, MARGIN + Inches(2.38), top2 + Inches(0.34), Inches(0.5), Inches(0.32))
+    flow_box(slide, MARGIN + Inches(2.95), top2, Inches(3.3), h, "text encoder g", "frozen",
+             fill=TINT_CLIP, border=CLIPBLUE)
+    add_text(slide, MARGIN, top2 + h + Inches(0.12), Inches(6.3), Inches(0.45),
+             [("prompt:  “a photo of a {class}.”", SUB, True, ACCENT)])
+    arrow(slide, MARGIN + Inches(6.35), top1 + Inches(1.05), Inches(0.5), Inches(0.4))
+    add_panel(slide, MARGIN + Inches(7.0), top1, Inches(5.1), Inches(2.45), fill=SURFACE)
+    add_equation(slide, r"z_k = s\,\cos\left(f(x),\,g(t_k)\right)", MARGIN + Inches(7.1), top1 + Inches(0.3),
+                 size=26, center_width=Inches(4.9))
+    add_equation(slide, r"p = \mathrm{softmax}(z),\quad \hat{y}_0 = \arg\max_k\, z_k",
+                 MARGIN + Inches(7.1), top1 + Inches(1.35), size=26, center_width=Inches(4.9))
+    add_bullets(slide, [
+        "Both encoders stay frozen; every method in this talk only changes what is done with features and logits.",
+        "The prediction ŷ₀ is CLIP's pseudo-label; its probability max p is the confidence.",
+        "It works without labels, but loses accuracy when the test images look unlike CLIP's web data "
+        "(satellite tiles, textures) or the classes are fine-grained (aircraft variants).",
+    ], top=Inches(4.75), spacing=6)
+    set_notes(slide, """
+This is the model everything builds on. CLIP has an image encoder and a text encoder, both frozen. Each
+class name is put into a prompt and encoded; the logit of a class is the cosine between the image
+feature and that text feature, times a learned scale. The softmax gives a distribution, its argmax is
+the prediction, which we will call CLIP's pseudo-label, and its probability is the confidence. Zero-shot
+CLIP needs no labels, but it is weak when the images look unlike web photos or the classes are very
+fine-grained. That is what test-time adaptation tries to fix.
+""")
+    return slide
 
 
 def render_calibration_figure(out_path: Path) -> Path:
@@ -555,8 +597,7 @@ def render_calibration_figure(out_path: Path) -> Path:
     over = confidence ** 2.4
     fig, ax = plt.subplots(figsize=(4.6, 4.3))
     ax.plot([0, 1], [0, 1], linestyle="--", color="#4D4D4D", linewidth=1.8, label="calibrated")
-    ax.plot(confidence, over, marker="o", markersize=6, color="#B34A3C", linewidth=2.2,
-            label="overconfident")
+    ax.plot(confidence, over, marker="o", markersize=6, color="#B34A3C", linewidth=2.2, label="overconfident")
     pick = 10
     ax.plot([confidence[pick]] * 2, [over[pick], confidence[pick]], color="#7D5BA6", linewidth=3.2,
             label="one bin's gap")
@@ -574,1689 +615,525 @@ def render_calibration_figure(out_path: Path) -> Path:
     return out_path
 
 
-def softmax(values):
-    m = max(values)
-    e = [math.exp(v - m) for v in values]
-    s = sum(e)
-    return [x / s for x in e]
-
-
-def product_of_experts(p, q, alpha):
-    w = [pi * qi ** alpha for pi, qi in zip(p, q)]
-    s = sum(w)
-    return [x / s for x in w]
-
-
-def mixture(p, q, w=0.5):
-    return [(1 - w) * pi + w * qi for pi, qi in zip(p, q)]
-
-
-# --- Slides -----------------------------------------------------------------------
-# Each builder: (prs, r) -> slide. Notes are spoken English; numbers via r.num.
-
-def slide_title(prs, r):
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
-    slide.background.fill.solid()
-    slide.background.fill.fore_color.rgb = BG_DARK
-    band = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, SLIDE_H - Inches(0.14), SLIDE_W, Inches(0.14))
-    band.fill.solid()
-    band.fill.fore_color.rgb = ACCENT
-    band.line.fill.background()
-    light, lavender, soft = RGBColor(0xF5, 0xF2, 0xFA), RGBColor(0xB9, 0xA6, 0xD6), RGBColor(0xC8, 0xC2, 0xD8)
-    add_text(slide, Inches(1.1), Inches(1.6), Inches(11.2), Inches(0.4),
-             [("TAU  ·  DEEP LEARNING  ·  FINAL PROJECT  ·  DRAFT v2 FOR REVIEW", 16, True, lavender)])
-    add_text(slide, Inches(1.1), Inches(2.15), Inches(11.2), Inches(1.8),
-             [("Calibration-Aware Test-Time Adaptation for CLIP", 44, True, light)])
-    add_text(slide, Inches(1.1), Inches(4.25), Inches(11.2), Inches(1.6), [
-        ("Gal Machlin   ·   Idan Yehuda", 22, False, light),
-        ("Zero-shot CLIP, an unlabeled test stream, no backprop: can test-time adaptation "
-         "keep its accuracy gain and report honest confidence?", 20, False, soft),
-    ], spacing=14)
-    add_text(slide, Inches(1.1), Inches(6.35), Inches(11.2), Inches(0.5), [
-        ("Yellow dashed boxes mark evidence that will be added after feature extraction.", 16, False, lavender),
-    ])
-    set_notes(slide, """
-Hello everyone. This project is about test-time adaptation for CLIP, and specifically
-about whether the confidence such methods report can be trusted.
-
-The setting is strict: we only know the class names, the test images arrive one at a time
-without labels, and nothing is retrained. Within that setting, a well-known method called
-TDA improves accuracy but makes the model overconfident. We study why, propose four small
-changes, and show which ones work.
-
-This is a draft for structure review. Wherever you see a yellow dashed box, that is a
-figure or table that will be computed once the image features are extracted.
-""")
-    return slide
-
-
-def slide_agenda(prs, r):
-    slide = new_slide(prs, "Roadmap", kicker="Overview")
-    entries = [
-        ("1", "Background", "the zero-shot setting, CLIP, why it fails, the method landscape"),
-        ("2", "TDA in depth", "how its cache is written and read, the math, what it buys"),
-        ("3", "Calibration", "ECE, why it matters, and how TDA becomes overconfident"),
-        ("4", "Our proposal", "four changes, each: motive, why it should work, evidence, result"),
-        ("5", "Results", "headline table, fairness protocols, ablation, baselines"),
-        ("6", "Limitations and conclusion", "what we can and cannot claim yet"),
-    ]
-    top = Inches(1.75)
-    for index, (number, heading, detail) in enumerate(entries):
-        row_top = top + index * Inches(0.82)
-        chip = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, MARGIN, int(row_top), Inches(0.62), Inches(0.62))
-        chip.fill.solid()
-        chip.fill.fore_color.rgb = ACCENT if index in (1, 3) else HEADER_FILL
-        chip.line.fill.background()
-        chip.shadow.inherit = False
-        chip.text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
-        p = chip.text_frame.paragraphs[0]
-        p.alignment = PP_ALIGN.CENTER
-        run = p.add_run()
-        run.text = number
-        _style(run, 20, bold=True, color=SURFACE if index in (1, 3) else MUTED)
-        add_text(slide, MARGIN + Inches(0.9), row_top, Inches(11.0), Inches(0.62), [[
-            (heading, 22, True, INK), ("      " + detail, SUB, False, MUTED)]], anchor=MSO_ANCHOR.MIDDLE)
-    set_notes(slide, """
-Six parts. First the background: what exactly the task is, what CLIP does, and where TDA
-sits among other methods. Then a long section on TDA itself, with the math, because
-everything we do changes one specific line of it. Then calibration: what we measure and
-why TDA gets it wrong. Then our four changes, one at a time, each with its motivation,
-why we expected it to work, the evidence and the outcome. Then results, fairness and
-baselines, and finally the limitations.
-""")
-    return slide
-
-
-def slide_problem(prs, r):
-    slide = new_slide(prs, "The problem: classify with nothing but the class names",
-                      kicker="1 · Background")
-    pets_classes = r.num(r.c("pets", "n_classes"), 0)
+def slide_calibration(prs, r):
+    slide = new_slide(prs, "Calibration: confidence should equal accuracy", kicker="3 · Calibration")
+    add_panel(slide, MARGIN, Inches(1.65), Inches(7.0), Inches(1.4))
+    add_equation(slide, r"\mathrm{ECE} = \sum_{b} \frac{|B_b|}{N}\,\left|\,\mathrm{acc}(B_b) - \mathrm{conf}(B_b)\,\right|",
+                 MARGIN, Inches(1.85), size=26, center_width=Inches(7.0))
     add_bullets(slide, [
-        f"Given: the names of the classes, e.g. the {pets_classes} breeds of Oxford Pets.",
-        "Given: a stream of unlabeled test images, arriving one at a time.",
-        "Not given: any labeled image. No training set, no labeled validation set.",
-        "Not allowed: retraining or backprop. One forward pass per image, and each "
-        "prediction is final before the next image arrives (online).",
-        "Wanted: the right class AND an honest confidence for it.",
-    ], width=Inches(7.3), spacing=12)
-    add_panel(slide, Inches(8.25), Inches(1.75), Inches(4.48), Inches(4.2))
-    seeds = sorted(set(r.summary["seed"]))
-    backbone = sorted(set(r.summary["backbone"]))[0]
-    add_text(slide, Inches(8.5), Inches(1.95), Inches(4.0), Inches(3.9), [
-        ("Our evaluation", SUB, True, ACCENT),
-        (f"Backbone {backbone}, single centre crop", SUB, False, INK),
-        ("Prompt: one template for every class", SUB, False, INK),
-        (f"Five datasets, CoOp test splits, {r.num(r.total_images(), comma=True)} test images", SUB, False, INK),
-        (f"Batch size one, seed {r.num(seeds[0], 0)}", SUB, False, INK),
-        (f"ECE with {r.num(r.n_bins(), 0)} equal-width bins", SUB, False, INK),
-        ("Labels are read only by the final scorer", SUB, False, INK),
-    ], spacing=8)
-    add_callout(slide, "Same setting as the benchmark we fork (Illusion of Progress, NeurIPS'25) and as TDA.")
-    set_notes(slide, f"""
-Let me state the task precisely, because it rules out a lot of familiar tools.
-
-We are given the class names, for example the {pets_classes} pet breeds, and a stream of test
-images without labels. There is no labeled set at all, not even for validation. We may not
-train or backpropagate; each image gets one forward pass, and its prediction is final
-before the next image arrives.
-
-And we want two things: the right class, and a confidence we can believe.
-
-On the right is our evaluation setup: five datasets, {r.num(r.total_images(), comma=True)} test images in total, one image at a
-time, and calibration measured with {r.num(r.n_bins(), 0)} bins. It is the same setting as the benchmark
-paper whose code we forked.
-""")
-    return slide
-
-
-def slide_clip(prs, r):
-    slide = new_slide(prs, "Zero-shot CLIP: two frozen encoders, one prompt", kicker="1 · Background")
-    scale = r.num(r.litv("clip_logit_scale"), 0)
-    # diagram: image branch and text branch meeting at the logits
-    top1, top2, h = Inches(1.8), Inches(3.25), Inches(1.0)
-    flow_box(slide, MARGIN, top1, Inches(2.3), h, "test image x", fill=SURFACE)
-    arrow(slide, MARGIN + Inches(2.38), top1 + Inches(0.34), Inches(0.5), Inches(0.32))
-    flow_box(slide, MARGIN + Inches(2.95), top1, Inches(3.3), h, "image encoder f", "frozen",
-             fill=TINT_CLIP, border=CLIPBLUE)
-    flow_box(slide, MARGIN, top2, Inches(2.3), h, "class name k", fill=SURFACE)
-    arrow(slide, MARGIN + Inches(2.38), top2 + Inches(0.34), Inches(0.5), Inches(0.32))
-    flow_box(slide, MARGIN + Inches(2.95), top2, Inches(3.3), h, "text encoder g", "frozen",
-             fill=TINT_CLIP, border=CLIPBLUE)
-    add_text(slide, MARGIN, top2 + h + Inches(0.12), Inches(6.3), Inches(0.45),
-             [("prompt:  “a photo of a {class}.”  (a single template)", SUB, True, ACCENT)])
-    arrow(slide, MARGIN + Inches(6.35), top1 + Inches(1.05), Inches(0.5), Inches(0.4))
-    add_panel(slide, MARGIN + Inches(7.0), top1, Inches(5.1), Inches(2.45), fill=SURFACE)
-    add_equation(slide, r"z_k = s\,\cos\left(f(x),\,g(t_k)\right)", MARGIN + Inches(7.1), top1 + Inches(0.3),
-                 size=26, center_width=Inches(4.9))
-    add_equation(slide, r"p = \mathrm{softmax}(z),\quad \hat{y} = \arg\max_k\, z_k",
-                 MARGIN + Inches(7.1), top1 + Inches(1.35), size=26, center_width=Inches(4.9))
-    add_bullets(slide, [
-        "Both encoders are frozen: no weight changes during test-time adaptation. Every method "
-        "in this talk only changes what is done with the features and logits.",
-        f"s is CLIP's learned logit scale ({scale} for this checkpoint), so logits are {scale} × a cosine.",
-        "Confidence = max_k p_k, the probability of the predicted class.",
-    ], top=Inches(4.75), spacing=6)
-    set_notes(slide, f"""
-This is the model everything builds on. CLIP has an image encoder and a text encoder.
-Both are frozen throughout; nothing in this talk changes a single weight of either.
-
-To classify, each class name is put into one prompt, "a photo of a" class, and encoded.
-We use one template only, the same for every dataset. The logit for class k is the cosine
-between the image feature and that text feature, times CLIP's logit scale, which is {scale}.
-The softmax of the logits is the predicted distribution, the argmax is the prediction, and
-its probability is what we call the confidence.
-
-Every method later in the talk works on these features and logits; none retrains anything.
-""")
-    return slide
-
-
-def slide_clip_fails(prs, r):
-    slide = new_slide(prs, "Why zero-shot CLIP fails on these datasets", kicker="1 · Background")
-    domain = {
-        "dtd": "texture close-ups", "flower102": "flower species", "pets": "cat and dog breeds",
-        "eurosat": "satellite land-use tiles", "aircraft": "aircraft model variants",
-    }
-    reason = {
-        "dtd": "domain shift", "flower102": "fine-grained names", "pets": "names are common on the web",
-        "eurosat": "domain shift", "aircraft": "fine-grained names",
-    }
-    rows = [[DATASET_LABEL[d], domain[d], r.num(r.c(d, "n_classes"), 0), r.num(r.s(d, "clipzs", "accuracy")),
-             reason[d]] for d in DATASET_ORDER]
-    add_table(slide, ["Dataset", "What it shows", "Classes", "CLIP top-1 (%)", "Main difficulty"], rows,
-              MARGIN, Inches(1.7), CONTENT_W, col_widths=[1.4, 2.6, 1.0, 1.4, 2.6], row_height=Inches(0.42),
-              font_size=16, aligns="LLRRL")
-    add_bullets(slide, [
-        "Domain shift: CLIP learned from web photos. Satellite tiles and texture crops look "
-        "nothing like them, so image features land far from the text features.",
-        "Caption granularity: web captions say “a plane” or “a flower”, rarely the exact "
-        "variant or species. The prompt names a class CLIP has barely seen named, so "
-        "neighbouring classes get almost the same score.",
-    ], top=Inches(4.45), spacing=8)
-    set_notes(slide, f"""
-Why is CLIP alone not enough? There are two different reasons, and they matter later.
-
-The first is domain shift. CLIP was trained on web photos; satellite tiles in EuroSAT and
-texture crops in DTD look nothing like them. CLIP gets {r.num(r.s('eurosat', 'clipzs', 'accuracy'))} percent on EuroSAT,
-which has only {r.num(r.c('eurosat', 'n_classes'), 0)} classes.
-
-The second is granularity. Web captions rarely name the exact aircraft variant or flower
-species, so the text features for neighbouring fine-grained classes are close, and CLIP is
-often torn between them. Aircraft, with {r.num(r.c('aircraft', 'n_classes'), 0)} variants, is at {r.num(r.s('aircraft', 'clipzs', 'accuracy'))} percent. Pets is the
-counter-example: breed names are common online, and CLIP reaches {r.num(r.s('pets', 'clipzs', 'accuracy'))}.
-
-Keep the second reason in mind: "torn between two neighbouring classes" is exactly the
-situation our gate later targets.
-""")
-    return slide
-
-
-def slide_landscape(prs, r):
-    slide = new_slide(prs, "The method landscape: where TDA sits", kicker="1 · Background")
-    rows = [
-        ["CLIP zero-shot", "ICML'21", "none", "—", "no", "no"],
-        ["Tip-Adapter", "ECCV'22", "few labeled shots", "—", "no", "no"],
-        ["TPT", "NeurIPS'22", "none", "episodic", "yes", "no"],
-        ["C-TPT", "ICLR'24", "none", "episodic", "yes", "yes"],
-        ["O-TPT", "CVPR'25", "none", "episodic", "yes", "yes"],
-        ["TDA", "CVPR'24", "none", "online", "no", "no"],
-        ["DMN (weak)", "CVPR'24", "none", "online", "no", "no"],
-        ["BoostAdapter", "NeurIPS'24", "none", "online", "no", "no"],
-        ["ECALP", "ICLR'25", "none", "online", "no", "no"],
-        ["UL-TTA", "arXiv'25", "none", "online", "no", "yes (temperature)"],
-    ]
-    add_table(slide, ["Method", "Venue", "Labels", "Adaptation", "Backprop", "Calibration-aware"], rows,
-              MARGIN, Inches(1.62), Inches(8.3), col_widths=[1.6, 1.2, 1.7, 1.2, 1.0, 1.7],
-              row_height=Inches(0.39), highlight_rows=(5,), align=PP_ALIGN.LEFT)
-    add_text(slide, Inches(9.2), Inches(1.65), Inches(3.55), Inches(4.4), [
-        ("Episodic", SUB, True, ACCENT),
-        ("adapts on augmented views of each image with gradient steps, then resets.", SUB, False, INK),
-        ("Online", SUB, True, ACCENT),
-        ("keeps state (a cache, a memory) across the stream; forward passes only.", SUB, False, INK),
-        ("Gap", SUB, True, WARN),
-        ("calibration-aware methods so far are episodic and need backprop; the online, "
-         "backprop-free family ignores calibration.", SUB, False, INK),
-    ], spacing=6)
-    add_text(slide, MARGIN, Inches(6.05), CONTENT_W, Inches(0.7), [
-        ("Also relevant: D-TPT and TCA (episodic, calibration-aware, arXiv); DPE, FreeTTA, BCA "
-         "(online); CRG (cache noise); ZS-Norm (logit-range calibration of adapters). "
-         "Source: pm/research/related-work.md.", SMALL, False, MUTED)])
+        "Bin the predictions by confidence; in each bin compare the mean confidence with the accuracy.",
+        "ECE is the sample-weighted mean gap (equal-width bins, as the benchmark). Lower is better.",
+        f"Overconfident: confidence above accuracy. Illustrative: a model that says {r.illus(90, 0)}% should be "
+        f"right {r.illus(90, 0)}% of the time.",
+        "We also report the per-sample gap confidence − accuracy on subsets of the stream.",
+    ], top=Inches(3.3), width=Inches(7.0), spacing=10)
+    path = render_calibration_figure(ASSETS / "what_is_calibration.png")
+    add_picture(slide, path, Inches(8.0), Inches(1.6), Inches(4.7), Inches(4.4))
+    add_text(slide, Inches(8.0), Inches(6.05), Inches(4.7), Inches(0.4), [
+        ("Concept sketch with synthetic curves, not data.", SMALL, False, MUTED)], align=PP_ALIGN.CENTER)
     set_notes(slide, """
-Here is the landscape, so you can see why we picked TDA.
-
-Tip-Adapter is the origin of the cache idea, but it needs a few labeled images per class,
-so it is a different setting; we will use it later only as a reference for what labels buy.
-
-The prompt-tuning family, TPT and its calibration-aware descendants C-TPT and O-TPT, is
-episodic: for every single image it builds many augmented views, takes gradient steps on
-the prompt, predicts, and resets. That needs backprop.
-
-The online family, TDA, DMN, BoostAdapter and ECALP, never backpropagates and keeps a
-memory across the stream. None of them is designed for calibration. UL-TTA is a recent
-online method that does adjust a temperature without labels; it is the closest prior art
-to our fourth change and we cite it.
-
-So the gap is: calibration-aware methods exist, but only in the expensive episodic family.
+Calibration means the confidence a model reports matches how often it is right. The expected
+calibration error bins the predictions by confidence and averages, over the bins, the gap between
+mean confidence and accuracy, weighted by the number of samples in each bin. The sketch on the right
+is a concept drawing, not data: points below the diagonal are overconfident. Throughout the talk we
+also use the signed gap, confidence minus accuracy, on parts of the stream.
 """)
     return slide
 
 
-def slide_why_tda(prs, r):
-    slide = new_slide(prs, "Why we build on TDA", kicker="1 · Background")
+# --- TDA section ---------------------------------------------------------------------------
+TDA_CITE = "Figure: Karmanov et al., Efficient Test-Time Adaptation of Vision-Language Models, CVPR'24, arxiv.org/abs/2403.18293."
+
+
+def slide_tda_why(prs, r):
+    slide = new_slide(prs, "Two ways to adapt CLIP at test time", kicker="2 · Test-time adaptation")
+    add_picture(slide, TDA_FIGS / "Prompt-Tuning.png", MARGIN, Inches(1.6), Inches(6.2), Inches(2.3))
+    add_picture(slide, TDA_FIGS / "TDA.png", MARGIN, Inches(3.95), Inches(6.2), Inches(2.4))
     add_bullets(slide, [
-        "It plays by our rules: online, no backprop, one view per image. It runs from cached "
-        "image features on a CPU; the episodic methods need many views and gradient steps per image.",
-        "It is the standard online baseline: CVPR'24, official code, and benchmarked for "
-        "accuracy and calibration by the Illusion of Progress paper, whose codebase we fork.",
-        "Its mechanism is explicit: a small cache of past test features. We can inspect "
-        "exactly which stored image moved which prediction, and by how much.",
-        "Our CLIP and TDA runs reproduce the benchmark's published ViT-B/16 accuracies "
-        "(our baseline audit), so differences we report are ours, not a broken baseline.",
-        "And it has a documented calibration problem, which the next sections dissect.",
-    ], spacing=12)
-    add_callout(slide, "TDA is the cleanest place to study how online TTA trades calibration for accuracy.")
+        "Episodic, with backprop (top: TPT, DiffTPT; also C-TPT, O-TPT): for each image, many augmented views "
+        "and gradient steps on the prompt, then reset. Slow; nothing carries over.",
+        "Online, training-free (bottom: TDA; also DMN, ECALP): keep a memory of past test images and use it "
+        "for the next ones. One forward pass per image.",
+        "We study TDA (CVPR'24): the standard online baseline, and later cache methods build on it.",
+    ], left=Inches(7.1), top=Inches(1.7), width=Inches(5.6), spacing=12)
+    add_text(slide, MARGIN, Inches(6.45), CONTENT_W, Inches(0.4), [("TDA paper, Fig. 1. " + TDA_CITE, SMALL, False, MUTED)])
     set_notes(slide, """
-Why TDA, and not one of the others?
-
-First, it fits the setting exactly: online, no gradients, one view per image. That also
-makes it cheap: since CLIP is frozen and there is a single view, image features can be
-computed once and replayed, which is how we will run all further experiments on a CPU.
-
-Second, it is the standard baseline of the online family, with official code, and the
-benchmark we fork already measured both its accuracy and its calibration.
-
-Third, its mechanism is a cache we can open and inspect, so every claim about why it
-becomes overconfident can be checked against what was actually stored.
-
-We verified that our runs reproduce the published accuracies, so the baseline is sound.
-""")
-    return slide
-
-
-# --- TDA section -------------------------------------------------------------------------
-def slide_tda_idea(prs, r):
-    slide = new_slide(prs, "TDA's idea: describe each class with test images, not only text",
-                      kicker="2 · TDA in depth")
-    panels = [(MARGIN, "Zero-shot CLIP", "one text feature per class"),
-              (MARGIN + Inches(6.2), "TDA", "+ a few confident test features per class")]
-    pw, ph, ptop = Inches(5.9), Inches(3.35), Inches(1.65)
-    clusters = [  # (cx, cy) of the image cluster, (tx, ty) of the text anchor, colour
-        ((1.7, 1.85), (0.85, 0.75), CLIPBLUE),
-        ((4.15, 1.75), (4.85, 0.75), BASELINE),
-    ]
-    import random
-    rng = random.Random(0)   # fixed layout of the decorative dots
-    offsets = [(rng.uniform(-0.7, 0.7), rng.uniform(-0.55, 0.55)) for _ in range(9)]
-    for index, (left, heading, sub) in enumerate(panels):
-        add_panel(slide, left, ptop, pw, ph)
-        add_text(slide, left + Inches(0.2), ptop + Inches(0.1), pw - Inches(0.4), Inches(0.4),
-                 [[(heading, SUB, True, ACCENT if index else CLIPBLUE), ("   " + sub, SUB, False, MUTED)]])
-        for (cx, cy), (tx, ty), color in clusters:
-            for k, (dx, dy) in enumerate(offsets):
-                cached = index == 1 and k < 3
-                dot(slide, left + Inches(cx + dx), ptop + Inches(0.55 + cy + dy), Inches(0.24 if cached else 0.17),
-                    color if not cached else SURFACE, outline=color if cached else None)
-            dot(slide, left + Inches(tx), ptop + Inches(0.55 + ty), Inches(0.36), color,
-                shape=MSO_SHAPE.STAR_5_POINT)
-    add_text(slide, MARGIN, ptop + ph + Inches(0.1), CONTENT_W, Inches(0.4), [[
-        ("★ text feature of a class     ", SUB, False, INK), ("• test images     ", SUB, False, INK),
-        ("○ cached test images (pseudo-labeled)", SUB, False, INK)]])
-    add_bullets(slide, [
-        "Under domain shift the test images of a class sit away from its text feature. A few "
-        "cached test features describe where this domain's images of the class actually are.",
-        "A new image is scored against both: CLIP's text features and the cached image features.",
-    ], top=Inches(5.55), spacing=4)
-    set_notes(slide, """
-Before the math, the idea in one picture. In zero-shot CLIP, each class is represented by
-one point, its text feature, the star. Under domain shift the actual test images of the
-class form a cloud somewhere else, and one point is a poor description of that cloud.
-
-TDA's idea is to remember a few test images per class, the circled dots, which by
-construction lie where this domain's images really are. A new image is then compared both
-with the text features and with these remembered images. It is a nearest-neighbour vote
-added on top of CLIP.
-
-The catch, which we come back to after the full walkthrough, is that the remembered images
-are labeled by CLIP's own guess.
+Test-time adaptation uses the unlabeled stream to improve CLIP. There are two families. This is the
+first figure of the TDA paper. On top, test-time prompt tuning: for every image it builds many augmented
+views and optimizes the prompt by backpropagation, then resets, which is slow. Below, TDA: no training,
+only a cache of earlier test images labelled by CLIP, used for the next images. It is fast and fully
+online, which is why it became the standard baseline of the training-free family and why we study it.
 """)
     return slide
 
 
 def slide_tda_pipeline(prs, r):
-    slide = new_slide(prs, "TDA, one image at a time", kicker="2 · TDA in depth")
-    cap = r.num(r.c("dtd", "pos_capacity"), 0)
-    steps = [
-        ("1 · Encode", "CLIP logits z, softmax p, pseudo-label ŷ, entropy H"),
-        ("2 · Write", "offer x to the positive cache under ŷ; mid-entropy x also to the negative one"),
-        ("3 · Read", "similarity-weighted votes from both caches"),
-        ("4 · Predict", "z + α·(positive votes) − α_neg·(negative votes)"),
-    ]
-    top, height = Inches(1.7), Inches(2.1)
-    gap = Inches(0.32)
-    width = (CONTENT_W - gap * 3) / 4
-    left = MARGIN
-    for index, (title, sub) in enumerate(steps):
-        flow_box(slide, left, top, width, height, title, sub, fill=TINT_ACCENT if index in (1, 2) else SURFACE,
-                 border=ACCENT if index in (1, 2) else RULE)
-        if index < 3:
-            arrow(slide, left + width + Inches(0.04), top + height / 2 - Inches(0.14), gap - Inches(0.08), Inches(0.28))
-        left += width + gap
+    slide = new_slide(prs, "TDA's two caches", kicker="2 · TDA")
+    add_picture(slide, TDA_FIGS / "TDA-full.png", MARGIN, Inches(1.55), CONTENT_W, Inches(3.6))
     add_bullets(slide, [
-        f"Every image is offered to the positive cache; per class the {cap} lowest-entropy images are kept. "
-        "There is no entropy threshold.",
-        "Write happens before read: an admitted image is already in the cache when it is classified.",
-        "Pseudo-labels and entropies come from raw CLIP. TDA's own output is never written back, "
-        "so there is no feedback loop through the cache labels.",
-        "State carries across the stream; nothing is ever reset or retrained.",
+        "Positive cache: per class, the lowest-entropy test images under CLIP's pseudo-label; votes for classes.",
+        "Negative cache: mid-entropy images with a mask of unlikely classes; votes against classes.",
+        "The values (labels) always come from CLIP's prediction, never from TDA's output.",
+    ], top=Inches(5.25), spacing=6, size=SUB)
+    add_text(slide, MARGIN, Inches(6.5), CONTENT_W, Inches(0.35), [("TDA paper, Fig. 2. " + TDA_CITE, SMALL, False, MUTED)])
+    set_notes(slide, """
+This is TDA's pipeline, from its paper. CLIP produces a prediction. Two caches store test features
+as keys and pseudo-labels as values: a positive cache of confident samples, and a negative cache of
+uncertain samples that records which classes are unlikely. Both caches produce predictions that are
+added to CLIP's. The important detail for us is the update path at the bottom: the cache values are
+CLIP's own predictions.
+""")
+    return slide
+
+
+def slide_tda_math(prs, r):
+    slide = new_slide(prs, "TDA in one equation", kicker="2 · TDA")
+    a, b, s = r.num(r.cfg["alpha"], 0), r.num(r.cfg["beta"], 0), r.num(r.cfg["shot_capacity"], 0)
+    add_panel(slide, MARGIN, Inches(1.65), CONTENT_W, Inches(1.65))
+    add_equation(slide, r"o(x) = z(x) - n(x) + \alpha\,c(x), \qquad "
+                 r"c_k(x) = \sum_{i \in \mathcal{C}_k} e^{-\beta\,(1 - \langle f(x), f_i\rangle)} \in [0, S]",
+                 MARGIN, Inches(1.85), size=26, center_width=CONTENT_W)
+    add_bullets(slide, [
+        "z: CLIP's logits; ŷ₀ = argmax z is the pseudo-label written to the cache.",
+        "n: the negative-cache term; b = z − n is CLIP plus the negative cache.",
+        f"c: the positive cache's kernel votes, at most S = {s} items per class, each vote at most 1.",
+        "Each image is first written to the cache (if admitted) and then read.",
+        f"One setting for every dataset (our protocol P2): α = {a}, β = {b}. The published per-dataset "
+        "values (P1) give the same conclusions (backup).",
+    ], top=Inches(3.55), spacing=10)
+    set_notes(slide, f"""
+Here is TDA in one line. The output logits are CLIP's logits, minus the negative cache term, plus
+alpha times the positive cache's votes. Each positive cache item votes with a kernel of its cosine to
+the test image, so each vote is at most one, and with {s} items per class a class gets at most {s}.
+Two facts matter later: the cache is filled with CLIP's argmax, and each image is written before it
+is read. We use alpha {a} and beta {b} on every dataset.
+""")
+    return slide
+
+
+def slide_tda_caches(prs, r):
+    slide = new_slide(prs, "Which cache does what (TDA paper's Fig. 3, with ECE)", kicker="3 · TDA\'s catch")
+    rows = []
+    for k, label in (("clip", "CLIP"), ("base", "CLIP + negative cache"), ("pos", "CLIP + positive cache"),
+                     ("tda", "TDA (both)")):
+        rows.append([label, r.num(r.val(f"{k}_acc")), r.num(r.val(f"{k}_ece"))])
+    add_table(slide, ["variant (val, mean of 5)", "accuracy", "ECE"], rows, MARGIN, Inches(1.75), Inches(6.6),
+              col_widths=[3.2, 1.2, 1.2], row_height=Inches(0.5), font_size=18, highlight_rows=(3,))
+    add_bullets(slide, [
+        "The negative cache adds accuracy and lowers ECE.",
+        "The positive cache adds more accuracy, and all of the overconfidence.",
+        "So the problem sits in the positive cache. The next section asks why.",
+    ], left=Inches(7.6), top=Inches(1.8), width=Inches(5.1), spacing=14)
+    add_callout(slide, "Exact re-evaluation of one TDA run per seed (caches do not depend on α). Val splits.")
+    set_notes(slide, f"""
+The TDA paper ablates its two caches for accuracy. We repeat that with calibration, on the val
+splits. CLIP alone has {r.num(r.val('clip_acc'))} percent accuracy and ECE {r.num(r.val('clip_ece'))}. The negative cache alone
+improves both. The positive cache brings accuracy, {r.num(r.val('pos_acc'))} percent, but its ECE is {r.num(r.val('pos_ece'))}. Full TDA ends
+at {r.num(r.val('tda_acc'))} and ECE {r.num(r.val('tda_ece'))}. The overconfidence comes from the positive cache.
+""")
+    return slide
+
+
+def slide_tda_overconfident(prs, r):
+    slide = new_slide(prs, "TDA's catch: more accuracy, worse calibration", kicker="3 · TDA\'s catch")
+    rows = []
+    for ds in CORE + ("mean",):
+        rows.append([NAMES.get(ds, "Mean"), r.num(r.main("clipzs", "accuracy", ds)), r.num(r.main("tda", "accuracy", ds)),
+                     r.num(r.main("clipzs", "ece", ds)), r.num(r.main("tda", "ece", ds))])
+    add_table(slide, ["dataset (test)", "CLIP acc.", "TDA acc.", "CLIP ECE", "TDA ECE"], rows, MARGIN, Inches(1.7),
+              Inches(7.4), col_widths=[2.0, 1.2, 1.2, 1.2, 1.2], row_height=Inches(0.48), font_size=17,
+              highlight_rows=(5,))
+    add_bullets(slide, [
+        "TDA gains accuracy on every dataset.",
+        "ECE rises on most, sharply on DTD, Flowers and Aircraft.",
+        "Pets is the exception: CLIP is underconfident there, and TDA's extra confidence happens to help.",
+    ], left=Inches(8.4), top=Inches(1.8), width=Inches(4.3), spacing=14)
+    add_callout(slide, "The benchmark (Illusion of Progress, NeurIPS'25) finds the same for TTA methods in general. "
+                "Our question: why, and can it be fixed at the source?")
+    seeds = r.num(r.pair("cal_tda_agree", "ece").n, 0)
+    set_notes(slide, f"""
+Per dataset, on the test splits with {seeds} stream orders. TDA gains accuracy everywhere, but the
+calibration error grows on most datasets; on DTD it goes from {r.num(r.main('clipzs', 'ece', 'dtd'))} to {r.num(r.main('tda', 'ece', 'dtd'))}.
+Pets is the exception: CLIP is underconfident on Pets and TDA's extra confidence happens to correct
+it. Keep Pets in mind, it will be the one dataset where our method is worse.
+""")
+    return slide
+
+
+# --- Diagnosis ---------------------------------------------------------------------------
+def slide_selfvote(prs, r):
+    slide = new_slide(prs, "Symptom: the self-vote", kicker="4 · Diagnosis · val")
+    v = r.d["val"][r.d["val"].dataset != "mean"]
+    lo, hi = r.num(v.self_vote_share.min(), 0), r.num(v.self_vote_share.max(), 0)
+    add_picture(slide, FIGURES / "paper_selfvote_val.png", MARGIN, Inches(1.55), CONTENT_W, Inches(3.5))
+    add_bullets(slide, [
+        "Write before read: an admitted image finds itself in the cache, with cosine 1 and vote exp(0) = 1, "
+        "for its own pseudo-label.",
+        f"Frequent ({lo}–{hi}% of the stream), and it makes the cache agree with CLIP almost always.",
+        f"Removing only the self term lowers TDA's val ECE from {r.num(r.val('tda_ece'))} to {r.num(r.val('noself_ece'))}. "
+        "But the self-vote is only the most visible part of a broader echo.",
+    ], top=Inches(5.15), spacing=6, size=SUB)
+    set_notes(slide, f"""
+The first symptom. Because each image is written before it is read, an admitted image votes for its
+own pseudo-label with weight exactly one. This carries no information about the true label. It
+happens for {lo} to {hi} percent of the stream on the val splits, and when it happens the cache almost
+always agrees with CLIP, left panel. Removing just that term lowers TDA's ECE from {r.num(r.val('tda_ece'))} to
+{r.num(r.val('noself_ece'))}, right panel. So the self-vote matters, but it is not the whole story.
+""")
+    return slide
+
+
+def slide_lemmas(prs, r):
+    slide = new_slide(prs, "Where the cache agrees with CLIP, it can only add confidence", kicker="4 · Diagnosis · proof")
+    add_panel(slide, MARGIN, Inches(1.6), CONTENT_W, Inches(2.25), fill=TINT_ACCENT, line=ACCENT)
+    add_text(slide, MARGIN + Inches(0.25), Inches(1.7), Inches(11.6), Inches(0.4),
+             [("Lemma (agreement). If argmax b = argmax c = ŷ, then", SUB, True, INK)])
+    add_equation(slide, r"o_{\hat y} - o_j = (b_{\hat y} - b_j) + \alpha\,(c_{\hat y} - c_j) \;\geq\; b_{\hat y} - b_j > 0",
+                 MARGIN, Inches(2.2), size=26, center_width=CONTENT_W)
+    add_text(slide, MARGIN + Inches(0.25), Inches(3.1), Inches(11.6), Inches(0.6),
+             [("so the decision is unchanged, every margin grows, and max softmax(o) ≥ max softmax(b).", SUB, False, INK)])
+    add_bullets(slide, [
+        "The gate tests argmax c = CLIP's top class; the lemma needs argmax c = argmax b. They differ only where the "
+        f"negative cache moved CLIP's top class: {r.num(r.val('agree_neg_moved'), 1)}% of agreeing val samples "
+        f"(TDA flips {r.num(r.val('agree_tda_flips'), 1)}%, with no net accuracy gain). Agreement mostly adds confidence.",
+        "No-flip region: if CLIP's top-2 logit gap exceeds αS + range(n), nothing in the cache can change the "
+        "decision (0 ≤ c ≤ S). Cf. MARC, arxiv.org/abs/2609.23409.",
+        "The cache is filled with CLIP's own argmax, so agreement is the common case: an echo.",
     ], top=Inches(4.1), spacing=10)
-    set_notes(slide, f"""
-Here is the loop TDA runs for every test image. First CLIP encodes the image and gives
-logits, a distribution, a pseudo-label which is just CLIP's argmax, and an entropy.
-
-Second, the write step: the image is offered to the positive cache under its pseudo-label,
-and, if its entropy is in a middle band, also to a negative cache.
-
-Third, the read step: both caches vote, weighted by similarity. Fourth, the prediction adds
-the positive votes and subtracts the negative ones.
-
-Three facts we verified in the code, because they are often stated wrongly. Every image is
-offered; the {cap} most confident per class are kept. Writing happens before reading, so an image
-can vote for itself. And the cache labels always come from raw CLIP, never from TDA's
-output, so there is no feedback loop of TDA reinforcing its own decisions.
+    set_notes(slide, """
+Now the formal argument. Let b be CLIP plus the negative cache. If the positive cache's top class is
+the same as b's top class, then every margin of the output is the margin of b plus alpha times a
+non-negative cache margin. So the decision cannot change, and the top probability can only increase.
+The gate checks agreement with CLIP's own top class, which differs from the lemma's condition only
+where the negative cache moved that top class, a small share of samples. So where the cache agrees it
+mostly adds confidence, and the accuracy gain comes from the samples where it disagrees. Since the
+cache is filled with CLIP's own labels, agreement is the common case: the cache echoes CLIP.
 """)
     return slide
 
 
-def slide_tda_write(prs, r):
-    slide = new_slide(prs, "Write rule: what enters the positive cache", kicker="2 · TDA in depth")
-    cap = r.num(r.c("dtd", "pos_capacity"), 0)
-    add_panel(slide, MARGIN, Inches(1.65), CONTENT_W, Inches(1.55))
-    add_equation(slide, r"\hat{y} = \arg\max_k z_k, \qquad H(x) = -\sum_k p_k \log p_k",
-                 MARGIN, Inches(1.75), size=24, center_width=CONTENT_W)
-    add_equation(slide, r"\mathcal{C}_{\hat{y}} \leftarrow \text{the } K \text{ lowest-}H"
-                 r"\text{ items of } \mathcal{C}_{\hat{y}} \cup \{(f(x), H(x))\}",
-                 MARGIN, Inches(2.45), size=24, center_width=CONTENT_W)
+def slide_agreement(prs, r):
+    slide = new_slide(prs, "The echo, measured: the gain is where the cache disagrees", kicker="4 · Diagnosis · val")
+    add_picture(slide, FIGURES / "paper_agreement_val.png", MARGIN, Inches(1.55), CONTENT_W, Inches(3.5))
+    share = r.num(r.val("agree_share"), 0)
     add_bullets(slide, [
-        f"K = {cap} per class. The key ŷ is CLIP's own guess, a pseudo-label: nothing checks it.",
-        "When the class is full, x replaces the least confident stored item only if x has lower entropy.",
-        "Early in the stream almost every image gets in, because classes are empty. Later an image must "
-        "beat its class's current least confident item.",
-        "Because write precedes read, an admitted x meets itself: cosine 1, vote exp(0) = 1, so its own "
-        "pseudo-label gets +α before anything else is counted.",
-    ], top=Inches(3.45), spacing=10)
-    add_text(slide, MARGIN, Inches(6.45), CONTENT_W, Inches(0.35), [
-        ("Code: online_method/tda.py, update_cache and adaptation_process.", SMALL, False, MUTED)])
+        f"Cache agrees with CLIP ({share}% of val samples): accuracy {r.num(r.val('base_acc_agree'))} → "
+        f"{r.num(r.val('tda_acc_agree'))}, gap {r.num(r.val('base_gap_agree'), 1, sign=True)} → {r.num(r.val('tda_gap_agree'), 1, sign=True)} points.",
+        f"Cache disagrees: accuracy {r.num(r.val('base_acc_disagree'))} → {r.num(r.val('tda_acc_disagree'))}, gap "
+        f"{r.num(r.val('base_gap_disagree'), 1, sign=True)} → {r.num(r.val('tda_gap_disagree'), 1, sign=True)}.",
+        "The echo's size is unrelated to CLIP's own calibration, so it overshoots except where CLIP was underconfident.",
+    ], top=Inches(5.15), spacing=6, size=SUB)
     set_notes(slide, f"""
-Now the write rule precisely. The pseudo-label is CLIP's argmax and the entropy is the
-usual Shannon entropy of CLIP's distribution. The cache for the predicted class keeps the
-{cap} lowest-entropy items it has seen.
-
-Two consequences matter. At the start of the stream, classes are empty, so almost anything
-gets in, including confident mistakes. Later, an image has to be more confident than the
-weakest item already stored for its class.
-
-And because the write happens before the read, an admitted image finds itself in the cache
-with cosine one. Its vote is exactly one, and its own pseudo-label gets plus alpha. That
-is a self-vote; keep it in mind for the calibration section.
+The lemma says what can happen; the data say how much. On the val splits the cache agrees with CLIP
+on {share} percent of the samples. There, the positive cache leaves accuracy essentially unchanged, but
+the confidence minus accuracy gap jumps from {r.num(r.val('base_gap_agree'), 1, sign=True)} to {r.num(r.val('tda_gap_agree'), 1, sign=True)} points. Where it disagrees,
+it carries the accuracy gain with a much smaller change in the gap. That points directly to
+the method: keep the disagreeing branch, drop the agreeing one.
 """)
     return slide
 
 
-def slide_tda_read(prs, r):
-    slide = new_slide(prs, "Read rule: cached images vote, weighted by similarity", kicker="2 · TDA in depth")
-    cap = r.num(r.c("dtd", "pos_capacity"), 0)
-    add_panel(slide, MARGIN, Inches(1.65), Inches(6.6), Inches(1.75))
-    add_equation(slide, r"c_k(x) = \sum_{i \in \mathcal{C}_k} \exp\!\left(-\beta\,(1 - f(x)^{\top} f_i)\right)",
-                 MARGIN, Inches(1.8), size=24, center_width=Inches(6.6))
-    add_equation(slide, r"z^{\mathrm{TDA}}_k = z_k + \alpha\, c_k(x) - \alpha_{\mathrm{neg}}\, n_k(x)",
-                 MARGIN, Inches(2.65), size=24, center_width=Inches(6.6))
+def slide_method(prs, r):
+    slide = new_slide(prs, "The agreement gate: use the cache only where it disagrees", kicker="4 · Method")
+    add_panel(slide, MARGIN, Inches(1.65), CONTENT_W, Inches(1.4), fill=TINT_ACCENT, line=ACCENT)
+    add_equation(slide, r"o(x) = b(x) + \alpha(x)\,c(x), \qquad \alpha(x) = \alpha\cdot\mathbf{1}\left[\arg\max_k c_k(x) \neq \hat y_0(x)\right]",
+                 MARGIN, Inches(1.95), size=28, center_width=CONTENT_W)
     add_bullets(slide, [
-        "Features are L2-normalized, so f(x)ᵀf_i is a cosine. Each vote lies in (0, 1]; "
-        "it equals 1 only for an identical feature.",
-        f"Hence 0 ≤ c_k ≤ {cap}. Classes with no cached item get no vote at all.",
-        "β sets how fast a vote fades as the images become less alike (right).",
-    ], top=Inches(3.65), width=Inches(6.6), spacing=10)
-    path = render_vote_figure(r, ASSETS / "vote_weight.png")
-    add_picture(slide, path, Inches(7.45), Inches(1.6), Inches(5.3), Inches(4.4))
-    add_text(slide, Inches(7.45), Inches(6.05), Inches(5.3), Inches(0.4), [
-        ("β per dataset as used in our runs (from the TDA run records).", SMALL, False, MUTED)],
-        align=PP_ALIGN.CENTER)
-    set_notes(slide, f"""
-The read rule. For each class, sum over its cached items an exponential of the cosine
-between the new image and the item. The exponent is minus beta times one minus the cosine,
-so an identical item gives exactly one, and less similar items give less.
-
-With at most {cap} items per class, a class's cache score is between zero and {cap}. Classes
-that have nothing cached get nothing.
-
-The final TDA logit is CLIP's logit, plus alpha times this score, minus a small negative
-cache term I will show in two slides.
-
-The plot shows the vote weight against cosine for each dataset's beta. A larger beta means
-only very similar cached images count.
+        "Caches, admission and the negative cache are TDA's, unchanged.",
+        "No parameter, no label, one argmax comparison per image; always on.",
+        "Removes the echo at its source instead of calibrating it afterwards.",
+        "Fixed on the val splits before any test, development or fresh result was computed.",
+        "An inference-time instance of “update only on disagreement” (Malach & Shalev-Shwartz, NeurIPS'17).",
+    ], top=Inches(3.35), spacing=12)
+    set_notes(slide, """
+The method follows directly. We keep everything in TDA, and only switch the positive cache off on
+samples where its top class agrees with CLIP's pseudo-label. There it could only inflate confidence.
+Where it disagrees, the cache is used exactly as in TDA. The rule has no parameter and needs no label;
+it costs one comparison per image. It was fixed on the val splits before we looked at any test,
+development or fresh results.
 """)
     return slide
 
 
-def slide_tda_alpha_beta(prs, r):
-    slide = new_slide(prs, "What α and β mean, and where their values come from", kicker="2 · TDA in depth")
+# --- Results ---------------------------------------------------------------------------------
+def slide_main(prs, r):
+    slide = new_slide(prs, "Main result: TDA's accuracy, half its ECE", kicker="5 · Results · test")
     rows = []
-    for d in DATASET_ORDER:
-        rows.append([DATASET_LABEL[d], r.num(r.c(d, "n_classes"), 0), r.num(r.c(d, "alpha"), 1),
-                     r.num(r.c(d, "beta"), 1), r.num(r.c(d, "vote_half_cos")),
-                     r.num(r.c(d, "overturn_log_odds"), 1)])
-    add_table(slide, ["Dataset", "Classes", "α", "β", "½-vote cos", "α·K"], rows,
-              MARGIN, Inches(1.65), Inches(7.4), col_widths=[1.4, 0.9, 0.7, 0.7, 1.5, 1.6], font_size=16,
-              row_height=Inches(0.44))
-    add_bullets(slide, [
-        "β (sharpness): how local the vote is. A vote is worth ½ at cos = 1 − ln 2 / β.",
-        "α (residual weight): logit units per full vote; α·K is the most the cache can shift a logit "
-        "difference (K = capacity).",
-    ], top=Inches(4.5), width=Inches(7.4), spacing=8)
-    add_panel(slide, Inches(8.35), Inches(1.65), Inches(4.38), Inches(4.4), fill=TINT_WARN, line=BASELINE)
-    add_text(slide, Inches(8.55), Inches(1.8), Inches(4.0), Inches(4.1), [
-        ("Provenance", SUB, True, WARN),
-        ("These per-dataset values come from TDA's official repository, not the paper. "
-         "How they were chosen is not stated; they may encode test-set information.", SUB, False, INK),
-        (f"The paper's single searched setting is α = {r.num(r.c('dtd', 'p2_alpha'), 0)}, "
-         f"β = {r.num(r.c('dtd', 'p2_beta'), 0)} (supp. Table 6).", SUB, False, INK),
-        ("We report both: P1 uses the repo values, P2 the single setting (Results).", SUB, True, INK),
-    ], spacing=8)
+    for ds in CORE + ("mean",):
+        rows.append([NAMES.get(ds, "Mean")] + [r.num(r.main(m, metric, ds)) for metric in ("accuracy", "ece")
+                                               for m in ("clipzs", "tda", "cal_tda_agree")])
+    add_table(slide, ["dataset", "CLIP", "TDA", "gate", "CLIP", "TDA", "gate"], rows, MARGIN, Inches(1.75),
+              Inches(8.0), col_widths=[1.8, 1, 1, 1, 1, 1, 1], row_height=Inches(0.46), font_size=17, highlight_rows=(5,))
+    add_text(slide, MARGIN, Inches(1.35), Inches(8.0), Inches(0.35),
+             [("                                   accuracy (%)                                      ECE (%)", SMALL, True, MUTED)])
+    pa, pe = r.pair("cal_tda_agree", "accuracy"), r.pair("cal_tda_agree", "ece")
+    n = r.num(pe.n, 0)
+    add_text(slide, Inches(9.0), Inches(1.8), Inches(3.7), Inches(4.2), [
+        (f"Gate − TDA, {n} seeds (t-interval)", SUB, True, ACCENT),
+        (f"accuracy {r.num(pa.mean_diff, sign=True)}  [{r.num(pa.ci90_lo, sign=True)}, {r.num(pa.ci90_hi, sign=True)}]", SUB, False, INK),
+        (f"ECE {r.num(pe.mean_diff, sign=True)}  [{r.num(pe.ci90_lo, sign=True)}, {r.num(pe.ci90_hi, sign=True)}]", SUB, True, INK),
+        (f"ECE lower on {r.num(pe.wins, 0)} of {n} seeds", SUB, False, INK),
+        ("Worse only on Pets (CLIP underconfident).", SUB, False, MUTED),
+    ], spacing=10)
     set_notes(slide, f"""
-What do alpha and beta mean? Beta is the sharpness: how local the nearest-neighbour vote is.
-A vote halves when the cosine drops to one minus log two over beta, the column in the
-middle. On EuroSAT, with beta {r.num(r.c('eurosat', 'beta'), 1)}, only images with cosine above {r.num(r.c('eurosat', 'vote_half_cos'))} count
-much; on Aircraft, with beta {r.num(r.c('aircraft', 'beta'), 1)}, the vote is much broader.
-
-Alpha is the weight of the cache against CLIP. The last column is the largest shift the
-positive cache can apply to a logit difference, alpha times the capacity. On EuroSAT that
-is {r.num(r.c('eurosat', 'overturn_log_odds'), 1)} logit units, which is a lot.
-
-Important for fairness: these values are per dataset and come from TDA's repository, with
-no stated procedure. The paper itself searched one setting, alpha {r.num(r.c('dtd', 'p2_alpha'), 0)}, beta {r.num(r.c('dtd', 'p2_beta'), 0)}. We
-will report results under both choices.
-""")
-    return slide
-
-
-def slide_tda_negative(prs, r):
-    slide = new_slide(prs, "Negative cache: penalize classes that confused similar images",
-                      kicker="2 · TDA in depth")
-    lo, hi = r.num(r.c("dtd", "band_lower"), 1), r.num(r.c("dtd", "band_upper"), 1)
-    pl = r.num(r.c("dtd", "mask_lower"))
-    a_neg = r.num(r.c("dtd", "neg_alpha"), 3)
-    b_neg = r.num(r.c("dtd", "neg_beta"), 1)
-    ncap = r.num(r.c("dtd", "neg_capacity"), 0)
-    add_panel(slide, MARGIN, Inches(1.65), CONTENT_W, Inches(1.6))
-    add_equation(slide, r"\mathrm{write\ if}\quad \tau_l < H(x)/\log_2 C < \tau_h"
-                 r"\qquad\mathrm{store}\ (f(x), H(x), p(x))",
-                 MARGIN, Inches(1.75), size=24, center_width=CONTENT_W)
-    add_equation(slide, r"n_k(x) = \sum_{j \in \mathcal{N}} \exp\!\left(-\beta_{\mathrm{neg}}(1 - f(x)^{\top} f_j)\right)"
-                 r"\;\mathbf{1}\!\left[p_{j,k} > p_l\right]",
-                 MARGIN, Inches(2.45), size=24, center_width=CONTENT_W)
-    add_bullets(slide, [
-        f"Written only for mid-entropy images: band τ_l = {lo}, τ_h = {hi}; {ncap} per pseudo-label; "
-        "stores the whole distribution p.",
-        f"Read: if x resembles an uncertain stored image, every class that image found plausible "
-        f"(p > {pl}) loses α_neg·vote, with α_neg = {a_neg}, β_neg = {b_neg}, fixed on all datasets.",
-        "Effect: a small damping among confusable classes. It is a correction on CLIP's side; "
-        "none of our changes touch it.",
-        "The paper's equations contain a double negative; the code masks p > p_l and subtracts. "
-        "We follow the code.",
-    ], top=Inches(3.5), spacing=8)
-    set_notes(slide, f"""
-TDA has a second cache. It stores images whose normalized entropy falls in a middle band,
-between {lo} and {hi}: uncertain, but not hopeless. It stores the whole distribution of each.
-
-At read time, if the new image resembles one of these uncertain images, every class that
-the stored image found plausible, with probability above {pl}, gets a penalty of {a_neg} times the
-vote. It is a small damping term among confusable classes.
-
-Two notes. The paper's equation has a double negative; we follow the code, which masks
-probabilities above the threshold and subtracts. And none of our changes touch this cache:
-it stays on CLIP's side in every variant.
-""")
-    return slide
-
-
-def slide_tda_poe(prs, r):
-    slide = new_slide(prs, "Final logits are a normalized product of experts", kicker="2 · TDA in depth")
-    add_panel(slide, MARGIN, Inches(1.65), CONTENT_W, Inches(1.75))
-    add_equation(slide, r"\mathrm{softmax}(z + \alpha c)_k \;=\; \frac{p_k\; q_k^{\,\alpha}}{\sum_j\, p_j\; q_j^{\,\alpha}},"
-                 r"\qquad p = \mathrm{softmax}(z),\quad q = \mathrm{softmax}(c)",
-                 MARGIN, Inches(1.75), size=30, center_width=CONTENT_W)
-    add_text(slide, MARGIN, Inches(2.85), CONTENT_W, Inches(0.4), [
-        ("because e^(z_k + α c_k) = e^(z_k) · (e^(c_k))^α and the normalizers of p and q cancel; "
-         "z already includes the negative-cache term", SMALL, False, MUTED)], align=PP_ALIGN.CENTER)
-    alpha = float(r.c("dtd", "p2_alpha"))
-    p, q = ILLUSTRATIVE["toy_p"], ILLUSTRATIVE["toy_q_agree"]
-    prod = product_of_experts(p, q, alpha)
-    mix = mixture(p, q)
-    rows = [[f"class {i + 1}", r.illus(p[i]), r.illus(q[i]), r.illus(prod[i]), r.illus(mix[i])] for i in range(3)]
-    add_table(slide, ["Illustrative", "CLIP p", "cache q", f"TDA  p·q^α  (α = {r.num(alpha, 0)})", "50/50 mixture"],
-              rows, MARGIN, Inches(3.65), Inches(7.2), col_widths=[1.3, 1.0, 1.0, 1.9, 1.4], font_size=16,
-              highlight_rows=(0,), row_height=Inches(0.44))
-    add_bullets(slide, [
-        "Experts multiply: where CLIP and the cache agree, the product is sharper than either.",
-        f"Both say {r.illus(p[0])}; TDA says {r.illus(prod[0])}.",
-        "The cache is built from CLIP's own guesses, so agreement is the common case.",
-    ], left=Inches(8.15), top=Inches(3.6), width=Inches(4.6), spacing=8)
-    set_notes(slide, f"""
-This slide is the key to the whole talk. Adding alpha times the cache score to the logits
-and then taking a softmax is exactly the same as multiplying CLIP's distribution by the
-cache's distribution raised to the power alpha, and renormalizing. The two softmax
-normalizers simply cancel. That is called a normalized product of experts.
-
-Products of experts have a well-known property: when the experts agree, the result is
-sharper than either. In this illustrative example, CLIP and the cache both give the top
-class {r.illus(p[0])}. TDA, with alpha {r.num(alpha, 0)}, reports {r.illus(prod[0])}. A simple average of the two would stay at
-{r.illus(mix[0])}.
-
-And because the cache is filled with CLIP's own guesses, agreement is the normal case, also
-when CLIP is wrong. Remember the right-hand column; it is our second change.
-""")
-    return slide
-
-
-def _worked_example(r):
-    """The worked example's numbers: Pets' alpha/beta from data, illustrative cosines."""
-    scale = r.litv("clip_logit_scale")
-    alpha, beta = float(r.c("pets", "alpha")), float(r.c("pets", "beta"))
-    z = [scale * c for c in ILLUSTRATIVE["we_text_cos"]]
-    p = softmax(z)
-    votes_other = [sum(math.exp(-beta * (1 - c)) for c in cs) for cs in ILLUSTRATIVE["we_cache_cos"]]
-    pred = max(range(3), key=lambda k: z[k])
-    votes = list(votes_other)
-    votes[pred] += 1.0          # the self-vote: x was written before it is read
-    z_tda = [zk + alpha * ck for zk, ck in zip(z, votes)]
-    z_noself = [zk + alpha * ck for zk, ck in zip(z, votes_other)]
-    return dict(scale=scale, alpha=alpha, beta=beta, z=z, p=p, votes=votes, z_tda=z_tda,
-                p_tda=softmax(z_tda), p_noself=softmax(z_noself), pred=pred)
-
-
-def slide_tda_example(prs, r):
-    slide = new_slide(prs, "Worked example: one Pets image through TDA (illustrative)", kicker="2 · TDA in depth")
-    w = _worked_example(r)
-    names = ILLUSTRATIVE["we_classes"]
-    rows = []
-    for k in range(3):
-        cos_items = ILLUSTRATIVE["we_cache_cos"][k]
-        cached = ", ".join(r.illus(c) for c in cos_items) if cos_items else "—"
-        if k == w["pred"]:
-            cached = (cached + " + itself (cos " + r.illus(1.0) + ")") if cos_items else "itself"
-        rows.append([names[k], r.illus(w["z"][k], 1), r.illus(w["p"][k]), cached, r.illus(w["votes"][k]),
-                     r.illus(w["z_tda"][k], 1), r.illus(w["p_tda"][k])])
-    add_table(slide, ["Class", "CLIP z", "CLIP p", "cached items (cos to x)", "votes c", "z + α c", "TDA p"],
-              rows, MARGIN, Inches(1.65), CONTENT_W, col_widths=[1.2, 0.9, 0.9, 3.0, 1.0, 1.1, 1.0],
-              font_size=16, row_height=Inches(0.46), highlight_rows=(w["pred"],))
-    add_bullets(slide, [
-        f"Illustrative cosines; α = {r.num(w['alpha'], 1)}, β = {r.num(w['beta'], 1)} are Pets' values "
-        f"and s = {r.num(w['scale'], 0)}. Negative cache omitted.",
-        f"CLIP: {r.illus(w['p'][w['pred']])} on {names[w['pred']]}. The image is written under that "
-        f"pseudo-label first, so it votes for itself.",
-        f"TDA: {r.illus(w['p_tda'][w['pred']])}; without the self-vote, {r.illus(w['p_noself'][w['pred']])}. "
-        f"The self-vote is {r.illus(100 / w['votes'][w['pred']], 0)}% of {names[w['pred']]}'s cache score.",
-        "Nothing here depends on whether Birman is the right answer.",
-    ], top=Inches(3.75), spacing=8)
-    set_notes(slide, f"""
-Let me put numbers on it, with an illustrative Pets image. Three candidate breeds. CLIP's
-cosines give logits about one point apart, and CLIP says {names[w['pred']]} with {r.illus(w['p'][w['pred']])}.
-
-The cache already holds two {names[0]} images and one {names[1]}. Because the image is written before
-it is read, it is also in the {names[w['pred']]} slot itself, with cosine one and vote one. With Pets'
-alpha {r.num(w['alpha'], 1)} and beta {r.num(w['beta'], 1)}, the {names[0]} logit rises by alpha times its votes.
-
-TDA's confidence becomes {r.illus(w['p_tda'][w['pred']])}. Without the self-vote it would have been {r.illus(w['p_noself'][w['pred']])}. In logit terms the
-self-vote is {r.illus(100 / w['votes'][w['pred']], 0)} percent of the {names[w['pred']]} cache score: a large part of the boost is the image
-agreeing with itself. And nothing in this computation knows whether
-{names[w['pred']]} is right. That is the mechanism of overconfidence, in miniature.
-""")
-    return slide
-
-
-def slide_tda_gains(prs, r):
-    slide = new_slide(prs, "What TDA buys: accuracy over zero-shot CLIP", kicker="2 · TDA in depth")
-    rows = []
-    for d in DATASET_ORDER:
-        clip, tda = r.s(d, "clipzs", "accuracy"), r.s(d, "tda", "accuracy")
-        rows.append([DATASET_LABEL[d], r.num(r.c(d, "n_classes"), 0), r.num(r.c(d, "n_samples"), comma=True),
-                     r.num(clip), r.num(tda), r.num(tda - clip, sign=True)])
-    clip_m, tda_m = r.s_mean("clipzs", "accuracy"), r.s_mean("tda", "accuracy")
-    rows.append(["Mean", "", r.num(r.total_images(), comma=True), r.num(clip_m), r.num(tda_m),
-                 r.num(tda_m - clip_m, sign=True)])
-    add_table(slide, ["Dataset", "Classes", "Test images", "CLIP top-1 (%)", "TDA top-1 (%)", "Gain"], rows,
-              MARGIN, Inches(1.65), Inches(8.0), col_widths=[1.5, 1.0, 1.3, 1.4, 1.4, 1.0], font_size=16,
-              row_height=Inches(0.45), highlight_rows=(5,))
-    gains = {d: r.s(d, "tda", "accuracy") - r.s(d, "clipzs", "accuracy") for d in DATASET_ORDER}
-    best, worst = max(gains, key=gains.get), min(gains, key=gains.get)
-    n_pos = sum(g > 0 for g in gains.values())
-    add_bullets(slide, [
-        f"TDA gains on {r.num(n_pos, 0)} of {r.num(len(gains), 0)} datasets.",
-        f"Most on {DATASET_LABEL[best]} ({r.num(gains[best], sign=True)}): {r.num(r.c(best, 'n_classes'), 0)} classes "
-        f"and the largest α.",
-        f"Least on {DATASET_LABEL[worst]} ({r.num(gains[worst], sign=True)}): CLIP is right only "
-        f"{r.num(r.s(worst, 'clipzs', 'accuracy'), 1)}% of the time, so most pseudo-labels are wrong.",
-    ], left=Inches(8.95), top=Inches(1.7), width=Inches(3.8), spacing=12)
-    add_text(slide, MARGIN, Inches(5.0), Inches(8.0), Inches(0.8), [
-        ("P1 hyperparameters (TDA's per-dataset α/β), ViT-B/16, seed 0, CoOp test splits. "
-         "Source: results/summary.csv.", SMALL, False, MUTED)])
-    add_callout(slide, "TDA's accuracy gain is real but uneven. Next: what it costs in calibration.",
-                top=Inches(6.05))
-    set_notes(slide, f"""
-Before any criticism, what TDA achieves. On all five datasets TDA is more accurate than
-zero-shot CLIP, on average from {r.num(clip_m)} to {r.num(tda_m)} percent.
-
-The gain is very uneven. On {DATASET_LABEL[best]} it is {r.num(gains[best])} points; there are only {r.num(r.c(best, 'n_classes'), 0)} classes, so each
-class's cache fills quickly, and the repository's alpha is the largest. On {DATASET_LABEL[worst]} it is only
-{r.num(gains[worst])} points: CLIP is right only about a quarter of the time there, so most cached
-pseudo-labels are wrong.
-
-These are protocol P1 numbers, with TDA's per-dataset hyperparameters, single seed.
-""")
-    return slide
-
-
-def slide_tda_gain_source(prs, r):
-    slide = new_slide(prs, "Where TDA's gain comes from: overturning CLIP's top choice", kicker="2 · TDA in depth")
-    add_panel(slide, MARGIN, Inches(1.65), Inches(6.5), Inches(1.3))
-    add_equation(slide, r"\mathrm{class\ 2\ overtakes\ class\ 1}\ \Leftrightarrow\ \log\frac{p_1}{p_2} < \alpha\,(c_2 - c_1)\ \leq\ \alpha K",
-                 MARGIN, Inches(1.8), size=26, center_width=Inches(6.5))
-    rows = [[DATASET_LABEL[d], r.num(r.c(d, "alpha"), 1), r.num(r.c(d, "overturn_log_odds"), 1),
-             r.num(r.c(d, "overturn_odds"), comma=True) + " : 1"] for d in DATASET_ORDER]
-    add_table(slide, ["Dataset", "α", "α·K", "max CLIP odds overturned"], rows, MARGIN, Inches(3.1),
-              Inches(6.5), col_widths=[1.4, 0.7, 0.8, 2.6], font_size=16, row_height=Inches(0.4))
-    add_text(slide, MARGIN, Inches(5.6), Inches(6.5), Inches(0.5), [
-        ("p from CLIP (with negative cache); K = capacity. Accuracy changes only where the argmax flips.",
-         SMALL, False, MUTED)])
-    add_placeholder(slide, Inches(7.45), Inches(1.65), Inches(5.28), Inches(4.25), "A2",
-                    "argmax flips vs CLIP's top-2 gap",
-                    "Per dataset: how many predictions TDA flips, how many wrong→right vs right→wrong, "
-                    "histogrammed by CLIP's top-2 probability gap. Tests whether the gain lives on near-ties.")
-    add_callout(slide, "Hypothesis to test: TDA's gain is concentrated where CLIP is torn between two classes.",
-                top=Inches(6.15))
-    set_notes(slide, f"""
-Accuracy changes only when TDA flips CLIP's argmax. A flip from class one to class two
-happens exactly when CLIP's log-odds between them is smaller than alpha times the cache's
-preference for class two. Since each class's cache score is at most the capacity, there is
-a hard limit on how confident a CLIP decision can be overturned.
-
-The table shows that limit. With alpha {r.num(r.c('dtd', 'alpha'), 1)}, the cache can overturn CLIP decisions up to odds of
-about {r.num(r.c('dtd', 'overturn_odds'), comma=True)} to one. On EuroSAT, with alpha {r.num(r.c('eurosat', 'alpha'), 1)}, essentially any decision can be overturned.
-
-What we do not know yet is where the flips actually happen. Evidence A2 will histogram
-flips by CLIP's top-two gap. Our hypothesis, which the gate relies on, is that the useful
-flips are concentrated on near-ties.
-""")
-    return slide
-
-
-# --- Calibration section ---------------------------------------------------------------
-def slide_ece(prs, r):
-    slide = new_slide(prs, "Confidence, calibration and ECE", kicker="3 · Calibration")
-    bins = r.num(r.n_bins(), 0)
-    add_panel(slide, MARGIN, Inches(1.65), Inches(7.5), Inches(1.95))
-    add_equation(slide, r"\mathrm{ECE} = \sum_{b=1}^{B} \frac{n_b}{N}\,\left|\,\mathrm{acc}(b) - \mathrm{conf}(b)\,\right|",
-                 MARGIN, Inches(1.7), size=24, center_width=Inches(7.5))
-    add_equation(slide, r"\mathrm{gap} = \overline{\mathrm{conf}} - \mathrm{acc},\qquad \mathrm{ECE} \geq |\mathrm{gap}|",
-                 MARGIN, Inches(2.9), size=24, center_width=Inches(7.5))
-    add_bullets(slide, [
-        "Confidence = probability of the predicted class (top-label).",
-        "Calibrated: among predictions made with confidence c, a fraction c is correct.",
-        f"ECE: sort predictions into B = {bins} equal-width confidence bins; average |accuracy − mean "
-        "confidence| per bin, weighted by bin size.",
-        "Gap > 0: overconfident; gap < 0: underconfident. ECE ≈ |gap| means every bin errs the "
-        "same way: a uniform shift.",
-    ], top=Inches(3.8), width=Inches(7.5), spacing=6)
-    path = render_calibration_figure(ASSETS / "what_is_calibration.png")
-    add_picture(slide, path, Inches(8.4), Inches(1.6), Inches(4.35), Inches(4.2))
-    add_text(slide, Inches(8.4), Inches(5.85), Inches(4.35), Inches(0.4), [
-        ("Illustrative reliability diagram (synthetic curves).", SMALL, False, MUTED)], align=PP_ALIGN.CENTER)
-    set_notes(slide, f"""
-Now calibration. The confidence of a prediction is the probability of the predicted class.
-A model is calibrated if, among all predictions it makes with, say, seventy percent
-confidence, seventy percent are correct.
-
-Expected calibration error measures the violation. We sort predictions into {bins} equal-width
-bins by confidence, take the absolute difference between accuracy and mean confidence in
-each bin, and average with bin sizes as weights. We use top-label ECE throughout.
-
-We will also use a simpler number, the gap: mean confidence minus accuracy. By the triangle
-inequality ECE is at least the absolute gap. When the two are almost equal, every bin errs
-in the same direction, which means the miscalibration is a uniform shift. That observation
-will motivate our temperature change.
-
-The diagram on the right is a synthetic reliability diagram: the diagonal is perfect
-calibration, a curve below it is overconfident, and ECE averages the vertical gaps.
-""")
-    return slide
-
-
-def slide_why_calibration(prs, r):
-    slide = new_slide(prs, "Why calibration matters", kicker="3 · Calibration")
-    fg_c, fg_t = r.num(r.litv("illusion_rn50_finegrained_clip_ece")), r.num(r.litv("illusion_rn50_finegrained_tda_ece"))
-    all_c, all_t = r.num(r.litv("illusion_rn50_all_clip_ece")), r.num(r.litv("illusion_rn50_all_tda_ece"))
-    add_bullets(slide, [
-        "Decisions use the confidence: accept automatically above a threshold, abstain or ask a human "
-        "below it.",
-        (1, "Overconfident: wrong answers pass the filter. Underconfident: right answers are needlessly deferred."),
-        "In online TTA the confidence also steers the method itself: TDA's cache keeps its most "
-        "confident images.",
-        "Accuracy alone hides this: two models with equal accuracy can be very differently trustworthy.",
-    ], width=Inches(7.0), spacing=10)
-    add_panel(slide, Inches(7.95), Inches(1.65), Inches(4.78), Inches(4.3), fill=TINT_WARN, line=BASELINE)
-    add_text(slide, Inches(8.15), Inches(1.8), Inches(4.4), Inches(4.05), [
-        ("The Illusion of Progress? (NeurIPS'25)", SUB, True, WARN),
-        ("A benchmark of TTA for vision-language models: accuracy gains often come with worse "
-         "calibration.", SUB, False, INK),
-        ([("TDA, ResNet-50, fine-grained average ECE: ", SUB, False, INK),
-          (f"{fg_c} → {fg_t}", SUB, True, WARN)]),
-        ([("All datasets: ", SUB, False, INK), (f"{all_c} → {all_t}", SUB, True, WARN),
-          ("  (CLIP → TDA, Table 7)", SUB, False, INK)]),
-        ("ECE is reported only for ResNet-50; our ViT-B/16 ECE has no published counterpart.",
-         SUB, False, MUTED),
-    ], spacing=8)
-    set_notes(slide, f"""
-Why should anyone care about calibration? Because the confidence is what downstream
-decisions use. A typical system accepts confident predictions automatically and sends the
-rest to a human. If the model is overconfident, wrong answers slip through; if it is
-underconfident, good answers are wasted on human review.
-
-In online test-time adaptation there is a second reason: the confidence also steers the
-method. TDA's cache keeps the most confident images, so miscalibration changes what it
-remembers.
-
-The benchmark we build on measured exactly this. For TDA with a ResNet-50 backbone, the
-average ECE over the fine-grained datasets goes from {fg_c} for CLIP to {fg_t}, and over all
-datasets from {all_c} to {all_t}. They report ECE only for ResNet-50, so our ViT-B/16 numbers,
-coming next, have no published counterpart.
-""")
-    return slide
-
-
-def slide_clip_vs_tda_cal(prs, r):
-    slide = new_slide(prs, "CLIP vs TDA: accuracy, confidence and ECE per dataset", kicker="3 · Calibration")
-    rows = []
-    for d in DATASET_ORDER:
-        rows.append([DATASET_LABEL[d]] + [r.num(r.r("headline", d, m, col)) for m in ("clipzs", "tda")
-                                          for col in ("accuracy", "mean_confidence", "ece")]
-                    + [r.num(r.r("headline", d, "tda", "gap"), sign=True)])
-    rows.append(["Mean"] + [r.num(r.r_mean("headline", m, col)) for m in ("clipzs", "tda")
-                            for col in ("accuracy", "mean_confidence", "ece")]
-                + [r.num(r.r_mean("headline", "tda", "gap"), sign=True)])
-    add_table(slide, ["Dataset", "CLIP acc", "CLIP conf", "CLIP ECE", "TDA acc", "TDA conf", "TDA ECE", "TDA gap"],
-              rows, MARGIN, Inches(1.65), CONTENT_W, col_widths=[1.5, 1, 1, 1, 1, 1, 1, 1], font_size=16,
-              row_height=Inches(0.42), highlight_rows=(5,))
-    over = [d for d in DATASET_ORDER if r.r("headline", d, "tda", "gap") > 0]
-    under = [d for d in DATASET_ORDER if d not in over]
-    rise = r.s_mean("tda", "ece") - r.s_mean("clipzs", "ece")
-    add_bullets(slide, [
-        f"TDA is overconfident on {r.num(len(over), 0)} of {r.num(len(DATASET_ORDER), 0)} datasets, and there its ECE is "
-        "almost exactly its gap: a near-uniform upward shift of confidence.",
-        f"{', '.join(DATASET_LABEL[d] for d in under)}: CLIP is underconfident "
-        f"(gap {r.num(r.r('headline', under[0], 'clipzs', 'gap'), sign=True)}), and TDA's shift happens to land "
-        "near calibration.",
-    ], top=Inches(5.2), spacing=6)
-    add_text(slide, MARGIN, Inches(4.75), CONTENT_W, Inches(0.35), [
-        (f"All in %. conf = mean top-1 confidence; gap = conf − acc. Mean ECE rises by "
-         f"{r.num(rise)} points. Source: results/analysis/reliability_stats.csv (evidence A1, seed 0).",
-         SMALL, False, MUTED)])
-    set_notes(slide, f"""
-Here are our own numbers, which is evidence A1, computed from the per-bin data in the run
-records. For each dataset: accuracy, mean confidence and ECE for CLIP and for TDA, and
-TDA's gap.
-
-TDA raises mean ECE from {r.num(r.s_mean('clipzs', 'ece'))} to {r.num(r.s_mean('tda', 'ece'))}. On {r.num(len(over), 0)} of the five datasets TDA is overconfident, and
-look at the last two columns: the ECE is almost exactly the gap. On DTD, ECE {r.num(r.r('headline', 'dtd', 'tda', 'ece'))}, gap
-{r.num(r.r('headline', 'dtd', 'tda', 'gap'))}. So TDA shifts confidence up nearly uniformly.
-
-Pets is the exception. There CLIP itself is underconfident, and TDA's upward shift happens
-to land close to calibration. Keep Pets in mind; it behaves differently in every change.
+The main result on the five test sets, {n} stream orders. The gate keeps TDA's accuracy, a difference
+of {r.num(pa.mean_diff, sign=True)} points, and lowers ECE by {r.num(-pe.mean_diff)} points, on every seed. Its mean ECE,
+{r.num(r.main('cal_tda_agree', 'ece'))}, is below CLIP's {r.num(r.main('clipzs', 'ece'))}. It is far better than TDA on DTD, Flowers, EuroSAT and Aircraft, and
+worse on Pets, where, as we saw, CLIP is underconfident and the echo happened to help.
 """)
     return slide
 
 
 def slide_reliability(prs, r):
-    slide = new_slide(prs, "Reliability diagrams: TDA moves the curve below the diagonal", kicker="3 · Calibration")
-    w = Inches(2.38)
-    gap = (CONTENT_W - 5 * w) / 4
-    for index, d in enumerate(DATASET_ORDER):
-        add_picture(slide, FIGURES / f"deck_reliability_{d}.png", MARGIN + index * (w + gap), Inches(1.7), w, w)
-    add_text(slide, MARGIN, Inches(4.2), CONTENT_W, Inches(0.45), [[
-        ("●  CLIP zero-shot", SUB, True, CLIPBLUE), ("        ■  TDA", SUB, True, BASELINE),
-        ("        - - -  perfect calibration", SUB, False, MUTED)]], align=PP_ALIGN.CENTER)
+    slide = new_slide(prs, "Reliability: the gate stays near the diagonal", kicker="5 · Results · test")
+    add_picture(slide, FIGURES / "story_reliability_test.png", MARGIN, Inches(1.7), CONTENT_W, Inches(3.4))
     add_bullets(slide, [
-        "Below the diagonal = accuracy lower than the confidence claimed.",
-        "On DTD, EuroSAT and Aircraft, TDA's whole curve drops below CLIP's: confidence went up in "
-        "every bin, accuracy did not follow.",
-        "On Pets, CLIP sits above the diagonal (underconfident); TDA moves it onto the diagonal.",
-    ], top=Inches(4.8), spacing=6)
+        "Below the diagonal = overconfident. TDA (red) sits below it in most confident bins.",
+        "The gate (green) tracks CLIP's curve where the cache agreed, and TDA's accuracy gain where it disagreed.",
+    ], top=Inches(5.3), spacing=8)
     set_notes(slide, """
-The same story as reliability diagrams, one per dataset. The dashed diagonal is perfect
-calibration. Blue is CLIP, orange is TDA. Points below the diagonal mean the model claims
-more confidence than its accuracy supports.
-
-On DTD, EuroSAT and Aircraft, TDA's curve is below CLIP's across the whole range: it pushes
-confidence up everywhere, and accuracy does not keep pace. On Pets, CLIP's curve is above
-the diagonal, and TDA's upward push brings it onto the line.
-
-So TDA does not make a few wild mistakes; it inflates confidence across the board. The next
-slide explains where that inflation comes from.
+Reliability diagrams on the five test sets, all seeds pooled, ten bins. Points below the diagonal
+are overconfident. TDA, in red, sits below the diagonal in the confident bins on most datasets. The
+gate, in green, follows CLIP's calibration where the cache agreed with CLIP and keeps TDA's corrected
+decisions where it disagreed. Pets is the one panel where TDA's curve is closer to the diagonal.
 """)
     return slide
 
 
-def slide_anatomy(prs, r):
-    slide = new_slide(prs, "Anatomy of TDA's overconfidence", kicker="3 · Calibration")
-    add_bullets(slide, [
-        "Self-vote: write precedes read, so an admitted image adds +α to its own pseudo-label.",
-        "Product of experts: the cache holds CLIP's own guesses, so it mostly agrees with CLIP, "
-        "and agreement multiplies.",
-        "Persistent wrong labels: a confidently wrong cached image votes for its wrong class on every "
-        "similar later image.",
-        "None depends on correctness; all raise confidence.",
-    ], width=Inches(6.6), size=SUB, spacing=8)
-    pairs = ", ".join(f"{DATASET_LABEL[d]} {r.num(r.r('headline', d, 'tda', 'ece'), 1)} vs "
-                      f"{r.num(r.r('headline', d, 'tda', 'gap'), 1)}" for d in ("dtd", "eurosat", "aircraft"))
-    add_text(slide, MARGIN, Inches(5.2), Inches(6.6), Inches(0.85), [
-        ("Measured so far, TDA's ECE vs gap: " + pairs + ".", SUB, False, INK)])
-    add_placeholder(slide, Inches(7.5), Inches(1.65), Inches(5.23), Inches(2.1), "A3",
-                    "self-vote share and cache purity, feature replay",
-                    "Over the stream: share of TDA's confidence lift due to self-votes; fraction of "
-                    "cached items with a wrong pseudo-label; class coverage.")
-    add_placeholder(slide, Inches(7.5), Inches(3.95), Inches(5.23), Inches(2.15), "A4",
-                    "one poisoned cached item",
-                    "A wrongly pseudo-labeled cached image, the later images it pulled, and CLIP's vs "
-                    "the cache's logit contribution for each.")
-    add_callout(slide, "Diagnosis: the cache adds confidence regardless of correctness. Each of our changes "
-                "targets one of these links.", top=Inches(6.22))
-    set_notes(slide, f"""
-Now, after the full walkthrough, the weaknesses. Three mechanisms inflate TDA's confidence.
-
-First, the self-vote we saw: an admitted image votes for its own pseudo-label before it is
-classified.
-
-Second, the product of experts: the cache is made of CLIP's own guesses, so it tends to
-agree with CLIP, and agreement multiplies.
-
-Third, a confidently wrong image stays in the cache under the wrong label and keeps voting
-for it, until it is displaced by an even more confident image of the same predicted class.
-
-None of these depends on whether the prediction is correct. What we already see in the
-data is that TDA's ECE equals its gap, for example {pairs}.
-What we will add, boxes A3 and A4, is the direct evidence: how much of the lift is
-self-votes, how pure the cache is, and a concrete poisoned item with the images it pulled.
-""")
-    return slide
+COMPARISON = (("TDA", "TDA (reference)"), ("agreement gate", "agreement gate (ours)"),
+              ("read-first TDA", "read-before-write TDA"), ("TDA + T (val)", "TDA + temperature (val, labels)"),
+              ("TDA + ZAEC", "TDA + ZAEC (post-hoc)"), ("gate + ZAEC", "gate + ZAEC"),
+              ("DMN-weak", "DMN-weak"), ("ECALP", "ECALP"))
 
 
-# --- Proposal -------------------------------------------------------------------------------
-def slide_proposal(prs, r):
-    slide = new_slide(prs, "Our proposal: four training-free changes, one link each", kicker="4 · Our proposal")
-    tau = r.num(r.margin_cfg["margin_threshold"], 1)
-    wgt = r.num(r.gate_cfg["fusion_weight"], 1)
-    rows = [
-        ["1  Margin admission", "what enters the cache", f"admit only if CLIP's top-2 logit margin > {tau}",
-         "dropped (negative result)"],
-        ["2  Probabilistic fusion", "how cache and CLIP combine",
-         f"mixture (1 − w)·p + w·q, w = {wgt}, instead of the product", "fails alone: underconfident"],
-        ["3  Gated fusion", "when the cache is consulted", "mixture only on two-way ties, CLIP elsewhere",
-         "recommended"],
-        ["4  LOO temperature", "the final scale", "T ≥ 1 matched to a label-free accuracy estimate",
-         "helps alone, does not stack"],
-    ]
-    colors = {(0, 3): WARN, (1, 3): WARN, (2, 3): GOOD, (3, 3): BASELINE}
-    add_table(slide, ["Change", "Targets", "Idea", "Outcome"], rows, MARGIN, Inches(1.7), CONTENT_W,
-              col_widths=[2.2, 2.1, 4.4, 2.3], font_size=16, row_height=Inches(0.62), align=PP_ALIGN.LEFT,
-              bold_first_col=True, cell_colors=colors)
-    add_bullets(slide, [
-        "Same constraints as TDA: no labels, no backprop, one pass; the encoders and the negative cache are untouched.",
-        "Each change is measured alone against “none” = TDA run through our code with all four "
-        "changes switched off, in the same sweep and seed.",
-        "Every knob was fixed before the runs, except one choice among fusion variants (disclosed later).",
-    ], top=Inches(4.95), spacing=6, size=SUB)
-    set_notes(slide, f"""
-Our proposal: four small changes, each aimed at one link of the diagnosis. Margin admission
-changes what enters the cache. Probabilistic fusion changes how the cache and CLIP are
-combined: a mixture instead of a product. Gated fusion changes when the cache is consulted
-at all. And the leave-one-out temperature rescales the final confidence.
-
-The right column gives away the ending: the first is a negative result, the second fails on
-its own but leads to the third, which is our recommendation, and the fourth helps alone but
-does not combine with the third.
-
-Every change is measured on its own against the same baseline, which we call "none": TDA run
-through our code with every change switched off, in the same sweep. Our knobs were fixed
-before running, with one exception about the gate that I will disclose.
-""")
-    return slide
-
-
-def slide_margin(prs, r):
-    slide = new_slide(prs, "Change 1 · Margin admission: a negative result", kicker="4 · Our proposal")
-    tau = r.num(r.margin_cfg["margin_threshold"], 1)
+def slide_comparison(prs, r):
+    slide = new_slide(prs, "Against calibration fixes and other memory methods", kicker="5 · Results · test")
     rows = []
-    for d in DATASET_ORDER:
-        rows.append([DATASET_LABEL[d], r.num(r.admission[d], 1) + "%",
-                     r.num(r.v(d, "none", "accuracy")), r.num(r.v(d, "margin", "accuracy")),
-                     r.num(r.r("ablation", d, "none", "gap"), 1, sign=True),
-                     r.num(r.r("ablation", d, "margin", "gap"), 1, sign=True),
-                     r.num(r.v(d, "none", "ece")), r.num(r.v(d, "margin", "ece"))])
-    rows.append(["Mean", r.num(sum(r.admission.values()) / len(r.admission), 1) + "%",
-                 r.num(r.v_mean("none", "accuracy")), r.num(r.v_mean("margin", "accuracy")),
-                 r.num(r.r_mean("ablation", "none", "gap"), 1, sign=True),
-                 r.num(r.r_mean("ablation", "margin", "gap"), 1, sign=True),
-                 r.num(r.v_mean("none", "ece")), r.num(r.v_mean("margin", "ece"))])
-    add_text(slide, MARGIN, Inches(1.6), CONTENT_W, Inches(0.75), [
-        [("Motive: ", SUB, True, ACCENT), ("TDA lets every image compete for the cache, confident mistakes included.  ",
-                                           SUB, False, INK),
-         ("Why it should work: ", SUB, True, ACCENT),
-         (f"a large top-2 logit margin m = z(1) − z(2) > {tau} should keep out ambiguous images.", SUB, False, INK)]])
-    add_table(slide, ["Dataset", "admitted", "acc: none", "margin", "gap: none", "margin", "ECE: none",
-                      "margin"], rows, MARGIN, Inches(2.45), Inches(8.1),
-              col_widths=[1.35, 1.05, 1.05, 0.9, 1.05, 0.9, 1.05, 0.9], font_size=14, row_height=Inches(0.36),
-              highlight_rows=(5,))
-    low = min(r.admission, key=r.admission.get)
-    high = max(r.admission, key=r.admission.get)
-    all_worse = all(r.v(d, "margin", "accuracy") < r.v(d, "none", "accuracy")
-                    and r.v(d, "margin", "ece") > r.v(d, "none", "ece") for d in DATASET_ORDER)
-    add_bullets(slide, [
-        "Worse on every dataset, both metrics." if all_worse else "Worse on most datasets.",
-        f"Admission follows CLIP's accuracy: {r.num(r.admission[low], 1)}% on {DATASET_LABEL[low]}, "
-        f"{r.num(r.admission[high], 1)}% on {DATASET_LABEL[high]}.",
-        "A starved cache is a biased one: only easy classes get in, and pull everything.",
-        "Margin measures loudness, not correctness.",
-    ], left=Inches(8.95), top=Inches(2.45), width=Inches(3.8), size=SUB, spacing=8)
-    add_text(slide, MARGIN, Inches(5.05), Inches(8.1), Inches(0.6), [
-        ("admitted = share of the stream that passed the margin gate and competed for a cache slot "
-         "(TDA: every image).  none = TDA through our code, all changes off.", SMALL, False, MUTED)])
-    add_placeholder(slide, MARGIN, Inches(5.75), Inches(8.1), Inches(1.0), "A5",
-                    "cache purity and class coverage, with vs without margin",
-                    "Wrongly pseudo-labeled cached images before/after the gate.")
+    for method, label in COMPARISON:
+        try:
+            acc, ece = r.comp(method, "accuracy"), r.comp(method, "ece")
+        except KeyError:
+            rows.append([label, "running", "", ""])
+            continue
+        delta = "—" if method == "TDA" else r.num(r.comp_pair(method, "ece").mean_diff, sign=True)
+        rows.append([label, r.num(acc), r.num(ece), delta])
+    add_table(slide, ["method (mean of 5, 3 seeds)", "acc.", "ECE", "ΔECE vs TDA"], rows, MARGIN, Inches(1.7),
+              Inches(7.3), col_widths=[3.4, 1, 1, 1.5], row_height=Inches(0.47), font_size=16, highlight_rows=(1,))
+    add_picture(slide, FIGURES / "paper_plane_test.png", Inches(8.1), Inches(1.6), Inches(4.7), Inches(4.0))
+    add_text(slide, MARGIN, Inches(6.05), Inches(12.0), Inches(0.75), [
+        ("Removing only the self-vote removes part of the excess ECE. Post-hoc temperatures (fitted on val, or "
+         "ZAEC, label-free) help less than the gate, and combine with it.", SUB, False, INK)])
     set_notes(slide, f"""
-The first change, as one compact slide, because it is a negative result.
-
-The motive: TDA lets every image compete for the cache, including confident mistakes. The
-idea: require a top-two logit margin above {tau}, one global threshold fixed in advance, so that
-ambiguous images stay out.
-
-It is worse on every dataset, on both accuracy and ECE, on average ECE {r.num(r.v_mean('none', 'ece'))} to {r.num(r.v_mean('margin', 'ece'))}. Two
-definitions for the table: "admitted" is the share of the stream that passed the gate and
-competed for a cache slot, which is every image for TDA; "none" is TDA through our code.
-
-Why it fails: the admission rate follows CLIP's accuracy, {r.num(r.admission[low], 1)} percent on {DATASET_LABEL[low]}, {r.num(r.admission[high], 1)} on
-{DATASET_LABEL[high]}. When few images get in, they come from the classes CLIP already finds easy, and
-the cache then pulls every prediction toward those classes: on {DATASET_LABEL[low]} the gap goes from
-{r.num(r.r('ablation', low, 'none', 'gap'), 1)} to {r.num(r.r('ablation', low, 'margin', 'gap'), 1)} points. And fundamentally, a confidently wrong image has a large margin too:
-the margin measures loudness, not correctness. Evidence A5 will show cache purity and
-coverage directly. We dropped this change.
-""")
-    return slide
-
-
-def slide_fusion_motive(prs, r):
-    slide = new_slide(prs, "Change 2 · Probabilistic fusion: motive and why it should work", kicker="4 · Our proposal")
-    wgt = r.num(r.gate_cfg["fusion_weight"], 1)
-    alpha = float(r.c("dtd", "p2_alpha"))
-    p = ILLUSTRATIVE["toy_p"]
-    agree, disagree = ILLUSTRATIVE["toy_q_agree"], ILLUSTRATIVE["toy_q_disagree"]
-    add_table(slide, ["", "TDA: normalized product", "Ours: mixture"], [
-        ["rule", "p_k · q_k^α / Σ_j p_j q_j^α", f"(1 − w)·p_k + w·q_k,  w = {wgt}"],
-        ["experts agree", "sharper than either", "between the two"],
-        ["experts disagree", "the more peaked wins", "a compromise"],
-        ["upper bound", "none: can reach 1", "max(max p, max q)"],
-    ], MARGIN, Inches(1.7), Inches(7.4), col_widths=[1.6, 2.9, 2.9], font_size=16, row_height=Inches(0.5),
-        align=PP_ALIGN.LEFT, bold_first_col=True)
-    pa, ma = product_of_experts(p, agree, alpha), mixture(p, agree)
-    pd_, md = product_of_experts(p, disagree, alpha), mixture(p, disagree)
-    add_text(slide, Inches(8.3), Inches(1.7), Inches(4.45), Inches(3.4), [
-        ("Illustrative, α = " + r.num(alpha, 0), SUB, True, ACCENT),
-        (f"p = ({', '.join(r.illus(x) for x in p)})", SUB, False, INK),
-        (f"agreeing q: product top {r.illus(pa[0])}, mixture {r.illus(ma[0])}", SUB, False, INK),
-        (f"q = ({', '.join(r.illus(x) for x in disagree)})", SUB, False, INK),
-        (f"product → ({', '.join(r.illus(x) for x in pd_)})", SUB, False, INK),
-        (f"mixture → ({', '.join(r.illus(x) for x in md)})", SUB, False, INK),
-    ], spacing=6)
-    add_bullets(slide, [
-        "Motive: TDA's product turns agreement into confidence, and the cache agrees with CLIP by construction.",
-        "Why it should work: a mixture is bounded by its most confident input. Agreement cannot "
-        "manufacture confidence neither source had.",
-        "Why not a normalized product with a smaller α? That is still TDA; it only rescales the sharpening.",
-    ], top=Inches(4.45), spacing=8)
-    set_notes(slide, f"""
-The second change attacks the product of experts. The table contrasts the two rules. TDA
-multiplies the distributions; when they agree the result is sharper than either, and there
-is no upper bound. We instead average them, with weight {wgt}. A mixture of two distributions can
-never be more confident than the more confident of the two.
-
-In the illustrative example with agreeing experts, the product gives {r.illus(pa[0])} and the mixture
-stays at {r.illus(ma[0])}. When they disagree, the product lets the more peaked one win, while the
-mixture produces a compromise.
-
-You might ask why not keep a normalized product but with a smaller alpha. That is simply TDA
-with a different alpha; it still sharpens on agreement. The mixture is a different kind of
-combination, and that is the point.
-""")
-    return slide
-
-
-def slide_fusion_result(prs, r):
-    slide = new_slide(prs, "Change 2 · Result: fusion makes every dataset underconfident", kicker="4 · Our proposal")
-    rows = []
-    for d in DATASET_ORDER:
-        rows.append([DATASET_LABEL[d], r.num(r.v(d, "none", "accuracy")), r.num(r.v(d, "fusion", "accuracy")),
-                     r.num(r.r("ablation", d, "none", "gap"), 1, sign=True),
-                     r.num(r.r("ablation", d, "fusion", "gap"), 1, sign=True),
-                     r.num(r.v(d, "none", "ece")), r.num(r.v(d, "fusion", "ece"))])
-    rows.append(["Mean", r.num(r.v_mean("none", "accuracy")), r.num(r.v_mean("fusion", "accuracy")),
-                 r.num(r.r_mean("ablation", "none", "gap"), 1, sign=True),
-                 r.num(r.r_mean("ablation", "fusion", "gap"), 1, sign=True),
-                 r.num(r.v_mean("none", "ece")), r.num(r.v_mean("fusion", "ece"))])
-    add_table(slide, ["Dataset", "acc none", "acc fusion", "gap none", "gap fusion", "ECE none", "ECE fusion"],
-              rows, MARGIN, Inches(1.65), Inches(7.6), col_widths=[1.4, 1, 1.05, 1, 1.05, 1, 1.05],
-              font_size=15, row_height=Inches(0.42), highlight_rows=(5,))
-    beta_air = float(r.c("aircraft", "beta"))
-    cap = int(r.c("aircraft", "pos_capacity"))
-    c_typ = cap * math.exp(-beta_air * (1 - ILLUSTRATIVE["scale_cos"]))
-    q_top = flat_cache_top_probability(int(r.c("aircraft", "n_classes")), c_typ)
-    fused_top = 0.5 * ILLUSTRATIVE["peaked_clip_top"] + 0.5 * q_top
-    add_text(slide, Inches(8.5), Inches(1.65), Inches(4.25), Inches(4.4), [
-        ("Why: softmax is not scale-invariant", SUB, True, ACCENT),
-        (f"CLIP's logits carry the ×{r.num(r.litv('clip_logit_scale'), 0)} scale: peaked.", SUB, False, INK),
-        (f"Cache logits are sums of ≤ {r.num(cap, 0)} votes ≤ 1: nearly flat after softmax.", SUB, False, INK),
-        (f"Illustrative, Aircraft: {r.num(cap, 0)} votes at cos {r.illus(ILLUSTRATIVE['scale_cos'])} → c = "
-         f"{r.illus(c_typ)}, top q = {r.illus(q_top, 3)} over {r.num(r.c('aircraft', 'n_classes'), 0)} classes.",
-         SUB, False, INK),
-        (f"Mixed 50/50 with a CLIP top of {r.illus(ILLUSTRATIVE['peaked_clip_top'])}: "
-         f"{r.illus(fused_top, 3)}. Right or wrong.", SUB, False, INK),
-    ], spacing=6)
-    add_placeholder(slide, MARGIN, Inches(4.72), Inches(3.7), Inches(1.38), "A6",
-                    "the scale gap, measured",
-                    "Histogram of max softmax(c) vs max softmax(z), per dataset.")
-    add_placeholder(slide, MARGIN + Inches(3.9), Inches(4.72), Inches(3.7), Inches(1.38), "A7",
-                    "dilution on CLIP-confident images",
-                    "Reliability of the CLIP-confident subgroup before vs after fusion.")
-    add_callout(slide, f"Mean ECE {r.num(r.v_mean('none', 'ece'))} → {r.num(r.v_mean('fusion', 'ece'))}: the worst "
-                "single change. Accuracy barely moves; the confidence is halved.", color=WARN, top=Inches(6.2))
-    set_notes(slide, f"""
-The result is bad, and instructive. Accuracy barely moves, {r.num(r.v_mean('none', 'accuracy'))} to {r.num(r.v_mean('fusion', 'accuracy'))}, but every dataset
-becomes underconfident: the gap column goes negative everywhere, by up to {r.num(-r.r('ablation', 'pets', 'fusion', 'gap'), 1)} points on Pets. Mean
-ECE more than doubles.
-
-The reason is that softmax is not scale-invariant. CLIP's logits are a hundred times a
-cosine, so its softmax is peaked. The cache logits are sums of at most {r.num(cap, 0)} votes, each at
-most one, so their softmax over many classes is almost flat. In the illustrative Aircraft
-case, three votes at cosine {r.illus(ILLUSTRATIVE['scale_cos'])} give a cache logit of {r.illus(c_typ)}, which over a hundred classes is a
-top probability of only {r.illus(q_top, 3)}. Averaging that with a confident CLIP prediction of {r.illus(ILLUSTRATIVE['peaked_clip_top'])}
-gives about {r.illus(fused_top, 3)}, whether CLIP was right or wrong. The mixture is bounded, as promised, but
-it is dragged down by a flat expert.
-
-Evidence A6 will measure the scale gap directly, and A7 the dilution on images CLIP was
-already confident about.
-""")
-    return slide
-
-
-def slide_gate_rule(prs, r):
-    slide = new_slide(prs, "Change 3 · Gated fusion: consult the cache only on a two-way tie", kicker="4 · Our proposal")
-    max_gap = r.num(r.gate_cfg["fusion_gate_max_gap"], 1)
-    min_mass = r.num(r.gate_cfg["fusion_gate_min_mass"], 1)
-    add_panel(slide, MARGIN, Inches(1.65), Inches(6.9), Inches(1.75))
-    add_equation(slide, r"\mathrm{tie} \Leftrightarrow p_{(1)} - p_{(2)} < g \ \ \mathrm{and}\ \ p_{(1)} + p_{(2)} > m",
-                 MARGIN, Inches(1.78), size=22, center_width=Inches(6.9))
-    add_equation(slide, r"\mathrm{output} = \frac{1}{2}(p+q)\ \mathrm{on\ a\ tie,}\quad p\ \mathrm{otherwise}",
-                 MARGIN, Inches(2.6), size=22, center_width=Inches(6.9))
-    add_bullets(slide, [
-        f"g = {max_gap}, m = {min_mass}: probability space, fixed before any run.",
-        "p: CLIP with the negative-cache correction. q: softmax of the positive cache.",
-        "Motive: fuse only where the cache can change the answer; elsewhere it only dilutes.",
-        "Second clause: spread over many classes means confused, not torn; the cache's vote is noise there.",
-        "Same top-2 gap as margin admission, but used at prediction time: every class stays represented.",
-    ], top=Inches(3.55), width=Inches(6.9), size=SUB, spacing=5)
-    add_panel(slide, Inches(7.75), Inches(1.65), Inches(4.98), Inches(1.55))
-    add_equation(slide, r"(2)\ \mathrm{overtakes}\ (1) \Leftrightarrow p_{(1)} - p_{(2)} < q_{(2)} - q_{(1)}",
-                 Inches(7.75), Inches(1.72), size=20, center_width=Inches(4.98))
-    add_equation(slide, r"q_{(2)} - q_{(1)} \leq \frac{e^{K} - 1}{e^{K} + C - 1}",
-                 Inches(7.75), Inches(2.3), size=22, center_width=Inches(4.98))
-    rows = [[DATASET_LABEL[d], r.num(r.c(d, "n_classes"), 0), r.num(r.c(d, "mixture_overturn_gap"))]
-            for d in DATASET_ORDER]
-    add_table(slide, ["Dataset", "C", "max gap the mixture can flip"], rows, Inches(7.75), Inches(3.35),
-              Inches(4.98), col_widths=[1.4, 0.6, 2.6], font_size=15, row_height=Inches(0.37))
-    safe = [DATASET_LABEL[d] for d in DATASET_ORDER
-            if r.c(d, "mixture_overturn_gap") < r.gate_cfg["fusion_gate_max_gap"]]
-    unsafe = [DATASET_LABEL[d] for d in DATASET_ORDER
-              if r.c(d, "mixture_overturn_gap") >= r.gate_cfg["fusion_gate_max_gap"]]
-    add_text(slide, Inches(7.75), Inches(5.65), Inches(4.98), Inches(1.1), [
-        (f"Gap ≥ {max_gap} is provably a clear winner on {' and '.join(safe)}; "
-         f"not on {', '.join(unsafe)}.", SUB, False, INK)])
-    set_notes(slide, f"""
-The diagnosis of the fusion failure suggests the repair. Fusion only helps where the cache
-can change the answer. Everywhere else it only dilutes. So we fuse only on a two-way tie,
-and otherwise output CLIP's own distribution, still with TDA's negative-cache correction.
-
-A tie means the top two CLIP probabilities are within {max_gap} of each other, and together hold more
-than {min_mass} of the mass. The second clause excludes images spread thinly over many classes: there
-CLIP is confused, not torn, and the cache vote is noise. Both thresholds are in probability
-space, so they mean the same on ten and a hundred classes, and they were fixed in advance.
-
-Why is "clear winner" safe to leave alone? Under the mixture, the cache flips the answer only if
-its own preference for the runner-up exceeds CLIP's gap. Cache logits are between zero and the
-capacity, which bounds that preference, as in the formula. On the hundred-class datasets the
-bound is {r.num(r.c('aircraft', 'mixture_overturn_gap'))}, so a CLIP gap of {max_gap} or more can never be overturned there; leaving
-those images to CLIP loses no flip the mixture could have made. On EuroSAT, with ten classes, the bound is {r.num(r.c('eurosat', 'mixture_overturn_gap'))}: the gate does give up
-flips there, and we will see it in the accuracy.
-
-Note this is the same quantity as margin admission, used the opposite way: to decide when the
-cache speaks, not what it remembers.
-""")
-    return slide
-
-
-def slide_gate_result(prs, r):
-    slide = new_slide(prs, "Change 3 · Result: gated fusion", kicker="4 · Our proposal")
-    g = "ablation_gate"
-    rows = []
-    for d in DATASET_ORDER:
-        rows.append([DATASET_LABEL[d], r.num(r.v(d, "none", "accuracy", g)), r.num(r.v(d, "gate", "accuracy", g)),
-                     r.num(r.r("headline", d, "clipzs", "mean_confidence"), 1),
-                     r.num(r.r(g, d, "gate", "mean_confidence"), 1),
-                     r.num(r.s(d, "clipzs", "ece")), r.num(r.v(d, "none", "ece", g)), r.num(r.v(d, "gate", "ece", g))])
-    rows.append(["Mean", r.num(r.v_mean("none", "accuracy", g)), r.num(r.v_mean("gate", "accuracy", g)),
-                 r.num(r.r_mean("headline", "clipzs", "mean_confidence"), 1),
-                 r.num(r.r_mean(g, "gate", "mean_confidence"), 1),
-                 r.num(r.s_mean("clipzs", "ece")), r.num(r.v_mean("none", "ece", g)), r.num(r.v_mean("gate", "ece", g))])
-    add_table(slide, ["Dataset", "acc none", "acc gate", "conf CLIP", "conf gate", "ECE CLIP", "ECE none", "ECE gate"],
-              rows, MARGIN, Inches(1.65), Inches(8.2), col_widths=[1.4, 1, 1, 1, 1, 1, 1, 1], font_size=15,
-              row_height=Inches(0.42), highlight_rows=(5,))
-    beats = [d for d in DATASET_ORDER if r.v(d, "gate", "ece", g) < r.s(d, "clipzs", "ece")]
-    loses = [d for d in DATASET_ORDER if d not in beats]
-    drop_eu = r.v("eurosat", "none", "accuracy", g) - r.v("eurosat", "gate", "accuracy", g)
-    add_bullets(slide, [
-        f"Mean ECE {r.num(r.v_mean('none', 'ece', g))} → {r.num(r.v_mean('gate', 'ece', g))}, below CLIP's mean.",
-        f"Beats CLIP's ECE on {r.num(len(beats), 0)} of {r.num(len(DATASET_ORDER), 0)} datasets; worse on "
-        f"{' and '.join(DATASET_LABEL[d] for d in loses)}.",
-        "Mean confidence tracks CLIP's on every dataset.",
-        f"Cost: accuracy, most on EuroSAT (−{r.num(drop_eu)}), as the flip bound predicts.",
-    ], left=Inches(9.05), top=Inches(1.65), width=Inches(3.7), size=SUB, spacing=8)
-    add_placeholder(slide, MARGIN, Inches(4.75), Inches(8.2), Inches(1.25), "A8",
-                    "how often the gate fires, and per-branch calibration",
-                    "Firing rate per dataset; reliability of tie rows vs non-tie rows.")
-    add_callout(slide, "Disclosure: the gate was chosen among four fusion variants evaluated on the test sets "
-                "(backup B2). P2 and val selection will check it.", color=BASELINE, top=Inches(6.2))
-    set_notes(slide, f"""
-With the gate, the blow-up is gone. Mean ECE drops from {r.num(r.v_mean('none', 'ece', g))} for the baseline to {r.num(r.v_mean('gate', 'ece', g))}, which is
-below CLIP's own mean of {r.num(r.s_mean('clipzs', 'ece'))}. But I want to be precise: it beats CLIP's ECE on {r.num(len(beats), 0)} of 5 datasets, not
-everywhere; on {' and '.join(DATASET_LABEL[d] for d in loses)} it is worse than CLIP.
-
-The confidence columns show what the gate does: its mean confidence tracks CLIP's on every
-dataset. In other words it removes TDA's inflation and returns roughly to CLIP's own
-calibration, while keeping part of TDA's accuracy.
-
-The cost is accuracy, mostly on EuroSAT, minus {r.num(drop_eu)} points, which is what the flip bound on
-the previous slide predicted: on ten classes the cache could usefully overturn larger gaps,
-and the gate forbids that.
-
-And a disclosure: during exploration we compared four fusion variants on the test sets and
-picked this one. That is selection on test. The backup slide lists all four, and the clean
-protocol and validation-split selection will check whether the choice holds.
-""")
-    return slide
-
-
-def slide_temp_motive(prs, r):
-    slide = new_slide(prs, "Change 4 · LOO temperature: motive and how it works", kicker="4 · Our proposal")
-    lo, hi = r.num(r.grid[0], 1), r.num(r.grid[-1], 1)
-    step = r.num(r.grid[1] - r.grid[0])
-    n_grid = r.num(len(r.grid), 0)
-    add_panel(slide, MARGIN, Inches(1.65), Inches(7.1), Inches(2.05))
-    add_equation(slide, r"\hat{a} = \frac{1}{M}\sum_{i=1}^{M} \mathbf{1}\!\left[\hat{y}_{\mathrm{nn}(i)} = \hat{y}_i\right]",
-                 MARGIN, Inches(1.7), size=22, center_width=Inches(7.1))
-    add_equation(slide, r"T^{\star} = \arg\min_{T \in \mathcal{G}} \left|\,\overline{\mathrm{conf}}(T) - \hat{a}\,\right|,"
-                 r"\qquad p = \mathrm{softmax}(z / T^{\star})",
-                 MARGIN, Inches(2.85), size=22, center_width=Inches(7.1))
-    add_bullets(slide, [
-        "Motive: TDA's error is a near-uniform shift (ECE ≈ gap), the textbook case for one scalar T.",
-        "No labels: â = leave-one-out 1-NN agreement of the cached pseudo-labels; conf(T) = mean "
-        "confidence over past images.",
-        f"Grid 𝒢 = {lo}, …, {hi} in steps of {step} ({n_grid} values). Floor T = {lo}: it can only soften.",
-        "Rank-preserving: accuracy cannot change.",
-    ], top=Inches(3.85), width=Inches(7.1), size=SUB, spacing=5)
-    add_text(slide, Inches(8.05), Inches(1.65), Inches(4.68), Inches(2.6), [
-        ("Cost, as implemented", SUB, True, WARN),
-        (f"Every step re-scores the whole history for all {n_grid} temperatures: O(N²) over a stream of N images.",
-         SUB, False, INK),
-        ("Task T03 keeps running sums per grid value: O(N), identical temperatures.", SUB, False, INK),
-    ], spacing=6)
-    add_placeholder(slide, Inches(8.05), Inches(4.35), Inches(4.68), Inches(1.65), "T06 timing",
-                    "per-image CPU time", "CLIP, TDA, gate, temperature (old and O(N)) on the same CPU.")
-    add_text(slide, MARGIN, Inches(6.5), CONTENT_W, Inches(0.4), [
-        ("Prior art: UL-TTA (arXiv'25) also sets a label-free test-time temperature; ours targets the "
-         "cache's own LOO agreement.", SMALL, False, MUTED)])
-    set_notes(slide, f"""
-The fourth change. The calibration section showed that TDA's error is close to a uniform
-upward shift: ECE about equal to the gap. That is the textbook case for temperature
-scaling, dividing all logits by one number. Normally the temperature is fitted on labeled
-validation data, which we do not have.
-
-So we estimate accuracy without labels: for each cached item, find its nearest other cached
-item and check whether their pseudo-labels agree. The fraction that agree is our estimate.
-Then we pick the temperature whose mean confidence over the history matches it, from a
-grid that starts at {lo}, so it can only soften, never sharpen. Since it is a monotone rescaling,
-accuracy cannot change.
-
-Cost: as implemented, every step re-scores the full history for all {n_grid} grid values, which is
-quadratic in the stream length. That is an implementation artifact; task T03 makes it linear
-with identical temperatures, and we will time both.
-
-UL-TTA, a recent paper, also sets a temperature without labels; we cite it as prior art.
-""")
-    return slide
-
-
-def slide_temp_result(prs, r):
-    slide = new_slide(prs, "Change 4 · Result: helps where TDA is overconfident, hurts where not",
-                      kicker="4 · Our proposal")
-    rows = []
-    for d in DATASET_ORDER:
-        rows.append([DATASET_LABEL[d], r.num(r.r("ablation", d, "none", "gap"), 1, sign=True),
-                     r.num(r.r("ablation", d, "temp", "gap"), 1, sign=True),
-                     r.num(r.v(d, "none", "ece")), r.num(r.v(d, "temp", "ece")),
-                     r.num(r.s(d, "cal_tda_temp", "temp_mean")),
-                     r.num(100 * r.s(d, "cal_tda_temp", "temp_frac_at_grid_boundary"), 1) + "%"])
-    rows.append(["Mean", r.num(r.r_mean("ablation", "none", "gap"), 1, sign=True),
-                 r.num(r.r_mean("ablation", "temp", "gap"), 1, sign=True),
-                 r.num(r.v_mean("none", "ece")), r.num(r.v_mean("temp", "ece")), "", ""])
-    add_table(slide, ["Dataset", "gap none", "gap temp", "ECE none", "ECE temp", "mean T", "on grid edge"],
-              rows, MARGIN, Inches(1.65), Inches(8.2), col_widths=[1.4, 1, 1, 1, 1, 0.9, 1.3], font_size=15,
-              row_height=Inches(0.42), highlight_rows=(5,))
-    same = all(abs(r.v(d, "none", "accuracy") - r.v(d, "temp", "accuracy")) < 1e-9 for d in DATASET_ORDER)
-    add_bullets(slide, [
-        "Accuracy identical on every dataset, as it must be." if same else "Accuracy changed: a bug.",
-        "Big wins where TDA was most overconfident (DTD, Aircraft).",
-        f"EuroSAT stays overconfident: T sits at the floor on most steps; â is too high.",
-        f"Pets made underconfident (mean T {r.num(r.s('pets', 'cal_tda_temp', 'temp_mean'))}): â is too low "
-        "(likely: similar breeds' neighbours disagree even when correct; A9 checks).",
-    ], left=Inches(9.05), top=Inches(1.65), width=Inches(3.7), size=SUB, spacing=6)
-    add_placeholder(slide, MARGIN, Inches(4.75), Inches(8.2), Inches(1.25), "A9",
-                    "estimator quality",
-                    "â vs the true running accuracy over the stream; estimator error; oracle-T ceiling (labels).")
-    add_callout(slide, "Keep or drop? Optional add-on for additive TDA only; it does not stack on the gate (next) "
-                "and is not in the recommended method.", color=BASELINE, top=Inches(6.2))
-    set_notes(slide, f"""
-Results for the temperature alone. Accuracy is identical on every dataset, as it must be. Mean
-ECE improves from {r.num(r.v_mean('none', 'ece'))} to {r.num(r.v_mean('temp', 'ece'))}, with large wins on DTD and Aircraft, where TDA was most
-overconfident.
-
-But the estimate is wrong in both directions. On EuroSAT it is too high: the search wants to
-sharpen, the floor holds it at one, and the temperature sits on the grid edge on
-{r.num(100 * r.s('eurosat', 'cal_tda_temp', 'temp_frac_at_grid_boundary'), 1)} percent of steps,
-so EuroSAT stays overconfident. On Pets it is too low, and the search softens a model that
-was already nearly calibrated. Our hypothesis is that neighbouring breeds look alike, so a
-correctly labeled cached Birman's nearest neighbour is often a correctly labeled Ragdoll and
-the agreement understates accuracy. Evidence A9 will compare the estimate with the true
-running accuracy and test this.
-
-Should we keep it? Given the cost and that it does not combine with the gate, we keep it only
-as an optional add-on for plain TDA, not in our recommended method.
-""")
-    return slide
-
-
-# --- Results ------------------------------------------------------------------------------
-HEADLINE = [("clipzs", "CLIP zero-shot"), ("tda", "TDA"), ("cal_tda_gate", "Ours: gated fusion"),
-            ("cal_tda_temp", "Ours: LOO temperature"), ("cal_tda_gate_temp", "Ours: gate + temperature")]
-
-
-def slide_headline(prs, r):
-    slide = new_slide(prs, "Headline results (protocol P1, seed 0)", kicker="5 · Results")
-    for block, (column, title) in enumerate((("accuracy", "Top-1 accuracy (%), higher is better"),
-                                             ("ece", "ECE (%), lower is better"))):
-        top = Inches(1.55) + block * Inches(2.42)
-        add_text(slide, MARGIN, top, CONTENT_W, Inches(0.35), [(title, SUB, True, MUTED)])
-        rows = [[label] + [r.num(r.s(d, m, column)) for d in DATASET_ORDER] + [r.num(r.s_mean(m, column))]
-                for m, label in HEADLINE]
-        add_table(slide, ["Method"] + [DATASET_LABEL[d] for d in DATASET_ORDER] + ["Mean"], rows, MARGIN,
-                  top + Inches(0.36), CONTENT_W, col_widths=[2.6, 1, 1.1, 1, 1, 1, 1], font_size=14,
-                  row_height=Inches(0.33), highlight_rows=(2,))
-    kept = r.s_mean("cal_tda_gate", "accuracy") - r.s_mean("clipzs", "accuracy")
-    gain = r.s_mean("tda", "accuracy") - r.s_mean("clipzs", "accuracy")
-    lowest = min(HEADLINE, key=lambda mm: r.s_mean(mm[0], "ece"))[0] == "cal_tda_gate"
-    add_callout(slide, f"Gated fusion keeps {r.num(kept)} of TDA's {r.num(gain)} accuracy points over CLIP"
-                + (f" and has the lowest mean ECE ({r.num(r.s_mean('cal_tda_gate', 'ece'))})." if lowest else "."),
-                color=GOOD, top=Inches(6.42), height=Inches(0.5))
-    set_notes(slide, f"""
-The headline table, protocol P1, seed zero. Top: accuracy; bottom: ECE. The highlighted row is
-our recommendation, gated fusion.
-
-On average, CLIP reaches {r.num(r.s_mean('clipzs', 'accuracy'))} percent at {r.num(r.s_mean('clipzs', 'ece'))} ECE, TDA {r.num(r.s_mean('tda', 'accuracy'))} at {r.num(r.s_mean('tda', 'ece'))}. Gated fusion reaches
-{r.num(r.s_mean('cal_tda_gate', 'accuracy'))} at {r.num(r.s_mean('cal_tda_gate', 'ece'))}. So it keeps {r.num(kept)} of TDA's {r.num(gain)} points of accuracy gain and has the lowest mean ECE
-of all five, although, as said, not the lowest on every dataset.
-
-The temperature row shows unchanged accuracy and better ECE than TDA except on Pets, and the
-combination is not better than the gate alone. That is the ablation, two slides on.
-""")
-    return slide
-
-
-def slide_protocols(prs, r):
-    slide = new_slide(prs, "Is it fair? Two hyperparameter protocols", kicker="5 · Results")
-    rows = [[DATASET_LABEL[d], r.num(r.c(d, "alpha"), 1), r.num(r.c(d, "beta"), 1), r.num(r.c(d, "p2_alpha"), 1),
-             r.num(r.c(d, "p2_beta"), 1)] for d in DATASET_ORDER]
-    add_table(slide, ["Dataset", "P1 α", "P1 β", "P2 α", "P2 β"], rows, MARGIN, Inches(1.65), Inches(5.2),
-              col_widths=[1.5, 0.8, 0.8, 0.8, 0.8], font_size=16, row_height=Inches(0.44))
-    add_bullets(slide, [
-        "P1 “published”: TDA's per-dataset values from its repo. Comparable with the paper and "
-        "the benchmark; provenance unstated.",
-        "P2 “clean”: one setting (the paper's own) on every dataset, for every method. No method has "
-        "seen any of the five test sets.",
-        "Our knobs (margin threshold, w, gate thresholds, grid floor) are global and fixed a priori.",
-        "Rule (agreed): P2 is the headline if P2-TDA beats CLIP's accuracy; both are always shown.",
-    ], left=Inches(6.15), top=Inches(1.65), width=Inches(6.6), size=SUB, spacing=8)
-    add_placeholder(slide, MARGIN, Inches(4.5), Inches(5.2), Inches(1.6), "T07",
-                    "P1 vs P2 results, seeds 0/1/2",
-                    "Accuracy, ECE, gap, mean ± std for CLIP, TDA and our variants.")
-    add_callout(slide, "Answers “is it fair?”: no method gets per-dataset tuning that the others do not, and P2 "
-                "uses none at all.", top=Inches(6.2))
-    set_notes(slide, f"""
-Is the comparison fair? Two issues. TDA's per-dataset alpha and beta come from its repository
-with no stated selection procedure, so they may encode test-set information. And our own
-knobs could have been tuned.
-
-We therefore report two protocols. P1 uses the published per-dataset values, which makes our
-numbers comparable with the paper and the benchmark. P2 uses one setting everywhere, alpha {r.num(r.c('dtd', 'p2_alpha'), 0)}
-and beta {r.num(r.c('dtd', 'p2_beta'), 0)}, the paper's own searched value, for every method; under P2 nothing has seen any
-of our test sets. Our own knobs are global constants fixed in advance in both.
-
-We agreed a decision rule beforehand: if TDA under P2 still beats CLIP's accuracy, P2 becomes
-the headline. The P2 numbers, with three seeds, are pending, task T07.
+Here we compare with the closest alternatives, three seeds, all paired to TDA. Removing only the
+self-vote, by reading before writing, reaches {r.num(r.comp('read-first TDA', 'ece'))}. A single temperature fitted on val with labels
+reaches {r.num(r.comp('TDA + T (val)', 'ece'))}. ZAEC, a recent label-free post-hoc method that restores the zero-shot entropy, reaches
+{r.num(r.comp('TDA + ZAEC', 'ece'))}. The gate reaches {r.num(r.comp('agreement gate', 'ece'))} without any calibration step, and gate plus ZAEC {r.num(r.comp('gate + ZAEC', 'ece'))}:
+the two act at different points and compose. DMN-weak and ECALP have higher ECE than TDA; ECALP is the
+most accurate method here, at {r.num(r.comp('ECALP', 'accuracy'))} percent, but has an ECE of {r.num(r.comp('ECALP', 'ece'))}.
 """)
     return slide
 
 
 def slide_ablation(prs, r):
-    slide = new_slide(prs, "Ablation: gate and temperature do not stack", kicker="5 · Results")
-    g = "ablation_gate"
-    labels = [("none", "neither (TDA through our code)"), ("gate", "gated fusion"),
-              ("temp", "LOO temperature"), ("gate_temp", "both")]
-    rows = [[label, r.num(r.v_mean(v, "accuracy", g)), r.num(r.v_mean(v, "ece", g)),
-             r.num(r.r_mean(g, v, "gap"), 1, sign=True)] for v, label in labels]
-    add_table(slide, ["Variant (margin off), mean of 5", "Accuracy", "ECE", "gap"], rows, MARGIN, Inches(1.65),
-              Inches(6.0), col_widths=[3.0, 1.1, 0.9, 0.9], font_size=16, row_height=Inches(0.46), highlight_rows=(1,))
-    eu = 100 * r.s("eurosat", "cal_tda_gate_temp", "temp_frac_at_grid_boundary")
-    air = 100 * r.s("aircraft", "cal_tda_gate_temp", "temp_frac_at_grid_boundary")
-    add_bullets(slide, [
-        f"Adding temperature to the gate: accuracy unchanged, ECE {r.num(r.v_mean('gate', 'ece', g))} → "
-        f"{r.num(r.v_mean('gate_temp', 'ece', g))}.",
-        "Both remove the same overconfidence; after the gate, what is left is CLIP's own calibration.",
-        f"On the gated output the search wants T < 1 and the floor blocks it: on a grid edge for "
-        f"{r.num(eu, 1)}% of EuroSAT and {r.num(air, 1)}% of Aircraft steps.",
-        f"On Pets it pushes the wrong way ({r.num(r.v('pets', 'gate', 'ece', g))} → "
-        f"{r.num(r.v('pets', 'gate_temp', 'ece', g))}).",
-    ], left=Inches(6.95), top=Inches(1.65), width=Inches(5.78), size=SUB, spacing=8)
-    per = [[DATASET_LABEL[d], r.num(r.v(d, "gate", "ece", g)), r.num(r.v(d, "gate_temp", "ece", g)),
-            r.num(100 * r.s(d, "cal_tda_gate_temp", "temp_frac_at_grid_boundary"), 1) + "%"] for d in DATASET_ORDER]
-    add_table(slide, ["Dataset", "ECE gate", "gate + temp", "T on grid edge"], per, MARGIN, Inches(4.2),
-              Inches(6.0), col_widths=[1.5, 1.1, 1.2, 1.4], font_size=15, row_height=Inches(0.36))
-    add_callout(slide, "Recommendation: gated fusion alone.", color=GOOD, top=Inches(5.95), left=Inches(6.95),
-                width=Inches(5.78), height=Inches(0.55))
+    slide = new_slide(prs, "Backup: cache ablation under the gate", kicker="Backup · Results · test")
+    rows = [[label, r.num(r.test(f"{k}_acc")), r.num(r.test(f"{k}_ece"))]
+            for k, label in (("clip", "CLIP"), ("base", "+ negative cache"), ("gpos", "+ gated positive cache"),
+                             ("gate", "both = agreement gate"), ("tda", "TDA (ungated)"))]
+    add_table(slide, ["variant (test, mean of 5)", "accuracy", "ECE"], rows, MARGIN, Inches(1.75), Inches(6.6),
+              col_widths=[3.2, 1.2, 1.2], row_height=Inches(0.5), font_size=18, highlight_rows=(3,))
+    add_picture(slide, FIGURES / "paper_ablation_test.png", Inches(7.5), Inches(1.6), Inches(5.2), Inches(4.2))
+    add_callout(slide, "The negative cache improves both metrics; the gated positive cache adds accuracy at a small ECE cost.",
+                top=Inches(5.95))
     set_notes(slide, f"""
-The two surviving changes, in all four on/off combinations, margin admission off.
-
-The gate alone gives the best ECE. Adding temperature on top leaves accuracy unchanged, as it
-must, and makes ECE slightly worse, {r.num(r.v_mean('gate', 'ece', g))} to {r.num(r.v_mean('gate_temp', 'ece', g))}. The reason is that they fix the same
-problem: the gate already removes TDA's inflation, and what is left is about CLIP's own
-calibration. On EuroSAT and Aircraft the temperature search then wants to sharpen, the floor
-blocks it, and it does nothing on {r.num(eu, 1)} and {r.num(air, 1)} percent of steps; on Pets it softens in the wrong
-direction.
-
-The lower table shows it per dataset. So we recommend the gate alone.
+The cache ablation again, now under the gate and on test. The gated positive cache alone gives
+{r.num(r.test('gpos_acc'))} percent at ECE {r.num(r.test('gpos_ece'))}. Adding the negative cache, which is the full method, gives {r.num(r.test('gate_acc'))} at
+{r.num(r.test('gate_ece'))}. Ungated TDA is at {r.num(r.test('tda_acc'))} and {r.num(r.test('tda_ece'))}. So the design choice made on val, keeping the negative
+cache, holds on test.
 """)
     return slide
 
 
-def slide_baselines(prs, r):
-    slide = new_slide(prs, "Baselines and positioning", kicker="5 · Results")
-    shots = r.num(r.litv("tip_adapter_shots"), 0)
-    rows = [
-        ["ECALP (ICLR'25)", "zero-shot, online", "run by us (replay)", "most accurate online method, worst calibrated"],
-        ["DMN-weak (CVPR'24)", "zero-shot, online", "run by us (replay)", "widely used memory method"],
-        ["Tip-Adapter", f"few-shot ({shots}-shot)", "run by us", "what labels buy: reference, not a competitor"],
-        ["TPT, C-TPT, O-TPT, D-TPT", "zero-shot, episodic", "cited from papers", "calibration-aware; need backprop"],
-    ]
-    add_table(slide, ["Method", "Setting", "How", "Why"], rows, MARGIN, Inches(1.65), CONTENT_W,
-              col_widths=[2.6, 2.0, 2.0, 4.4], font_size=16, row_height=Inches(0.5), align=PP_ALIGN.LEFT,
-              bold_first_col=True)
-    add_placeholder(slide, MARGIN, Inches(4.35), CONTENT_W, Inches(1.65), "T08",
-                    "baseline table: accuracy, ECE, gap on the five datasets",
-                    "ECALP and DMN-weak with their published settings (P1 only, noted); Tip-Adapter "
-                    f"{shots}-shot with α, β chosen on val; cited ECE with protocol differences stated.")
-    add_callout(slide, "Answers “why only TDA?”: two more zero-shot methods run, one few-shot reference, "
-                "calibration-specific methods cited.", top=Inches(6.2))
+def slide_generalization(prs, r):
+    slide = new_slide(prs, "Generalization: datasets never used in the design", kicker="5 · Results · dev + fresh")
+    g = r.gen
+    rows = []
+    for _, x in g.iterrows():
+        rows.append([("dev  " if x.tier == "dev" else "fresh  ") + NAMES.get(x.dataset, x.dataset),
+                     r.num(x.tda_accuracy), r.num(x.gate_accuracy), r.num(x.tda_ece), r.num(x.gate_ece),
+                     r.num(x.d_ece, sign=True)])
+    add_table(slide, ["dataset", "TDA acc.", "gate acc.", "TDA ECE", "gate ECE", "ΔECE"], rows, MARGIN, Inches(1.55),
+              Inches(8.2), col_widths=[2.6, 1, 1, 1, 1, 1], row_height=Inches(0.33), font_size=14)
+    wins, n = int((g.d_ece < 0).sum()), len(g)
+    add_text(slide, Inches(9.1), Inches(1.7), Inches(3.6), Inches(4.5), [
+        (f"{r.num(n, 0)} datasets", SUB, True, ACCENT),
+        (f"ECE lower on {r.num(wins, 0)}", SUB, False, INK),
+        (f"mean ΔECE {r.num(g.d_ece.mean(), sign=True)}", SUB, True, INK),
+        (f"mean Δaccuracy {r.num(g.d_accuracy.mean(), sign=True)}", SUB, False, INK),
+        (f"worst Δaccuracy {r.num(g.d_accuracy.min(), sign=True)}", SUB, False, MUTED),
+        ("P2, 3 seeds; nothing fitted on these sets.", SMALL, False, MUTED),
+    ], spacing=10)
     set_notes(slide, f"""
-To answer "why only TDA", we will add baselines. Two more zero-shot online methods run by us
-from the cached features: ECALP, the most accurate online method in the benchmark and also
-the worst calibrated, and DMN in its zero-shot variant. One few-shot reference, Tip-Adapter
-with {shots} labeled images per class, to show what labels buy; it is not a competitor in our
-setting. And the calibration-aware prompt-tuning methods, which need backprop and many views,
-are cited from their papers with the protocol differences stated.
-
-This table is pending, task T08.
+The method was designed on the val splits of five datasets. Here are {r.num(n, 0)} datasets that played no
+role in the design: four development sets and the fresh sets, including the full ImageNet validation
+set. The gate lowers ECE on {r.num(wins, 0)} of them; the mean ECE change is {r.num(g.d_ece.mean(), sign=True)} points and the
+mean accuracy change {r.num(g.d_accuracy.mean(), sign=True)} points. Accuracy is kept everywhere; ECE is mixed, and the next
+slide shows when it helps.
 """)
     return slide
 
 
-def slide_limitations(prs, r):
-    slide = new_slide(prs, "Limitations and next steps", kicker="6 · Limitations and conclusion")
-    seeds = sorted(set(r.summary["seed"]))
-    fs_flowers = r.r("exploration", "flower102", "fusion_sharpen", "accuracy")
+def slide_where(prs, r):
+    slide = new_slide(prs, "Where it helps: mostly where CLIP is not underconfident", kicker="5 · Results · all tiers")
+    rg, rc = r.rho("clip_gap"), r.rho("conf")
+    add_picture(slide, FIGURES / "paper_where_all.png", MARGIN, Inches(1.6), Inches(6.6), Inches(4.9))
     add_bullets(slide, [
-        f"One seed ({r.num(seeds[0], 0)}) and one backbone (ViT-B/16). Next: seeds 0/1/2 by feature replay (T07).",
-        "Selection history: the gate was chosen among four fusion variants evaluated on the test sets; "
-        f"one was never run on EuroSAT, and another reached {r.num(fs_flowers)} on Flowers102 "
-        f"(TDA {r.num(r.s('flower102', 'tda', 'accuracy'))}). Next: P2 and val-split selection.",
-        "Per-dataset α/β of unstated provenance (P1). Next: P2 everywhere, and TDA's own ablations with "
-        "ECE (T06).",
-        "LOO estimate quality: wrong in both directions (EuroSAT too high, Pets too low). Next: A9.",
-        "Mechanism claims rest on math and aggregate statistics so far. Next: traces A2–A8.",
-        "Temperature is O(N²) as implemented (T03). Calibration-specific baselines are cited, not run.",
-    ], spacing=10, size=SUB)
+        "Prediction from the lemmas: on agreeing samples the echo only adds confidence. Removing it helps if CLIP "
+        "is calibrated or overconfident, and hurts if CLIP is underconfident.",
+        f"Spearman ρ of ΔECE with CLIP's own confidence − accuracy gap: {r.num(rg.rho, sign=True)} "
+        f"(n = {r.num(rg.n, 0)}). A tendency, not a rule: GTSRB and Food101 lose a little, VOC2007 and Cars gain. "
+        "Uses labels: it explains, it cannot switch.",
+        f"Label-free proxy (CLIP's mean confidence on the first {r.num(SIGNAL_HEAD, 0)} samples): ρ = "
+        f"{r.num(rc.rho, sign=True)}. Confidence is not calibration: CIFAR-100 is unconfident and underconfident.",
+        "The gate stays always on; this is its stated condition.",
+    ], left=Inches(7.5), top=Inches(1.7), width=Inches(5.2), spacing=10, size=SUB)
     set_notes(slide, f"""
-What we cannot claim yet. One seed and one backbone; replaying cached features will make three
-seeds cheap.
-
-Selection history: the gated variant was picked among four fusion variants looked at on the
-test sets. One of them was never run on EuroSAT, and another one actually beat TDA's accuracy on
-Flowers, {r.num(fs_flowers)} against {r.num(r.s('flower102', 'tda', 'accuracy'))}. We disclose this, and the clean protocol plus selection on the
-validation split will test whether the choice survives.
-
-TDA's own per-dataset hyperparameters have unstated provenance; protocol P2 removes them.
-
-The temperature estimate is unreliable in both directions, and the mechanism claims so far are
-supported by math and aggregate statistics; the trace analyses will test them directly.
+When does the gate help? The lemmas say that on agreeing samples the echo only adds confidence. So
+removing it should help when CLIP is calibrated or overconfident, and hurt when CLIP is underconfident.
+That is the tendency we see: over {r.num(rg.n, 0)} datasets, the gate's ECE change follows CLIP's own confidence minus
+accuracy gap with a rank correlation of {r.num(rg.rho, sign=True)}. That variable needs labels, so it explains the
+result but cannot be used to switch the method. The best label-free proxy we tried, CLIP's mean confidence,
+reaches only {r.num(rc.rho, sign=True)}, because a dataset can be unconfident and still underconfident.
 """)
     return slide
 
 
 def slide_conclusion(prs, r):
-    slide = new_slide(prs, "Conclusion", kicker="6 · Limitations and conclusion")
-    add_panel(slide, MARGIN, Inches(1.65), CONTENT_W, Inches(1.45), fill=TINT_ACCENT, line=ACCENT)
-    add_text(slide, MARGIN + Inches(0.3), Inches(1.8), CONTENT_W - Inches(0.6), Inches(1.2), [
-        ("What we recommend", SUB, True, ACCENT),
-        (f"TDA's cache with gated fusion: mean ECE {r.num(r.s_mean('tda', 'ece'))} → {r.num(r.s_mean('cal_tda_gate', 'ece'))} "
-         f"(CLIP {r.num(r.s_mean('clipzs', 'ece'))}) at {r.num(r.s_mean('cal_tda_gate', 'accuracy'))}% accuracy "
-         f"(TDA {r.num(r.s_mean('tda', 'accuracy'))}, CLIP {r.num(r.s_mean('clipzs', 'accuracy'))}). "
-         "One extra comparison per image.", 22, True, INK),
-    ], spacing=4)
+    slide = new_slide(prs, "Limitations and conclusion", kicker="5 · Conclusion")
     add_bullets(slide, [
-        "TDA's overconfidence comes from its cache adding confidence regardless of correctness: "
-        "self-votes and a product of experts that agree by construction.",
-        "Filtering the cache by margin fails; mixing instead of multiplying fails through a scale mismatch; "
-        "consulting the cache only on two-way ties works.",
-        "A label-free temperature helps plain TDA but adds nothing after the gate.",
-        "Pending: P2 protocol, three seeds, mechanism traces, and baselines.",
-    ], top=Inches(3.35), spacing=10)
-    set_notes(slide, f"""
-To conclude. TDA's overconfidence is structural: the cache adds confidence regardless of
-correctness, through self-votes and a product of experts that agree by construction.
-
-Of our four changes, filtering the cache by margin fails, and mixing instead of multiplying
-fails because of a scale mismatch. Consulting the cache only where CLIP is torn between two
-classes works: mean ECE from {r.num(r.s_mean('tda', 'ece'))} to {r.num(r.s_mean('cal_tda_gate', 'ece'))}, at {r.num(r.s_mean('cal_tda_gate', 'accuracy'))} percent accuracy, for one comparison per image.
-The temperature helps plain TDA but adds nothing on top of the gate.
-
-What remains is to confirm this under the clean protocol, over three seeds, with direct traces of
-the mechanism and against other methods. Thank you.
-""")
-    return slide
-
-
-# --- Backup -----------------------------------------------------------------------------
-def slide_b_tda_ablations(prs, r):
-    slide = new_slide(prs, "Backup B1 · TDA's own ablations, redone with ECE", kicker="Backup")
-    add_bullets(slide, [
-        "Fig. 3: CLIP vs positive-only vs negative-only vs TDA: which cache causes the overconfidence?",
-        "Fig. 4: shot capacity 1–6: purity vs coverage; does calibration follow accuracy?",
-        "Fig. 5 and Table 5: negative-cache mask threshold and entropy band.",
-        "Table 6: α × β heatmaps per dataset, accuracy and ECE, P1 and P2 points marked.",
-    ], width=CONTENT_W, spacing=8, size=SUB)
-    add_placeholder(slide, MARGIN, Inches(3.75), CONTENT_W, Inches(2.2), "T06",
-                    "TDA paper figures with ECE",
-                    "Each of TDA's ablations on our five datasets, accuracy plus ECE and gap, labelled as test-split "
-                    "sensitivity analyses.")
+        "Limitations",
+        (1, "Underconfident CLIP (Pets, Caltech101, CIFAR-10/100, ImageNet-R, STL-10): the echo happens to help, the gate is worse; "
+            "no label-free signal separates these cases yet."),
+        (1, "The disagreeing branch is still overconfident on hard sets; ZAEC on top helps."),
+        (1, "One backbone, one cache method. The argument applies to any cache of the model's own pseudo-labels (e.g. DMN), untested."),
+        (1, "Designed on val after earlier attempts, some explored on test; dev and fresh tiers are the clean evidence."),
+        "Conclusion",
+        (1, "TDA's positive cache echoes CLIP: where it agrees it cannot change a decision, only inflate confidence."),
+        (1, "The agreement gate keeps TDA's accuracy everywhere and halves its ECE on the test sets and ImageNet, "
+            "with no parameter and no label; on the fresh tier the gain is smaller and not uniform."),
+    ], spacing=8)
     set_notes(slide, """
-Backup. We will redo TDA's own ablations with calibration added: which of the two caches
-causes the overconfidence, how the shot capacity trades purity against coverage, the negative
-cache thresholds, and alpha-beta heatmaps with both protocols marked. Test-split sweeps here are
-sensitivity analyses only; no choice is made from them.
+To close. The gate is worse on datasets where CLIP is underconfident, because there the echo happened
+to correct CLIP, and we have not found a label-free way to detect those datasets. Its remaining
+overconfidence is in the disagreeing branch, where post-hoc calibration like ZAEC still helps. We tested
+one backbone and one cache method, and the design was done on val after earlier exploration on test,
+which is why the development and fresh sets matter. The main message: TDA's cache echoes CLIP, and
+gating it on disagreement removes the echo.
 """)
     return slide
 
 
-def slide_b_selection(prs, r):
-    slide = new_slide(prs, "Backup B2 · Selection history: the four fusion variants (test sets)", kicker="Backup")
-    variants = [("fusion_gate", "gated (chosen)"), ("fusion_gate_sharpen", "gated + range-matched cache"),
-                ("fusion_gate_temp", "gated + temperature"), ("fusion_sharpen", "range-matched cache, ungated")]
+# --- Backup ---------------------------------------------------------------------------------
+def slide_b_p1(prs, r):
+    slide = new_slide(prs, "Backup: protocol P1 (published per-dataset α, β)", kicker="Backup")
+    p = r.d["p1"][r.d["p1"].dataset == "mean"]
     rows = []
-    for v, label in variants:
-        row = [label]
-        for d in DATASET_ORDER:
-            try:
-                row.append(f"{r.num(r.r('exploration', d, v, 'accuracy'), 1)} / {r.num(r.r('exploration', d, v, 'ece'), 1)}")
-            except KeyError:
-                row.append("not run")
-        rows.append(row)
-    rows.append(["TDA (reference)"] + [f"{r.num(r.s(d, 'tda', 'accuracy'), 1)} / {r.num(r.s(d, 'tda', 'ece'), 1)}"
-                                        for d in DATASET_ORDER])
-    add_table(slide, ["Variant (acc / ECE)"] + [DATASET_LABEL[d] for d in DATASET_ORDER], rows, MARGIN, Inches(1.7),
-              CONTENT_W, col_widths=[3.2, 1.2, 1.3, 1.2, 1.2, 1.2], font_size=15, row_height=Inches(0.46),
-              highlight_rows=(0,))
+    for m, label in (("clipzs", "CLIP"), ("tda", "TDA"), ("cal_tda_agree", "agreement gate")):
+        a = p[(p.method == m) & (p.metric == "accuracy")].iloc[0]
+        e = p[(p.method == m) & (p.metric == "ece")].iloc[0]
+        rows.append([label, r.num(a.mean_P1), r.num(a.mean_P2), r.num(e.mean_P1), r.num(e.mean_P2)])
+    add_table(slide, ["method (test, mean of 5, 3 seeds)", "acc. P1", "acc. P2", "ECE P1", "ECE P2"], rows,
+              MARGIN, Inches(1.8), Inches(9.0), col_widths=[3.2, 1, 1, 1, 1], row_height=Inches(0.5), font_size=18)
+    repro = r.d["repro"].delta_gpu_vs_benchmark.abs().max()
     add_bullets(slide, [
-        "All four were evaluated on the test sets during exploration; the gated variant was then adopted.",
-        "Range-matched cache: cache logits rescaled to CLIP's logit range before mixing (cf. ZS-Norm).",
-    ], top=Inches(4.75), size=SUB, spacing=6)
-    set_notes(slide, """
-For full disclosure, these are the four fusion variants we looked at on the test sets before
-settling on the plain gate. One of them, the gated variant with a range-matched cache, was never
-run on EuroSAT. The ungated range-matched variant beat TDA's accuracy on Flowers. Choosing among
-these on test is selection on test; the clean protocol and validation-split selection will redo
-the choice properly.
-""")
-    return slide
-
-
-def slide_b_scatter(prs, r):
-    slide = new_slide(prs, "Backup B3 · Accuracy vs ECE, all headline runs", kicker="Backup")
-    add_picture(slide, FIGURES / "accuracy_vs_ece.png", MARGIN, Inches(1.6), CONTENT_W, Inches(5.2))
-    set_notes(slide, """
-The headline results as a scatter: accuracy to the right is better, ECE down is better. Each
-coloured line joins one dataset's methods. The target corner is TDA's accuracy at CLIP's ECE.
-""")
-    return slide
-
-
-def slide_b_first_ablation(prs, r):
-    slide = new_slide(prs, "Backup B4 · First ablation: all eight on/off combinations", kicker="Backup")
-    labels = [("none", "none"), ("margin", "margin"), ("fusion", "fusion"), ("temp", "temperature"),
-              ("margin_fusion", "margin + fusion"), ("margin_temp", "margin + temperature"),
-              ("fusion_temp", "fusion + temperature"), ("all", "all three")]
-    rows = [[label, r.num(r.v_mean(v, "accuracy")), r.num(r.v_mean(v, "ece")),
-             r.num(r.r_mean("ablation", v, "gap"), 1, sign=True)] for v, label in labels]
-    add_table(slide, ["Variant, mean of 5", "Accuracy", "ECE", "gap"], rows, MARGIN, Inches(1.65), Inches(5.6),
-              col_widths=[2.6, 1.1, 1.0, 0.9], font_size=15, row_height=Inches(0.44))
-    better = [label for v, label in labels if v != "none" and r.v_mean(v, "ece") < r.v_mean("none", "ece")]
-    add_bullets(slide, [
-        f"Variants with lower mean ECE than none: {', '.join(better) or 'none'}.",
-        "Every variant with margin admission or ungated fusion is worse calibrated than none, "
-        "which is why margin was dropped and fusion was gated." if better == ["temperature"] else
-        "See the table for which variants beat none.",
-        "Ungated fusion flips the sign of the gap (underconfident); margin makes it larger.",
-    ], left=Inches(6.6), top=Inches(1.65), width=Inches(6.13), size=SUB, spacing=8)
-    set_notes(slide, """
-The first ablation, every on/off combination of margin admission, ungated fusion and temperature.
-Any variant with margin admission or ungated fusion is worse than the baseline on ECE, which is
-why those were dropped or repaired.
-""")
-    return slide
-
-
-def slide_b_implementation(prs, r):
-    slide = new_slide(prs, "Backup B5 · Implementation notes", kicker="Backup")
-    diffs = [abs(r.v(d, "none", "accuracy") - r.s(d, "tda", "accuracy")) for d in DATASET_ORDER]
-    ece_diffs = [abs(r.v(d, "none", "ece") - r.s(d, "tda", "ece")) for d in DATASET_ORDER]
-    add_bullets(slide, [
-        f"“none” vs the upstream TDA run: accuracy within {r.num(max(diffs))} points and ECE within "
-        f"{r.num(max(ece_diffs))} points on every dataset (separate runs, same settings).",
-        "TDA's “normalized” entropy divides an entropy in nats by log₂ C, so its maximum is ln 2, "
-        "not 1. The negative-cache band is applied to that quantity; we keep it as is.",
-        "Pseudo-labels and entropies use raw CLIP logits; negative-cache correction is applied before "
-        "our fusion and gate, positive cache after.",
-        "Every number in this deck is generated from tracked CSVs by presentation/build_pptx.py; "
-        "derived statistics by analysis/deck_evidence.py.",
-    ], spacing=10, size=SUB)
+        f"Our GPU run reproduces the benchmark's published CLIP and TDA accuracies within {r.num(repro)} points per dataset.",
+        "P1 tunes α, β per dataset (on test, in the original paper); P2 is one setting for all.",
+    ], top=Inches(4.2), spacing=10)
     set_notes(slide, f"""
-A few implementation notes for questions. Our "none" baseline and the separately run upstream
-TDA agree within {r.num(max(diffs))} accuracy points and {r.num(max(ece_diffs))} ECE points. TDA's normalized entropy has a quirk:
-nats divided by log base two of the class count, so it never reaches one; we keep it unchanged
-for faithfulness. And every number in the deck is produced by code from tracked files.
+For completeness, the published protocol P1 with TDA's per-dataset alpha and beta. The conclusions
+do not change: the gate keeps TDA's accuracy and lowers its ECE under both protocols. Our GPU
+reproduction of the benchmark is within {r.num(repro)} points per dataset, and every number in this talk
+comes from an exact CPU replay of cached features.
 """)
     return slide
 
 
-def slide_b_metrics(prs, r):
-    slide = new_slide(prs, "Backup B6 · Other calibration and selective-prediction metrics", kicker="Backup")
+def slide_b_proofs(prs, r):
+    slide = new_slide(prs, "Backup: proofs", kicker="Backup")
+    add_equation(slide, r"b_{\hat y_0} - b_j \geq (z_{\hat y_0} - z_j) - (\max n - \min n) > \alpha S"
+                 r"\;\Rightarrow\; o_{\hat y_0} - o_j > \alpha S - \alpha S = 0",
+                 MARGIN, Inches(1.8), size=24, center_width=CONTENT_W)
+    add_equation(slide, r"\max\,\mathrm{softmax}(o) = \left(1 + \sum_{j \neq \hat y} e^{-(o_{\hat y} - o_j)}\right)^{-1}",
+                 MARGIN, Inches(2.9), size=24, center_width=CONTENT_W)
     add_bullets(slide, [
-        "ECE depends on the binning; we will add proper scoring rules and a selective-prediction curve.",
-        "NLL and Brier score: reward confident correct and punish confident wrong predictions.",
-        "AURC: area under the risk–coverage curve, the abstention use case directly.",
-    ], spacing=8, size=SUB)
-    add_placeholder(slide, MARGIN, Inches(3.4), CONTENT_W, Inches(2.2), "A10",
-                    "NLL, Brier and AURC for every headline run",
-                    "One table, five methods by five datasets, to check that the ECE ranking is not a binning artifact.")
+        "No-flip region (first line): uses 0 ≤ c_k ≤ S.",
+        "Agreement lemma: every margin of o is at least the margin of b, and the top probability is increasing "
+        "in every margin (second line).",
+        "Self-vote: an admitted x has c_ŷ₀(x) ≥ exp(0) = 1, and every other vote is at most 1.",
+    ], top=Inches(4.0), spacing=10)
     set_notes(slide, """
-Backup on metrics. ECE depends on binning, so we will also report negative log-likelihood,
-the Brier score and the area under the risk-coverage curve, which measures the abstention use
-case directly. Evidence A10.
+The two proofs in full. For the no-flip region, the negative cache can move a margin by at most its
+range, and the positive cache by at most alpha times the shot capacity, so a larger CLIP gap cannot be
+overturned. For the agreement lemma, each output margin is at least the corresponding margin of CLIP
+plus negative cache, and the top softmax probability is an increasing function of the margins.
+""")
+    return slide
+
+
+def slide_b_earlier(prs, r):
+    slide = new_slide(prs, "Backup: earlier attempts", kicker="Backup")
+    rows = []
+    for m, label in (("cal_tda_agree", "agreement gate (final)"),) + tuple(ra.EARLIER.items()):
+        rows.append([label, r.num(r.main(m, "accuracy")), r.num(r.main(m, "ece")),
+                     r.num(r.pair(m, "accuracy").mean_diff, sign=True), r.num(r.pair(m, "ece").mean_diff, sign=True)])
+    add_table(slide, ["variant (test, P2, mean of 5)", "acc.", "ECE", "Δacc. vs TDA", "ΔECE vs TDA"], rows,
+              MARGIN, Inches(1.8), Inches(10.5), col_widths=[3.6, 1, 1, 1.4, 1.4], row_height=Inches(0.48),
+              font_size=17, highlight_rows=(0,))
+    add_text(slide, MARGIN, Inches(5.4), CONTENT_W, Inches(1.0), [
+        ("Margin admission starves the cache; fusion caps confidence; the two-way-tie gate calibrates but loses "
+         "accuracy; the LOO temperature calibrates partly. Explored before the diagnosis, partly on test.", SUB, False, INK)])
+    set_notes(slide, """
+These are the changes we tried before the diagnosis, all on the same protocol and paired to TDA.
+Margin admission starves the cache on hard datasets. Probability fusion caps every prediction's
+confidence. Gating fusion to two-way ties fixed calibration but lost accuracy. A leave-one-out
+temperature helped calibration partly. Some of this exploration was done on test, which we disclose.
+""")
+    return slide
+
+
+def slide_b_per_dataset(prs, r):
+    slide = new_slide(prs, "Backup: comparison per dataset (ECE, test, 3 seeds)", kicker="Backup")
+    rows = []
+    for method, label in COMPARISON:
+        cells = []
+        for ds in CORE:
+            try:
+                cells.append(r.num(r.comp(method, "ece", ds)))
+            except KeyError:
+                cells.append("—")
+        rows.append([label] + cells)
+    add_table(slide, ["method"] + [NAMES[d] for d in CORE], rows, MARGIN, Inches(1.7), CONTENT_W,
+              col_widths=[3.4, 1, 1, 1, 1, 1], row_height=Inches(0.47), font_size=16, highlight_rows=(1,))
+    set_notes(slide, """
+Per dataset ECE for every method in the comparison table, three seeds each. The gate is best on
+EuroSAT; the val-fitted temperature wins on DTD and Aircraft, ZAEC on Flowers, and plain TDA on Pets,
+where removing the echo costs calibration. Combining the gate with ZAEC is the strongest on the mean.
 """)
     return slide
 
 
 MAIN_BUILDERS = [
     slide_title, slide_agenda,
-    slide_problem, slide_clip, slide_clip_fails, slide_landscape, slide_why_tda,
-    slide_tda_idea, slide_tda_pipeline, slide_tda_write, slide_tda_read, slide_tda_alpha_beta,
-    slide_tda_negative, slide_tda_poe, slide_tda_example, slide_tda_gains, slide_tda_gain_source,
-    slide_ece, slide_why_calibration, slide_clip_vs_tda_cal, slide_reliability, slide_anatomy,
-    slide_proposal,
-    slide_margin, slide_fusion_motive, slide_fusion_result, slide_gate_rule, slide_gate_result,
-    slide_temp_motive, slide_temp_result,
-    slide_headline, slide_protocols, slide_ablation, slide_baselines,
-    slide_limitations, slide_conclusion,
+    slide_task, slide_clip,
+    slide_tda_why, slide_tda_pipeline, slide_tda_math,
+    slide_calibration, slide_tda_overconfident, slide_tda_caches,
+    slide_selfvote, slide_lemmas, slide_agreement,
+    slide_method,
+    slide_main, slide_reliability, slide_comparison, slide_generalization, slide_where,
+    slide_conclusion,
 ]
-BACKUP_BUILDERS = [slide_b_tda_ablations, slide_b_selection, slide_b_scatter, slide_b_first_ablation,
-                   slide_b_implementation, slide_b_metrics]
+BACKUP_BUILDERS = [slide_ablation, slide_b_p1, slide_b_proofs, slide_b_earlier, slide_b_per_dataset]
 SLIDE_BUILDERS = MAIN_BUILDERS + BACKUP_BUILDERS
-TDA_SECTION = [slide_tda_idea, slide_tda_pipeline, slide_tda_write, slide_tda_read, slide_tda_alpha_beta,
-               slide_tda_negative, slide_tda_poe, slide_tda_example, slide_tda_gains, slide_tda_gain_source,
-               slide_anatomy]
+TDA_SECTION = [slide_tda_why, slide_tda_pipeline, slide_tda_math, slide_tda_overconfident, slide_tda_caches]
 
 
 def slide_heading(slide, index):
@@ -2270,7 +1147,7 @@ def slide_heading(slide, index):
 
 def write_markdown_mirror(prs, md_path) -> Path:
     lines = [
-        "# Calibration-Aware Test-Time Adaptation for CLIP — draft deck v2",
+        "# The cache that echoes CLIP: agreement-gated TDA — deck v3",
         "",
         "**Generated file — do not edit.** Produced by `python presentation/build_pptx.py`",
         "alongside `calibration_aware_tta.pptx`; edit the slide functions in that script instead.",

@@ -76,7 +76,7 @@ Verdict:
 - **Claim 3 (no-flip region):** a simple proposition; cite MARC.
 
 **Head-to-head** (our offline re-implementation of ZAEC on the same traces; P2, 3 seeds;
-`results/analysis/t16/zaec_preliminary.csv`):
+`results/analysis/t16/comparison.csv`, tested `analysis/comparison.py`; dev numbers from the earlier scratch run):
 
 | | 5 test sets | 4 dev sets |
 |---|---|---|

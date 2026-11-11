@@ -1,0 +1,163 @@
+dataset,method,seed,accuracy,ece
+dtd,CLIP,0,44.3262,8.2377
+dtd,TDA,0,47.0449,17.774
+dtd,agreement gate,0,47.0449,7.5985
+dtd,TDA + T (val),0,47.0449,2.6732
+dtd,TDA + ZAEC,0,47.0449,8.4898
+dtd,gate + ZAEC,0,47.0449,6.3208
+dtd,read-first TDA,0,47.104,12.8337
+dtd,CLIP,1,44.3262,8.2377
+dtd,TDA,1,47.2813,17.0338
+dtd,agreement gate,1,47.104,7.6128
+dtd,TDA + T (val),1,47.2813,3.8658
+dtd,TDA + ZAEC,1,47.2813,8.0524
+dtd,gate + ZAEC,1,47.104,5.3634
+dtd,read-first TDA,1,47.3995,12.5971
+dtd,CLIP,2,44.3262,8.2377
+dtd,TDA,2,46.9858,17.3329
+dtd,agreement gate,2,47.2222,7.5705
+dtd,TDA + T (val),2,46.9858,4.1582
+dtd,TDA + ZAEC,2,46.9858,7.912
+dtd,gate + ZAEC,2,47.2222,5.6591
+dtd,read-first TDA,2,47.5177,12.6912
+flower102,CLIP,0,67.3163,2.905
+flower102,TDA,0,70.5238,9.559
+flower102,agreement gate,0,70.3613,2.681
+flower102,TDA + T (val),0,70.5238,5.9445
+flower102,TDA + ZAEC,0,70.5238,2.7684
+flower102,gate + ZAEC,0,70.3613,2.9305
+flower102,read-first TDA,0,69.5899,7.9889
+flower102,CLIP,1,67.3163,2.905
+flower102,TDA,1,70.0365,9.7887
+flower102,agreement gate,1,69.7929,3.2784
+flower102,TDA + T (val),1,70.0365,5.3336
+flower102,TDA + ZAEC,1,70.0365,2.0164
+flower102,gate + ZAEC,1,69.7929,2.5972
+flower102,read-first TDA,1,69.2651,7.8269
+flower102,CLIP,2,67.3163,2.905
+flower102,TDA,2,70.4019,9.4251
+flower102,agreement gate,2,69.9147,3.6621
+flower102,TDA + T (val),2,70.4019,5.4429
+flower102,TDA + ZAEC,2,70.4019,3.143
+flower102,gate + ZAEC,2,69.9147,3.9608
+flower102,read-first TDA,2,69.5087,7.9879
+pets,CLIP,0,88.1712,4.3583
+pets,TDA,0,88.6072,2.6706
+pets,agreement gate,0,88.7163,4.7173
+pets,TDA + T (val),0,88.6072,11.2064
+pets,TDA + ZAEC,0,88.6072,5.0718
+pets,gate + ZAEC,0,88.7163,5.7414
+pets,read-first TDA,0,88.58,2.9327
+pets,CLIP,1,88.1712,4.3583
+pets,TDA,1,88.7435,2.3237
+pets,agreement gate,1,88.798,4.3818
+pets,TDA + T (val),1,88.7435,11.321
+pets,TDA + ZAEC,1,88.7435,4.7514
+pets,gate + ZAEC,1,88.798,5.5039
+pets,read-first TDA,1,88.3892,2.4934
+pets,CLIP,2,88.1712,4.3583
+pets,TDA,2,88.58,2.5531
+pets,agreement gate,2,88.5527,4.621
+pets,TDA + T (val),2,88.58,11.6981
+pets,TDA + ZAEC,2,88.58,4.9389
+pets,gate + ZAEC,2,88.5527,5.5209
+pets,read-first TDA,2,88.2529,2.8993
+eurosat,CLIP,0,41.9136,7.3136
+eurosat,TDA,0,53.4198,7.6594
+eurosat,agreement gate,0,53.1235,4.0248
+eurosat,TDA + T (val),0,53.4198,8.7906
+eurosat,TDA + ZAEC,0,53.4198,5.3823
+eurosat,gate + ZAEC,0,53.1235,6.2858
+eurosat,read-first TDA,0,53.4198,7.4379
+eurosat,CLIP,1,41.9136,7.3136
+eurosat,TDA,1,55.2346,6.4399
+eurosat,agreement gate,1,54.9753,3.615
+eurosat,TDA + T (val),1,55.2346,10.6296
+eurosat,TDA + ZAEC,1,55.2346,5.9498
+eurosat,gate + ZAEC,1,54.9753,7.3656
+eurosat,read-first TDA,1,55.1358,6.3342
+eurosat,CLIP,2,41.9136,7.3136
+eurosat,TDA,2,53.1481,6.6292
+eurosat,agreement gate,2,52.963,3.6452
+eurosat,TDA + T (val),2,53.1481,9.0457
+eurosat,TDA + ZAEC,2,53.1481,4.6461
+eurosat,gate + ZAEC,2,52.963,5.4476
+eurosat,read-first TDA,2,53.1358,6.4946
+aircraft,CLIP,0,23.8524,5.4583
+aircraft,TDA,0,24.0024,18.1942
+aircraft,agreement gate,0,24.0924,8.6419
+aircraft,TDA + T (val),0,24.0024,4.9605
+aircraft,TDA + ZAEC,0,24.0024,8.7455
+aircraft,gate + ZAEC,0,24.0924,5.4668
+aircraft,read-first TDA,0,23.8824,13.8567
+aircraft,CLIP,1,23.8524,5.4583
+aircraft,TDA,1,24.4224,17.5241
+aircraft,agreement gate,1,24.3324,7.6815
+aircraft,TDA + T (val),1,24.4224,4.4739
+aircraft,TDA + ZAEC,1,24.4224,8.2462
+aircraft,gate + ZAEC,1,24.3324,5.0179
+aircraft,read-first TDA,1,23.9724,13.0191
+aircraft,CLIP,2,23.8524,5.4583
+aircraft,TDA,2,23.6724,18.6743
+aircraft,agreement gate,2,23.8524,8.881
+aircraft,TDA + T (val),2,23.6724,5.1765
+aircraft,TDA + ZAEC,2,23.6724,9.0988
+aircraft,gate + ZAEC,2,23.8524,5.8389
+aircraft,read-first TDA,2,23.4623,14.2195
+dtd,DMN-weak,0,45.6265,25.9475
+dtd,ECALP,0,48.227,39.0179
+flower102,DMN-weak,0,70.2395,7.153
+flower102,ECALP,0,72.635,27.0916
+pets,DMN-weak,0,89.1251,4.586
+pets,ECALP,0,89.6702,9.99
+eurosat,DMN-weak,0,55.3457,4.2975
+eurosat,ECALP,0,55.679,24.3132
+aircraft,DMN-weak,0,24.2424,28.1106
+aircraft,ECALP,0,25.7726,60.8455
+dtd,DMN-weak,1,46.513,24.9211
+dtd,ECALP,1,47.7541,39.3517
+flower102,DMN-weak,1,70.1177,7.1717
+flower102,ECALP,1,73.2846,26.4758
+pets,DMN-weak,1,88.9343,4.6393
+pets,ECALP,1,89.643,9.9111
+eurosat,DMN-weak,1,56.4568,3.1642
+eurosat,ECALP,1,56.1111,24.2455
+aircraft,DMN-weak,1,24.4224,27.7852
+aircraft,ECALP,1,25.5626,61.5412
+dtd,DMN-weak,2,45.3901,26.1305
+dtd,ECALP,2,47.3404,39.9116
+flower102,DMN-weak,2,70.2801,7.1259
+flower102,ECALP,2,73.3252,26.402
+pets,DMN-weak,2,88.9616,4.2936
+pets,ECALP,2,89.3704,10.2819
+eurosat,DMN-weak,2,55.0123,5.4161
+eurosat,ECALP,2,55.5062,23.9442
+aircraft,DMN-weak,2,23.7924,28.4891
+aircraft,ECALP,2,25.2325,61.4483
+mean,CLIP,0,53.1159,5.6546
+mean,CLIP,1,53.1159,5.6546
+mean,CLIP,2,53.1159,5.6546
+mean,DMN-weak,0,56.9158,14.0189
+mean,DMN-weak,1,57.2889,13.5363
+mean,DMN-weak,2,56.6873,14.291
+mean,ECALP,0,58.3967,32.2516
+mean,ECALP,1,58.4711,32.3051
+mean,ECALP,2,58.1549,32.3976
+mean,TDA,0,56.7196,11.1715
+mean,TDA,1,57.1437,10.622
+mean,TDA,2,56.5577,10.9229
+mean,TDA + T (val),0,56.7196,6.7151
+mean,TDA + T (val),1,57.1437,7.1248
+mean,TDA + T (val),2,56.5577,7.1043
+mean,TDA + ZAEC,0,56.7196,6.0916
+mean,TDA + ZAEC,1,57.1437,5.8032
+mean,TDA + ZAEC,2,56.5577,5.9478
+mean,agreement gate,0,56.6677,5.5327
+mean,agreement gate,1,57.0005,5.3139
+mean,agreement gate,2,56.501,5.676
+mean,gate + ZAEC,0,56.6677,5.3491
+mean,gate + ZAEC,1,57.0005,5.1696
+mean,gate + ZAEC,2,56.501,5.2855
+mean,read-first TDA,0,56.5152,9.0099
+mean,read-first TDA,1,56.8324,8.4541
+mean,read-first TDA,2,56.3755,8.8585

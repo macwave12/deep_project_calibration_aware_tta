@@ -1,7 +1,5 @@
 """The deck is built from tracked CSVs and records; these tests pin that."""
 
-import json
-import re
 from pathlib import Path
 
 import pandas as pd
@@ -14,7 +12,6 @@ from presentation.build_pptx import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE_IDS = {f"A{i}" for i in range(1, 11)} | {"T06", "T06 timing", "T07", "T08"}
 
 
 def _slide_text(slide, *, skip_footer=True):
@@ -42,8 +39,9 @@ def deck(tmp_path_factory):
 
 def test_slide_count_and_every_slide_has_speaker_notes(deck):
     prs, _, notes, markdown, _ = deck
-    assert len(prs.slides) == len(SLIDE_BUILDERS) == 42
-    assert len(MAIN_BUILDERS) == 36 and len(BACKUP_BUILDERS) == 6
+    assert len(prs.slides) == len(SLIDE_BUILDERS)
+    assert len(MAIN_BUILDERS) <= 20  # T16 plan §10: at most 20 main slides, backup after
+    assert len(BACKUP_BUILDERS) >= 3
     for index, note in enumerate(notes, start=1):
         assert len(note.split()) >= 25, f"slide {index} has no real speaker notes"
     assert markdown.count("\n## ") == len(SLIDE_BUILDERS)
@@ -91,17 +89,6 @@ def test_illustrative_numbers_are_labelled_on_their_slide(deck):
             assert "llustrative" in text, f"slide {index} shows illustrative numbers without saying so"
 
 
-def test_placeholders_name_their_evidence(deck):
-    _, texts, _, _, _ = deck
-    found = set()
-    for text in texts:
-        for match in re.finditer(r"\[Pending ([^:\]]+):", text):
-            assert match.group(1) in EVIDENCE_IDS, match.group(1)
-            found.add(match.group(1))
-    # every T05 item that has a home in the outline is on a slide
-    assert {"A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "T06", "T07", "T08"} <= found
-
-
 def test_fonts_are_projector_legible(deck):
     prs = deck[0]
     for index, slide in enumerate(prs.slides, start=1):
@@ -120,61 +107,26 @@ def test_fonts_are_projector_legible(deck):
                             assert run.font.size >= Pt(14), (index, run.text[:40])
 
 
-def test_headline_slide_quotes_the_summary_csv_means(deck):
+def test_main_result_slide_quotes_the_ten_seed_records(deck):
     _, texts, _, _, _ = deck
-    summary = pd.read_csv(ROOT / "results/summary.csv")
-    means = summary.groupby("method")[["accuracy", "ece"]].mean()
-    slide = next(t for t in texts if "Headline results" in t)
-    for method in ("clipzs", "tda", "cal_tda_gate", "cal_tda_temp", "cal_tda_gate_temp"):
-        assert f"{means.loc[method, 'accuracy']:.2f}" in slide, method
-        assert f"{means.loc[method, 'ece']:.2f}" in slide, method
+    prot = pd.read_csv(ROOT / "results/protocols_10seeds.csv")
+    slide = next(t for t in texts if "Main result" in t)
+    for method in ("clipzs", "tda", "cal_tda_agree"):
+        for metric in ("accuracy", "ece"):
+            row = prot[(prot.protocol == "P2") & (prot.dataset == "mean") & (prot.method == method) & (prot.metric == metric)]
+            assert f"{float(row.iloc[0]['mean']):.2f}" in slide, (method, metric)
 
 
-def test_gate_result_slide_matches_ablation_gate_csv(deck):
+def test_tda_section_shows_and_cites_the_tda_paper_figures(deck):
+    prs, texts, _, _, _ = deck
+    cited = [t for t in texts if "arxiv.org/abs/2403.18293" in t]
+    assert any("Fig. 1" in t for t in cited) and any("Fig. 2" in t for t in cited)
+
+
+def test_every_evidence_slide_names_its_split(deck):
     _, texts, _, _, _ = deck
-    gate = pd.read_csv(ROOT / "results/ablation_gate.csv")
-    means = gate.groupby("variant")[["accuracy", "ece"]].mean()
-    slide = next(t for t in texts if "Result: gated fusion" in t)
-    assert f"{means.loc['gate', 'ece']:.2f}" in slide
-    assert f"{means.loc['none', 'ece']:.2f}" in slide
-    assert f"{means.loc['gate', 'accuracy']:.2f}" in slide
-    summary = pd.read_csv(ROOT / "results/summary.csv").set_index(["dataset", "method"])
-    beats = sum(gate.set_index(["dataset", "variant"]).loc[(d, "gate"), "ece"] < summary.loc[(d, "clipzs"), "ece"]
-                for d in gate.dataset.unique())
-    assert f"Beats CLIP's ECE on {beats} of 5" in slide
-
-
-def test_margin_slide_shows_admission_rates_from_the_raw_records(deck):
-    _, texts, _, _, _ = deck
-    slide = next(t for t in texts if "Margin admission: a negative result" in t)
-    for dataset in ("aircraft", "pets", "eurosat"):
-        record = json.loads((ROOT / f"results/raw/ablation/{dataset}_margin.json").read_text(encoding="utf-8"))
-        rate = 100.0 * record["hyperparams"]["admission"]["admission_rate"]
-        assert f"{rate:.1f}%" in slide, dataset
-
-
-def test_ablation_slide_lists_the_four_variants(deck):
-    _, texts, _, _, _ = deck
-    gate = pd.read_csv(ROOT / "results/ablation_gate.csv")
-    means = gate.groupby("variant")[["accuracy", "ece"]].mean()
-    slide = next(t for t in texts if "do not stack" in t)
-    for variant in ("none", "gate", "temp", "gate_temp"):
-        assert f"{means.loc[variant, 'ece']:.2f}" in slide, variant
-
-
-def test_clip_vs_tda_slide_uses_reliability_stats(deck):
-    _, texts, _, _, _ = deck
-    rel = pd.read_csv(ROOT / "results/analysis/reliability_stats.csv")
-    head = rel[rel.study == "headline"].set_index(["dataset", "variant"])
-    slide = next(t for t in texts if "CLIP vs TDA: accuracy, confidence" in t)
-    for dataset in ("dtd", "pets", "aircraft"):
-        assert f"{head.loc[(dataset, 'tda'), 'mean_confidence']:.2f}" in slide
-        assert f"{head.loc[(dataset, 'clipzs'), 'mean_confidence']:.2f}" in slide
-
-
-def test_tda_hyperparameters_on_slides_match_the_run_records(deck):
-    _, texts, _, _, _ = deck
-    slide = next(t for t in texts if "What α and β mean" in t)
-    for dataset in ("dtd", "eurosat", "aircraft"):
-        hp = json.loads((ROOT / f"results/raw/{dataset}_tda.json").read_text(encoding="utf-8"))["hyperparams"]
-        assert f"{hp['alpha']:.1f}" in slide and f"{hp['beta']:.1f}" in slide
+    assert sum("DIAGNOSIS · VAL" in t for t in texts) >= 2
+    assert sum("RESULTS · TEST" in t for t in texts) >= 4
+    for t in texts:
+        if "DIAGNOSIS · VAL" in t:
+            assert "(test" not in t

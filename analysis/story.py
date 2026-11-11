@@ -37,13 +37,17 @@ OUT = REPO / "results" / "analysis" / "story"
 RELIABILITY = ("clip", "tda", "gate")
 VARIANTS = {  # name -> label, as shown in the figures
     "clip": "CLIP", "base": "CLIP + negative cache", "pos": "CLIP + positive cache",
-    "tda": "TDA (both caches)", "noself": "TDA without self-vote", "gate": "agreement gate",
+    "tda": "TDA (both caches)", "noself": "TDA without self-vote", "gpos": "CLIP + gated positive cache",
+    "gate": "agreement gate (gated positive + negative)",
 }
 
 ALPHA = 2.0
 FIG = REPO / "analysis" / "figures"
 NAMES = {"dtd": "DTD", "flower102": "Flowers", "pets": "Pets", "eurosat": "EuroSAT", "aircraft": "Aircraft",
-         "imagenetv2": "ImageNetV2", "caltech101": "Caltech101", "ucf101": "UCF101", "food101": "Food101"}
+         "imagenetv2": "ImageNetV2", "caltech101": "Caltech101", "ucf101": "UCF101", "food101": "Food101",
+         "imagenet": "ImageNet", "imagenet_a": "ImageNet-A", "imagenet_r": "ImageNet-R",
+         "imagenet_sketch": "ImageNet-Sketch", "stl10": "STL-10", "cifar10": "CIFAR-10", "cifar100": "CIFAR-100",
+         "voc2007": "VOC2007", "gtsrb": "GTSRB", "cars": "Cars"}
 C_CLIP, C_BASE, C_TDA, C_GATE = "#4c78a8", "#8d99ae", "#e45756", "#2a9d8f"
 
 
@@ -53,13 +57,15 @@ def derive(r) -> dict:
     p0 = r.clip.softmax(-1)
     pred0 = p0.argmax(-1)
     has = r.cache.clamp_min(0).sum(-1) > 0
-    agree = has & (r.cache.argmax(-1) == pred0)
+    agree = has & (r.s["agree"] == 1)  # as `disagree_mask`: the online tie-break of CLIP's top-1
     o_tda = r.base + ALPHA * r.cache
     c_ns = r.cache.clone()
     sv = r.self_vote
     c_ns[sv, pred0[sv]] -= 1.0
     o_ns = r.base + ALPHA * c_ns.clamp_min(0)
-    o_gate = r.base + (ALPHA * (has & ~agree).double())[:, None] * r.cache
+    open_ = (ALPHA * (has & ~agree).double())[:, None]
+    o_gate = r.base + open_ * r.cache
+    o_gpos = r.clip + open_ * r.cache
     top2 = r.clip.topk(2, -1).values
     n = r.clip - r.base
     safe = (top2[:, 0] - top2[:, 1]) > ALPHA * r.cache.max(-1).values + (n.max(-1).values - n.min(-1).values)
@@ -67,7 +73,7 @@ def derive(r) -> dict:
            "clip_conf": p0.max(-1).values}
     o_pos = r.clip + ALPHA * r.cache
     for k, o in (("clip", r.clip), ("base", r.base), ("pos", o_pos), ("tda", o_tda), ("noself", o_ns),
-                 ("gate", o_gate)):
+                 ("gpos", o_gpos), ("gate", o_gate)):
         p = o.softmax(-1)
         out[f"{k}_pred"], out[f"{k}_conf"] = p.argmax(-1), p.max(-1).values
         out[f"{k}_ece"] = 100 * compute_ece(p.numpy(), y.numpy())
@@ -203,12 +209,18 @@ def fig_step3(val, path, split="val"):
 
 # --- Step 5: where it helps most (exploratory relationship; DECISIONS 2026-11-11) -------------
 SHOT_CAPACITY = 3
+SIGNAL_HEAD = 500  # stream samples the label-free confidence signals use
+CONF_CUT = 0.6
 
 
 def worst_case_safe(r) -> torch.Tensor:
     """No flip possible whatever the cache holds: CLIP gap > alpha * S + range(n) (cache-independent)."""
-    top2 = r.clip.topk(2, -1).values
-    n = r.clip - r.base
+    return worst_case_safe_logits(r.clip, r.base)
+
+
+def worst_case_safe_logits(clip: torch.Tensor, base: torch.Tensor) -> torch.Tensor:
+    top2 = clip.topk(2, -1).values
+    n = clip - base
     return (top2[:, 0] - top2[:, 1]) > ALPHA * SHOT_CAPACITY + (n.max(-1).values - n.min(-1).values)
 
 
@@ -219,46 +231,64 @@ CONFIDENCE_SIGNALS = (
 )
 
 
-def confidence_signals(runs, head=500) -> pd.DataFrame:
+def signal_row(dataset, clip, base, head=SIGNAL_HEAD) -> dict:
+    clip, base = clip[:head].double(), base[:head].double()
+    conf = clip.softmax(-1).max(-1).values
+    return {"dataset": dataset,
+            "share": 100 * float(worst_case_safe_logits(clip, base).double().mean()),
+            "over06": 100 * float((conf > CONF_CUT).double().mean()),
+            "conf": 100 * float(conf.mean())}
+
+
+def confidence_signals(runs, head=SIGNAL_HEAD) -> pd.DataFrame:
     """Label-free CLIP-confidence signals on the first `head` stream samples, mean over seeds."""
-    rows = []
-    for r in runs:
-        conf = r.clip.softmax(-1).max(-1).values[:head]
-        rows.append({"dataset": r.dataset,
-                     "share": 100 * float(worst_case_safe(r)[:head].double().mean()),
-                     "over06": 100 * float((conf > 0.6).double().mean()),
-                     "conf": 100 * float(conf.mean())})
-    return pd.DataFrame(rows).groupby("dataset").mean()
+    return pd.DataFrame([signal_row(r.dataset, r.clip, r.base, head) for r in runs]).groupby("dataset").mean()
 
 
-def fig_step5(runs, data_by_group, path):
+def plot_where_it_helps(sig: pd.DataFrame, dece: dict, group_of: dict, path, seeds_note="P2, 3 seeds"):
+    """dECE (gate - TDA) per dataset against each confidence signal, with Spearman rho over all."""
     from scipy.stats import spearmanr
-    sig = confidence_signals(runs)
-    dece = {n: mean_over_seeds(ds, lambda d: d["gate_ece"] - d["tda_ece"])
-            for data in data_by_group.values() for n, ds in data.items()}
     names = list(dece)
+    groups = list(dict.fromkeys(group_of[n] for n in names))
+    markers = dict(zip(groups, ("o", "s", "D", "^")))
     fig, axes = plt.subplots(1, len(CONFIDENCE_SIGNALS), figsize=(16, 4.6), sharey=True)
     for ax, (key, label) in zip(axes, CONFIDENCE_SIGNALS):
-        for (group, data), marker in zip(data_by_group.items(), ("o", "s", "D")):
-            for n in data:
-                x, y = sig.loc[n, key], dece[n]
-                ax.plot(x, y, marker, ms=9, color=C_GATE if y < 0 else C_TDA, mec="black")
-                ax.annotate(NAMES.get(n, n), (x, y), textcoords="offset points", xytext=(6, 4), fontsize=8)
+        for n in names:
+            x, y = sig.loc[n, key], dece[n]
+            ax.plot(x, y, markers[group_of[n]], ms=9, color=C_GATE if y < 0 else C_TDA, mec="black")
+            ax.annotate(NAMES.get(n, n), (x, y), textcoords="offset points", xytext=(6, 4), fontsize=8)
         rho = spearmanr([sig.loc[n, key] for n in names], [dece[n] for n in names]).correlation
         ax.set_title(f"Spearman rho = {rho:+.2f}  (n = {len(names)})", fontsize=10)
         ax.axhline(0, color="black", lw=0.6)
         ax.set_xlabel(label + ", first 500 samples")
         ax.grid(alpha=0.3)
     axes[0].set_ylabel("ECE(gate) - ECE(TDA)  (pts; < 0: gate better)")
-    groups = ", ".join(f"{g} {m}" for g, m in zip(data_by_group, ("o", "[]", "<>")))
-    fig.suptitle(f"Where the gate helps most: where CLIP is not confident (exploratory; {groups}; P2, 3 seeds)")
+    legend = ", ".join(f"{g} {m}" for g, m in zip(groups, ("o", "[]", "<>", "^")))
+    fig.suptitle(f"Where the gate helps most: where CLIP is not confident (exploratory; {legend}; {seeds_note})")
     fig.tight_layout()
     fig.savefig(path, dpi=140)
     plt.close(fig)
 
 
+def spearman_rows(sig: pd.DataFrame, dece: dict, keys=None) -> pd.DataFrame:
+    from scipy.stats import spearmanr
+    names = list(dece)
+    keys = [k for k, _ in CONFIDENCE_SIGNALS] if keys is None else keys
+    return pd.DataFrame([{"signal": key, "n": len(names),
+                          "rho": spearmanr([sig.loc[n, key] for n in names], [dece[n] for n in names]).correlation}
+                         for key in keys])
+
+
+def fig_step5(runs, data_by_group, path):
+    sig = confidence_signals(runs)
+    dece = {n: mean_over_seeds(ds, lambda d: d["gate_ece"] - d["tda_ece"])
+            for data in data_by_group.values() for n, ds in data.items()}
+    group_of = {n: g for g, data in data_by_group.items() for n in data}
+    plot_where_it_helps(sig, dece, group_of, path)
+
+
 # --- Cache ablation (TDA paper Fig. 3, with ECE) --------------------------------------------
-ABLATION = ("clip", "base", "pos", "tda", "gate")
+ABLATION = ("clip", "base", "gpos", "gate", "tda")
 
 
 def summary_table(data) -> pd.DataFrame:
@@ -274,6 +304,12 @@ def summary_table(data) -> pd.DataFrame:
         row["agree_share"] = mean_over_seeds(ds, lambda d: 100 * float(d["agree"].double().mean()))
         row["p_agree_given_self"] = mean_over_seeds(ds, lambda d: 100 * float(d["agree"][d["self"]].double().mean()))
         row["p_agree_given_no_self"] = mean_over_seeds(ds, lambda d: 100 * float(d["agree"][~d["self"]].double().mean()))
+        # Lemma 2 needs argmax c = argmax b; the gate tests argmax c = CLIP's top-1. Where the negative cache
+        # moved the top-1 (b's argmax != CLIP's) the lemma does not apply and adding the cache can flip.
+        row["agree_neg_moved"] = mean_over_seeds(
+            ds, lambda d: 100 * float((d["base_pred"][d["agree"]] != d["pred0"][d["agree"]]).double().mean()))
+        row["agree_tda_flips"] = mean_over_seeds(
+            ds, lambda d: 100 * float((d["tda_pred"][d["agree"]] != d["base_pred"][d["agree"]]).double().mean()))
         for part, sel in (("agree", lambda d: d["agree"]), ("disagree", lambda d: ~d["agree"])):
             for k in ("base", "tda"):
                 row[f"{k}_acc_{part}"] = mean_over_seeds(ds, lambda d, k=k: acc(d, k, sel(d)))
@@ -288,7 +324,7 @@ def summary_table(data) -> pd.DataFrame:
 def fig_cache_ablation(table, path, split="test"):
     names = list(table["dataset"])
     x = np.arange(len(names))
-    colors = {"clip": C_CLIP, "base": C_BASE, "pos": "#f4a261", "tda": C_TDA, "gate": C_GATE}
+    colors = {"clip": C_CLIP, "base": C_BASE, "gpos": "#f4a261", "tda": C_TDA, "gate": C_GATE}
     fig, ax = plt.subplots(1, 2, figsize=(14, 3.9))
     w = 0.16
     for i, k in enumerate(ABLATION):
@@ -301,8 +337,8 @@ def fig_cache_ablation(table, path, split="test"):
         a.grid(axis="y", alpha=0.3)
     ax[0].set_ylim(max(0, float(table[[f"{k}_acc" for k in ABLATION]].min().min()) - 10), None)
     ax[1].legend(fontsize=8)
-    fig.suptitle(f"Which cache does what ({split}, P2): the positive cache brings the gain and all the "
-                 "overconfidence; the negative cache helps both")
+    fig.suptitle(f"Cache ablation under the gate ({split}, P2): the gated positive cache brings the gain without "
+                 "TDA's overconfidence; the negative cache adds to both metrics")
     fig.tight_layout()
     fig.savefig(path, dpi=140)
     plt.close(fig)

@@ -1,0 +1,97 @@
+dataset,method,reference,metric,n,seeds,mean_diff,std_diff,mae_diff,ci90_lo,ci90_hi,wins,ties,losses
+dtd,CLIP,TDA,accuracy,3,0 1 2,-2.7778,0.1564,2.7778,,,0,0,3
+dtd,CLIP,TDA,ece,3,0 1 2,-9.1425,0.3724,9.1425,,,3,0,0
+dtd,agreement gate,TDA,accuracy,3,0 1 2,0.0197,0.2076,0.1379,,,1,1,1
+dtd,agreement gate,TDA,ece,3,0 1 2,-9.7863,0.3778,9.7863,,,3,0,0
+dtd,TDA + T (val),TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0
+dtd,TDA + T (val),TDA,ece,3,0 1 2,-13.8145,1.114,13.8145,,,3,0,0
+dtd,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0
+dtd,TDA + ZAEC,TDA,ece,3,0 1 2,-9.2288,0.225,9.2288,,,3,0,0
+dtd,gate + ZAEC,TDA,accuracy,3,0 1 2,0.0197,0.2076,0.1379,,,1,1,1
+dtd,gate + ZAEC,TDA,ece,3,0 1 2,-11.5992,0.1264,11.5992,,,3,0,0
+dtd,read-first TDA,TDA,accuracy,3,0 1 2,0.2364,0.2576,0.2364,,,3,0,0
+dtd,read-first TDA,TDA,ece,3,0 1 2,-4.6729,0.2533,4.6729,,,3,0,0
+dtd,DMN-weak,TDA,accuracy,3,0 1 2,-1.2608,0.4356,1.2608,,,0,0,3
+dtd,DMN-weak,TDA,ece,3,0 1 2,8.2861,0.4655,8.2861,,,0,0,3
+dtd,ECALP,TDA,accuracy,3,0 1 2,0.6698,0.4475,0.6698,,,3,0,0
+dtd,ECALP,TDA,ece,3,0 1 2,22.0468,0.7075,22.0468,,,0,0,3
+flower102,CLIP,TDA,accuracy,3,0 1 2,-3.0045,0.2536,3.0045,,,0,0,3
+flower102,CLIP,TDA,ece,3,0 1 2,-6.6859,0.1839,6.6859,,,3,0,0
+flower102,agreement gate,TDA,accuracy,3,0 1 2,-0.2977,0.169,0.2977,,,0,0,3
+flower102,agreement gate,TDA,ece,3,0 1 2,-6.3838,0.5682,6.3838,,,3,0,0
+flower102,TDA + T (val),TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0
+flower102,TDA + T (val),TDA,ece,3,0 1 2,-4.0173,0.4213,4.0173,,,3,0,0
+flower102,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0
+flower102,TDA + ZAEC,TDA,ece,3,0 1 2,-6.9483,0.7575,6.9483,,,3,0,0
+flower102,gate + ZAEC,TDA,accuracy,3,0 1 2,-0.2977,0.169,0.2977,,,0,0,3
+flower102,gate + ZAEC,TDA,ece,3,0 1 2,-6.4281,0.8809,6.4281,,,3,0,0
+flower102,read-first TDA,TDA,accuracy,3,0 1 2,-0.8662,0.0845,0.8662,,,0,0,3
+flower102,read-first TDA,TDA,ece,3,0 1 2,-1.6564,0.2727,1.6564,,,3,0,0
+flower102,DMN-weak,TDA,accuracy,3,0 1 2,-0.1083,0.1831,0.1624,,,1,0,2
+flower102,DMN-weak,TDA,ece,3,0 1 2,-2.4408,0.1617,2.4408,,,3,0,0
+flower102,ECALP,TDA,accuracy,3,0 1 2,2.7609,0.5856,2.7609,,,3,0,0
+flower102,ECALP,TDA,ece,3,0 1 2,17.0655,0.4296,17.0655,,,0,0,3
+pets,CLIP,TDA,accuracy,3,0 1 2,-0.4724,0.0876,0.4724,,,0,0,3
+pets,CLIP,TDA,ece,3,0 1 2,1.8425,0.1764,1.8425,,,0,0,3
+pets,agreement gate,TDA,accuracy,3,0 1 2,0.0454,0.0686,0.0636,,,2,0,1
+pets,agreement gate,TDA,ece,3,0 1 2,2.0576,0.0106,2.0576,,,0,0,3
+pets,TDA + T (val),TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0
+pets,TDA + T (val),TDA,ece,3,0 1 2,8.8927,0.3178,8.8927,,,0,0,3
+pets,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0
+pets,TDA + ZAEC,TDA,ece,3,0 1 2,2.4049,0.0212,2.4049,,,0,0,3
+pets,gate + ZAEC,TDA,accuracy,3,0 1 2,0.0454,0.0686,0.0636,,,2,0,1
+pets,gate + ZAEC,TDA,ece,3,0 1 2,3.0729,0.1062,3.0729,,,0,0,3
+pets,read-first TDA,TDA,accuracy,3,0 1 2,-0.2362,0.1815,0.2362,,,0,0,3
+pets,read-first TDA,TDA,ece,3,0 1 2,0.2593,0.0883,0.2593,,,0,0,3
+pets,DMN-weak,TDA,accuracy,3,0 1 2,0.3634,0.1643,0.3634,,,3,0,0
+pets,DMN-weak,TDA,ece,3,0 1 2,1.9905,0.2948,1.9905,,,0,0,3
+pets,ECALP,TDA,accuracy,3,0 1 2,0.9176,0.1372,0.9176,,,3,0,0
+pets,ECALP,TDA,ece,3,0 1 2,7.5452,0.208,7.5452,,,0,0,3
+eurosat,CLIP,TDA,accuracy,3,0 1 2,-12.0206,1.1343,12.0206,,,0,0,3
+eurosat,CLIP,TDA,ece,3,0 1 2,0.4041,0.6563,0.6347,,,1,0,2
+eurosat,agreement gate,TDA,accuracy,3,0 1 2,-0.2469,0.0566,0.2469,,,0,0,3
+eurosat,agreement gate,TDA,ece,3,0 1 2,-3.1478,0.429,3.1478,,,3,0,0
+eurosat,TDA + T (val),TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0
+eurosat,TDA + T (val),TDA,ece,3,0 1 2,2.5791,1.5358,2.5791,,,0,0,3
+eurosat,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0
+eurosat,TDA + ZAEC,TDA,ece,3,0 1 2,-1.5834,0.9582,1.5834,,,3,0,0
+eurosat,gate + ZAEC,TDA,accuracy,3,0 1 2,-0.2469,0.0566,0.2469,,,0,0,3
+eurosat,gate + ZAEC,TDA,ece,3,0 1 2,-0.5431,1.2757,1.1603,,,2,0,1
+eurosat,read-first TDA,TDA,accuracy,3,0 1 2,-0.037,0.0538,0.037,,,0,1,2
+eurosat,read-first TDA,TDA,ece,3,0 1 2,-0.1539,0.0603,0.1539,,,3,0,0
+eurosat,DMN-weak,TDA,accuracy,3,0 1 2,1.6708,0.3897,1.6708,,,3,0,0
+eurosat,DMN-weak,TDA,ece,3,0 1 2,-2.6169,1.2165,2.6169,,,3,0,0
+eurosat,ECALP,TDA,accuracy,3,0 1 2,1.8313,0.8283,1.8313,,,3,0,0
+eurosat,ECALP,TDA,ece,3,0 1 2,17.2581,0.578,17.2581,,,0,0,3
+aircraft,CLIP,TDA,accuracy,3,0 1 2,-0.18,0.3759,0.3,,,1,0,2
+aircraft,CLIP,TDA,ece,3,0 1 2,-12.6726,0.5777,12.6726,,,3,0,0
+aircraft,agreement gate,TDA,accuracy,3,0 1 2,0.06,0.1375,0.12,,,2,0,1
+aircraft,agreement gate,TDA,ece,3,0 1 2,-9.7294,0.1553,9.7294,,,3,0,0
+aircraft,TDA + T (val),TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0
+aircraft,TDA + T (val),TDA,ece,3,0 1 2,-13.2606,0.2251,13.2606,,,3,0,0
+aircraft,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0
+aircraft,TDA + ZAEC,TDA,ece,3,0 1 2,-9.4341,0.1494,9.4341,,,3,0,0
+aircraft,gate + ZAEC,TDA,accuracy,3,0 1 2,0.06,0.1375,0.12,,,2,0,1
+aircraft,gate + ZAEC,TDA,ece,3,0 1 2,-12.6897,0.1679,12.6897,,,3,0,0
+aircraft,read-first TDA,TDA,accuracy,3,0 1 2,-0.26,0.1706,0.26,,,0,0,3
+aircraft,read-first TDA,TDA,ece,3,0 1 2,-4.4325,0.0859,4.4325,,,3,0,0
+aircraft,DMN-weak,TDA,accuracy,3,0 1 2,0.12,0.12,0.12,,,2,1,0
+aircraft,DMN-weak,TDA,ece,3,0 1 2,9.9975,0.234,9.9975,,,0,0,3
+aircraft,ECALP,TDA,accuracy,3,0 1 2,1.4901,0.3208,1.4901,,,3,0,0
+aircraft,ECALP,TDA,ece,3,0 1 2,43.1474,0.7556,43.1474,,,0,0,3
+mean,CLIP,TDA,accuracy,3,0 1 2,-3.6911,0.3026,3.6911,,,0,0,3
+mean,CLIP,TDA,ece,3,0 1 2,-5.2509,0.2751,5.2509,,,3,0,0
+mean,DMN-weak,TDA,accuracy,3,0 1 2,0.157,0.0348,0.157,,,3,0,0
+mean,DMN-weak,TDA,ece,3,0 1 2,3.0433,0.2833,3.0433,,,0,0,3
+mean,ECALP,TDA,accuracy,3,0 1 2,1.5339,0.1833,1.5339,,,3,0,0
+mean,ECALP,TDA,ece,3,0 1 2,21.4126,0.3062,21.4126,,,0,0,3
+mean,TDA + T (val),TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0
+mean,TDA + T (val),TDA,ece,3,0 1 2,-3.9241,0.4882,3.9241,,,3,0,0
+mean,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0
+mean,TDA + ZAEC,TDA,ece,3,0 1 2,-4.9579,0.1314,4.9579,,,3,0,0
+mean,agreement gate,TDA,accuracy,3,0 1 2,-0.0839,0.0513,0.0839,,,0,0,3
+mean,agreement gate,TDA,ece,3,0 1 2,-5.3979,0.2108,5.3979,,,3,0,0
+mean,gate + ZAEC,TDA,accuracy,3,0 1 2,-0.0839,0.0513,0.0839,,,0,0,3
+mean,gate + ZAEC,TDA,ece,3,0 1 2,-5.6374,0.185,5.6374,,,3,0,0
+mean,read-first TDA,TDA,accuracy,3,0 1 2,-0.2326,0.069,0.2326,,,0,0,3
+mean,read-first TDA,TDA,ece,3,0 1 2,-2.1313,0.058,2.1313,,,3,0,0

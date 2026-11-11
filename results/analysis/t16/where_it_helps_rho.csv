@@ -1,0 +1,13 @@
+signal,n,rho,datasets
+share,19,0.435,all
+over06,19,0.551,all
+conf,19,0.567,all
+clip_gap,19,-0.886,all
+share,9,0.583,test+dev
+over06,9,0.7,test+dev
+conf,9,0.7,test+dev
+clip_gap,9,-0.733,test+dev
+share,10,0.164,fresh
+over06,10,0.442,fresh
+conf,10,0.442,fresh
+clip_gap,10,-0.867,fresh
