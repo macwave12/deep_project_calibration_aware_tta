@@ -120,6 +120,9 @@ class CalTdaConfig:
     # decision. `agreement_temperature` divides the logits of the gated samples.
     agreement_gate: bool = False
     agreement_temperature: float = 1.0
+    # T16 ablation: read both caches BEFORE writing the current image (TDA writes first),
+    # so an image can never vote for itself (no self-vote).
+    read_before_write: bool = False
 
     # Inherited from TDA; kept so `cal_tda` with all flags off == `tda`.
     entropy_threshold: float = 0.5
@@ -180,6 +183,8 @@ class CalTdaConfig:
             # Off: leave records of every pre-T14 config unchanged.
             data.pop('agreement_gate', None)
             data.pop('agreement_temperature', None)
+        if not data.get('read_before_write'):
+            data.pop('read_before_write', None)
         data['inert'] = inert
         return data
 
@@ -470,43 +475,54 @@ class CalTDA(TDA):
         self._n_admit_offered += 1
         trace = self.trace
         in_pos_cache = in_neg_cache = False
-        if admit:
-            self._n_admit_admitted += 1
-            update_cache(
-                self.pos_cache, pred0, [image_features, ent0], self.config.shot_capacity
-            )
-            if trace is not None:
-                in_pos_cache = trace.track_write('pos', self.pos_cache, pred0, image_features)
-
         # Negative cache: untouched upstream behaviour (normalized-entropy band).
         neg_band = bool(0.2 < ent0 / math.log2(num_classes) and ent0 / math.log2(num_classes) < 0.5)
-        if neg_band:
-            update_cache(self.neg_cache, pred0, [image_features, ent0, softmax0], 2, True)
-            if trace is not None:
-                in_neg_cache = trace.track_write('neg', self.neg_cache, pred0, image_features)
+
+        def write_caches():
+            nonlocal in_pos_cache, in_neg_cache
+            if admit:
+                self._n_admit_admitted += 1
+                update_cache(
+                    self.pos_cache, pred0, [image_features, ent0], self.config.shot_capacity
+                )
+                if trace is not None:
+                    in_pos_cache = trace.track_write('pos', self.pos_cache, pred0, image_features)
+            if neg_band:
+                update_cache(self.neg_cache, pred0, [image_features, ent0, softmax0], 2, True)
+                if trace is not None:
+                    in_neg_cache = trace.track_write('neg', self.neg_cache, pred0, image_features)
 
         # --- CLIP evidence, corrected by the negative cache -------------------
         # The negative cache carries its own fixed alpha and is a correction to
         # CLIP's own evidence, so it stays on the CLIP side of the fusion. The
         # positive cache is computed *unscaled* (alpha=1.0) because
         # `finalize_probs` applies `config.alpha` itself in the additive branch.
-        base_logits = logits.clone()
-        neg_logits = None
-        if self.use_neg_cache and len(self.neg_cache) > 0:
-            neg_logits = compute_cache_logits(
-                image_features, self.neg_cache, self.neg_alpha, self.neg_beta,
-                text_features.unsqueeze(0), (0.03, 1.0),
-            )
-            base_logits -= neg_logits
+        def read_caches():
+            base = logits.clone()
+            neg = None
+            if self.use_neg_cache and len(self.neg_cache) > 0:
+                neg = compute_cache_logits(
+                    image_features, self.neg_cache, self.neg_alpha, self.neg_beta,
+                    text_features.unsqueeze(0), (0.03, 1.0),
+                )
+                base -= neg
+            has = self.use_pos_cache and len(self.pos_cache) > 0
+            if has:
+                cache = compute_cache_logits(
+                    image_features, self.pos_cache, 1.0, self.config.beta,
+                    text_features.unsqueeze(0),
+                )
+            else:
+                cache = torch.zeros_like(base)
+            return base, neg, has, cache
 
-        has_cache = self.use_pos_cache and len(self.pos_cache) > 0
-        if has_cache:
-            cache_logits = compute_cache_logits(
-                image_features, self.pos_cache, 1.0, self.config.beta,
-                text_features.unsqueeze(0),
-            )
-        else:
-            cache_logits = torch.zeros_like(base_logits)
+        if self.config.read_before_write:
+            base_logits, neg_logits, has_cache, cache_logits = read_caches()
+            write_caches()
+            in_pos_cache = in_neg_cache = False  # not in the caches when they were read
+        else:  # upstream TDA order: write, then read (the image can vote for itself)
+            write_caches()
+            base_logits, neg_logits, has_cache, cache_logits = read_caches()
 
         base_logits = base_logits.float()
         cache_logits = cache_logits.float()

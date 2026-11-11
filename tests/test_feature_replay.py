@@ -299,7 +299,16 @@ def test_val_split_and_other_seeds_get_their_own_folders(store_root, tmp_path):
     assert json.loads(val.read_text())["n_samples"] == 16
 
 
-@pytest.mark.parametrize("algorithm", ["dmn_weak", "ecalp", "onzeta"])
+@pytest.mark.parametrize("algorithm", ["dmn_weak", "ecalp"])
+def test_baselines_are_scored_as_probability_records(store_root, tmp_path, algorithm):
+    path = replay_one(store_root, "dtd", algorithm=algorithm, out_dir=tmp_path, limit=12,
+                      log=lambda *_: None)
+    record = json.loads(path.read_text())
+    assert path.name == f"dtd_{algorithm}.json" and record["n_samples"] == 12
+    assert 0.0 <= record["accuracy"] <= 1.0 and 0.0 <= record["ece"] <= 1.0
+
+
+@pytest.mark.parametrize("algorithm", ["onzeta"])
 def test_unscored_upstream_methods_run_on_cpu_and_keep_raw_outputs(store_root, tmp_path, algorithm):
     path = replay_one(store_root, "dtd", algorithm=algorithm, out_dir=tmp_path, limit=12,
                       log=lambda *_: None)

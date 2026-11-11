@@ -40,14 +40,24 @@ def test_logit_methods_are_softmaxed_into_distributions():
         assert torch.allclose(out.sum(dim=-1), torch.ones(2), atol=1e-6)
 
 
-def test_only_the_three_studied_methods_are_scored():
-    assert SCORED_ALGORITHMS == {'clipzs', 'tda', 'cal_tda'}
-    assert PROBABILITY_OUTPUT_ALGORITHMS == {'cal_tda'}
-    # The seven untouched upstream methods were never inspected for output
-    # shape or scale, so they must not reach the scorer.
-    for algorithm in ('dmn', 'dmn_weak', 'boostadapter', 'dpe', 'ecalp',
-                      'onzeta', 'dynaprompt'):
+def test_only_studied_methods_and_inspected_baselines_are_scored():
+    assert SCORED_ALGORITHMS == {'clipzs', 'tda', 'cal_tda', 'ecalp', 'dmn_weak'}
+    assert PROBABILITY_OUTPUT_ALGORITHMS == {'cal_tda', 'ecalp'}
+    # The untouched upstream methods were never inspected for output shape or
+    # scale, so they must not reach the scorer.
+    for algorithm in ('dmn', 'boostadapter', 'dpe', 'onzeta', 'dynaprompt'):
         assert algorithm not in SCORED_ALGORITHMS
+
+
+def test_baseline_outputs_become_their_own_distributions():
+    from online_tta import to_probabilities
+    probs = torch.tensor([[0.7, 0.2, 0.1]])
+    # ECALP already returns a probability vector: kept as is, never re-softmaxed.
+    assert torch.equal(to_probabilities('ecalp', probs), probs)
+    # DMN-weak returns p_clip + alpha * p_memory: scored as the mixture (row-normalized).
+    mix = torch.tensor([[0.6, 0.3, 0.1]]) + 1.0 * torch.tensor([[0.2, 0.2, 0.6]])
+    out = to_probabilities('dmn_weak', mix)
+    assert torch.allclose(out, torch.tensor([[0.4, 0.25, 0.35]])) and torch.allclose(out.sum(-1), torch.ones(1))
 
 
 def test_config_loading_is_typed_for_cal_tda_and_plain_otherwise(tmp_path):

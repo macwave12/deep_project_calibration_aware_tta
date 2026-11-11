@@ -55,13 +55,18 @@ model_names = sorted(name for name in models.__dict__
 # Methods whose `return_dict['output']` is already a probability vector rather
 # than logits. Everything else gets a softmax before scoring, so all methods
 # hand `score_and_save` the same kind of object.
-PROBABILITY_OUTPUT_ALGORITHMS = {'cal_tda'}
+# `ecalp` returns softmax(10000 * propagated labels) (ecalp_utils.py), i.e. already a
+# (near one-hot) probability vector: it is ECALP's own predictive distribution.
+PROBABILITY_OUTPUT_ALGORITHMS = {'cal_tda', 'ecalp'}
+# `dmn_weak` returns softmax(clip) + alpha * softmax(memory) (dmn_weak.py), a sum of two
+# distributions; scored as the mixture it is, i.e. divided by its row sum (1 + alpha).
+MIXTURE_OUTPUT_ALGORITHMS = {'dmn_weak'}
 
-# Only the three methods this project studies are scored. The other upstream
-# methods were never inspected here: one of them returning probabilities would
-# get a silently double-softmaxed ECE, and one returning a shape other than
-# [B, C] would fail the scorer's row-count check only *after* a full run.
-SCORED_ALGORITHMS = {'clipzs', 'tda', 'cal_tda'}
+# The methods this project studies plus the T16 baselines (outputs inspected above). The
+# other upstream methods were never inspected here: one of them returning probabilities would
+# get a silently double-softmaxed ECE, and one returning a shape other than [B, C] would fail
+# the scorer's row-count check only *after* a full run.
+SCORED_ALGORITHMS = {'clipzs', 'tda', 'cal_tda', 'ecalp', 'dmn_weak'}
 
 
 def to_probabilities(algorithm, output):
@@ -74,6 +79,8 @@ def to_probabilities(algorithm, output):
     values = output.detach().float()
     if algorithm in PROBABILITY_OUTPUT_ALGORITHMS:
         return values
+    if algorithm in MIXTURE_OUTPUT_ALGORITHMS:
+        return values / values.sum(dim=-1, keepdim=True)
     return values.softmax(dim=-1)
 
 

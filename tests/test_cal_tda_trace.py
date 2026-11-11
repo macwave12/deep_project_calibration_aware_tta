@@ -73,8 +73,8 @@ def test_trace_off_is_bit_identical_to_the_pre_change_code(cpu_only, baseline_mo
     features, text = stream[0][:N_BASELINE], stream[1]
     args = default_args("Pets")
     data = yaml.safe_load((ROOT / "configs" / "method" / f"{name}.yaml").read_text())
-    if "agreement_gate" in data:
-        pytest.skip("T14 config: the pre-T03 code has no agreement gate to compare against")
+    if "agreement_gate" in data or "read_before_write" in data:
+        pytest.skip("T14/T16 config: the pre-T03 code has no such option to compare against")
     old_cfg = baseline_module.CalTdaConfig.from_dict(data)
     old, old_out = _run(baseline_module.CalTDA, old_cfg, features, text, args)
     new, new_out = _run(CalTDA, _config(name), features, text, args)
@@ -298,3 +298,28 @@ def test_agreement_gate_rejects_fusion(cpu_only, stream):
     features, text, _ = stream
     with pytest.raises(ValueError, match="additive"):
         _run(CalTDA, _config("cal_tda_agree", use_prob_fusion=True), features, text, default_args("DTD"))
+
+
+# --- T16: read before write (no self-vote) -----------------------------------------------
+
+def test_read_before_write_removes_the_self_vote_but_not_the_writes(cpu_only, stream):
+    features, text, _ = stream
+    args = default_args("DTD")
+    first, out_first = _run(CalTDA, _config("tda_equivalent", trace=True), features, text, args)
+    read, out_read = _run(CalTDA, _config("tda_read_first", trace=True), features, text, args)
+    s_first, s_read = first.trace_dict(), read.trace_dict()
+    assert s_first["steps"]["in_pos_cache"].any()          # TDA: images vote for themselves
+    assert not s_read["steps"]["in_pos_cache"].any()        # read first: never
+    # The first image meets empty caches: plain CLIP.
+    assert torch.allclose(out_read[0].double(), (100.0 * features[:1] @ text.t()).double().softmax(-1), atol=1e-6)
+    # Same writes in the same order: the caches end identical, only the read timing differs.
+    for which in ("pos", "neg"):
+        a, b = s_first["snapshots"][-1][which], s_read["snapshots"][-1][which]
+        assert torch.equal(a["class"], b["class"]) and torch.equal(a["feature"], b["feature"])
+    assert not all(torch.equal(x, y) for x, y in zip(out_first, out_read))
+
+
+def test_read_before_write_defaults_off_and_stays_out_of_records():
+    assert CalTdaConfig().read_before_write is False
+    assert "read_before_write" not in CalTdaConfig().as_record_dict()
+    assert _config("tda_read_first").as_record_dict()["read_before_write"] is True
