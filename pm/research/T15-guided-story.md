@@ -19,8 +19,9 @@ the **self-vote**, where the image votes for its own label. We show three things
    it overshoots.
 3. All of TDA's accuracy gain comes from the samples where the cache disagrees with CLIP.
 
-Hence the method: use the cache only where it disagrees. A label-free test of how much of the
-stream the cache cannot affect predicts the datasets where this is not worth doing.
+Hence the method: use the cache only where it disagrees, **always on** (Idan, 2026-11-11). Its
+gain over TDA is largest where CLIP is not confident and shrinks as CLIP's confidence rises; that
+relationship is reported as an exploratory result, not used as a switch.
 
 ## Step 1: the self-vote and its cost
 
@@ -122,45 +123,48 @@ This step refines the premise rather than asserting it.
   unrelated to how calibrated CLIP was; so it overshoots unless CLIP was underconfident by
   about the right amount."** It is not true that CLIP is always calibrated.
 
-## Step 6: when not to apply it — a label-free "ban" test (hypothesis)
+## Step 6: where it helps most (exploratory relationship, no threshold)
 
-The datasets where the gate loses or ties (Caltech101, Pets, Food101) are the ones where most
-of the stream is in the no-flip region (Lemma 2). There the cache has almost no decision power
-and CLIP is in its easy, typically underconfident regime.
+Decision (Idan, 2026-11-11; DECISIONS): the headline method is the agreement gate **always on**.
+The earlier "ban" rule (a 6% threshold on the no-flip share) is not used for any headline number:
+it would be a threshold fitted on three datasets, and the trade is asymmetric anyway. Where the
+gate wins it wins by 3–12 ECE points; where it loses it loses at most about 2 ECE points and
+0.2 accuracy points. The means favour it: test −5.45, dev −4.07.
 
-| no-flip share (*prelim.*) | datasets | gate vs TDA |
-|---|---|---|
-| ≥ 37% | Caltech101 68%, Food101 42%, Pets 37% | loss, tie, loss |
-| ≤ 12% | UCF101, ImageNetV2, DTD, EuroSAT, Flowers, Aircraft | wins |
+What we report instead is a relationship, per dataset:
+- ΔECE (gate − TDA) against three label-free signals of CLIP's confidence on the first 500
+  stream samples:
+  - the worst-case no-flip share (Lemma 3: no flip possible whatever the cache holds);
+  - the share of samples with CLIP confidence > 0.6;
+  - CLIP's mean confidence;
+- summarised by the Spearman rank correlation over all datasets, the fresh ones included.
 
-- **Proposed rule.** Estimate the no-flip share on the first few hundred stream samples. This
-  is label-free and online. Apply the gate only if the share is below τ; otherwise keep TDA.
-- **Alternative signal:** CLIP's mean confidence separates the same groups (83–88% vs ≤ 68%).
-- **Caveats:**
-  - this is 9 datasets, and τ would be chosen after looking at them;
-  - the agreement-rate accuracy estimate I also tried does *not* work (Pets 66% vs 88%
-    accuracy);
-  - so τ must be pre-registered and tested on fresh datasets (below).
-- **Figure 6:** scatter of no-flip share against Δ ECE (gate − TDA), one point per dataset,
-  with τ marked.
+So far (9 datasets, P2, 3 seeds; `analysis/figures/t15_step5_where_it_helps.png`), ρ is
+**+0.60** for the no-flip share and **+0.73** for both other signals. The gain is largest where
+CLIP is not confident, which is what Lemmas 2–3 predict. The two losses (Pets, Caltech101) are
+the most confident datasets.
 
-## Doing it "the right way" (proposal)
+Earlier ideas kept only as a record: the agreement-rate accuracy estimate did not work (Pets 66%
+vs 88% accuracy). The τ = 6% rule and the ImageNet-val "gate" decision logged before its results
+are in DECISIONS; they now play no role in the headline.
 
-1. **Freeze now:** this structure, the figures, the method, and the ban rule with τ fixed in
-   advance (e.g. 25%, between 12% and 37%).
-2. **Fresh evaluation datasets that have never been looked at:** ImageNet-val (50k, the
-   canonical set) plus the public ImageNet-A, -R and -Sketch. Optionally SUN397 or Stanford
-   Cars subsets.
-3. **Run once:** CLIP, TDA, the gate, and the gate + ban rule. Report the per-dataset ban
-   decision and whether it was right.
-4. **Regenerate** every figure above under P2 from tested scripts. The preliminary script
-   becomes a tested module.
-5. **Deck (T10)** following steps 1–6, with P1 and the appendix tables at the end.
+## Doing it "the right way"
 
-## Questions to agree on
+1. **Frozen:** this structure, the figures and the method, the gate always on.
+2. **Fresh datasets never looked at:**
+   - ImageNet-val (50k; extracted on Colab);
+   - ImageNet-A, -R and -Sketch;
+   - STL-10, CIFAR-10, VOC2007, CIFAR-100, GTSRB and Stanford Cars (one Colab run, `RUN_FRESH`).
+3. **Run once:** CLIP, TDA and the gate. Report per-dataset accuracy and ECE, ΔECE against TDA,
+   and the rank correlation of step 6 over all datasets.
+4. **Regenerate** every figure under P2 from tested scripts. The preliminary script becomes a
+   tested module.
+5. **Deck (T10)** in this order: self-vote → unsure vs confident → agreement (with the proofs)
+   → method → where it helps → results. P1 goes in the appendix.
 
-- Is this order right? An alternative leads with Step 3 (agreement) and treats the self-vote
-  (Step 1) as its most visible special case.
-- Should the ban test be part of the method ("gate + abstain"), or a separate diagnostic?
-- ImageNet-val: will you run the Colab extraction? It needs ImageNet access (Kaggle or
-  Hugging Face terms). ImageNet-A, -R and -Sketch I can run locally on CPU.
+## Settled (2026-11-11)
+
+- **Order:** steps 2 and 3 merge, with step 2 as the picture and step 3 carrying the proof. The
+  self-vote is the opening hook and is presented as a special case of agreement.
+- **The gate is always on;** "where it helps" is a relationship, not a switch.
+- **ImageNet-val** came from Colab. The other fresh sets come from one more Colab run.
