@@ -27,9 +27,9 @@ ID_to_DIRNAME={
     'dtd': 'dtd',
     'pets': 'oxford_pets',
     'cars': 'few-shot-datasets/stanford_cars',
-    'ucf101': 'few-shot-datasets/ucf101',
-    'caltech101': 'few-shot-datasets/caltech-101',
-    'food101': 'few-shot-datasets/food-101',
+    'ucf101': 'ucf101',
+    'caltech101': 'caltech-101',
+    'food101': 'food-101',
     'sun397': 'few-shot-datasets/sun397',
     'aircraft': 'fgvc_aircraft',
     'eurosat': 'eurosat'
@@ -65,6 +65,18 @@ class ImageFolder_path(datasets.ImageFolder):
 
         return sample, torch.tensor(target).long(), path
 
+def imagenetv2_numeric_labels(dataset):
+    """ImageNetV2's class folders are named 0..999 (ImageNet indices), but ImageFolder
+    sorts them as strings ("0", "1", "10", ...), which permutes the labels against
+    `imagenet_classes`. Relabel each sample with its folder's number."""
+    to_index = {name: int(name) for name in dataset.classes}
+    dataset.samples = [(path, to_index[dataset.classes[t]]) for path, t in dataset.samples]
+    dataset.imgs = dataset.samples
+    dataset.targets = [t for _, t in dataset.samples]
+    dataset.class_to_idx = to_index
+    return dataset
+
+
 def build_dataset(set_id, transform, data_root, mode='test', n_shot=None, split="all", bongard_anno=False):
     if set_id == 'I':
         # ImageNet validation set
@@ -73,6 +85,8 @@ def build_dataset(set_id, transform, data_root, mode='test', n_shot=None, split=
     elif set_id in ['A', 'K', 'R', 'V']:
         testdir = os.path.join(data_root, ID_to_DIRNAME[set_id])
         testset = datasets.ImageFolder(testdir, transform=transform)
+        if set_id == 'V':
+            imagenetv2_numeric_labels(testset)
     elif set_id in fewshot_datasets:
         if mode == 'train' and n_shot:
             testset = build_fewshot_dataset(set_id, os.path.join(data_root, ID_to_DIRNAME[set_id.lower()]), transform, mode=mode, n_shot=n_shot)

@@ -38,6 +38,9 @@ from torch.utils.data import DataLoader, Dataset
 FORMAT_VERSION = 1
 SPLITS = ("test", "val", "train16")
 DATASETS = ("dtd", "flower102", "pets", "eurosat", "aircraft")
+# T14 development datasets: used to design the adaptive cache weight, never to evaluate it.
+DEV_DATASETS = ("imagenetv2", "caltech101", "food101", "ucf101")
+ALL_DATASETS = DATASETS + DEV_DATASETS
 
 # Our lowercase dataset key -> upstream `--test_sets` value (mixed case, and
 # `eurosat` stays lowercase). Same mapping as scripts/run_one.* and tests/helpers.py.
@@ -47,6 +50,10 @@ UPSTREAM_SET_ID = {
     "pets": "Pets",
     "eurosat": "eurosat",
     "aircraft": "Aircraft",
+    "imagenetv2": "V",
+    "caltech101": "Caltech101",
+    "food101": "Food101",
+    "ucf101": "UCF101",
 }
 
 # text_feats.pt is a dict with these keys:

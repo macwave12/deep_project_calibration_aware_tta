@@ -32,6 +32,9 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 DATASETS = ("dtd", "flower102", "pets", "eurosat", "aircraft")
+DEV_DATASETS = ("imagenetv2", "caltech101", "food101", "ucf101")  # T14 development sets
+ALL_DATASETS = DATASETS + DEV_DATASETS
+TEST_ONLY_SET_IDS = ("I", "A", "K", "R", "V")  # ImageFolder sets: build_dataset ignores `mode`
 NORMALIZE_MEAN = [0.48145466, 0.4578275, 0.40821073]
 NORMALIZE_STD = [0.26862954, 0.26130258, 0.27577711]
 
@@ -66,6 +69,15 @@ def build_tip_adapter_transform(resolution: int):
         transforms.ToTensor(),
         transforms.Normalize(mean=NORMALIZE_MEAN, std=NORMALIZE_STD),
     ])
+
+
+def class_names(set_id: str) -> list:
+    """Class names as online_tta.py uses them: ImageNet variants share `imagenet_classes`."""
+    if set_id in ("I", "V"):
+        from data.imagnet_prompts import imagenet_classes
+        return list(imagenet_classes)
+    from data import cls_to_names
+    return getattr(cls_to_names, f"{set_id.lower()}_classes")
 
 
 def pinned_torch_version() -> str | None:
@@ -113,7 +125,8 @@ def parse_args(argv=None):
     p.add_argument("--data-root", default=os.environ.get("DATA_ROOT"),
                    help="dataset root (same as run_one's DATA_ROOT); defaults to $DATA_ROOT")
     p.add_argument("--out", default="features", help="output folder (default: features/)")
-    p.add_argument("--datasets", nargs="+", default=list(DATASETS), choices=DATASETS)
+    p.add_argument("--datasets", nargs="+", default=list(DATASETS), choices=ALL_DATASETS,
+                   help="default: the five project datasets; T14 dev sets: " + " ".join(DEV_DATASETS))
     p.add_argument("--splits", nargs="+", default=["test", "val", "train16"], choices=["test", "val", "train16"])
     p.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2], help="stream seeds for the test split")
     p.add_argument("--val-seeds", nargs="+", type=int, default=[0, 1, 2], help="stream seeds for the val split")
@@ -166,7 +179,6 @@ def main(argv=None):
                  "--force to proceed anyway (the version is recorded in meta.json).")
 
     from clip.custom_clip import get_coop
-    from data import cls_to_names
     from data.datautils import build_dataset
     from utils.feature_cache import UPSTREAM_SET_ID, FeatureStore
     from utils.feature_extraction import extract_dataset, preflight
@@ -191,7 +203,12 @@ def main(argv=None):
     # Preflight: every list file and image, before any model is built.
     plan, skipped = {}, {}
     for key in args.datasets:
-        available, skipped[key] = preflight(key, args.splits, split_builder(UPSTREAM_SET_ID[key]),
+        splits = args.splits
+        if UPSTREAM_SET_ID[key] in TEST_ONLY_SET_IDS and splits != ["test"]:
+            # ImageFolder sets ignore `mode`: a "val" or "train16" split would be the test set.
+            print(f"[{key}] test split only (an ImageFolder set has no val/train split)")
+            splits = ["test"]
+        available, skipped[key] = preflight(key, splits, split_builder(UPSTREAM_SET_ID[key]),
                                             missing_files)
         if "test" not in available:
             print(f"[{key}] SKIPPED: test split unavailable ({skipped[key].get('test')})")
@@ -239,7 +256,7 @@ def main(argv=None):
     verdicts = {}
     for key, splits in plan.items():
         set_id = UPSTREAM_SET_ID[key]
-        classnames = getattr(cls_to_names, f"{set_id.lower()}_classes")
+        classnames = class_names(set_id)
 
         def build_model(classnames=classnames):
             # online_tta.py: get_coop(arch, classnames, args.gpu, n_ctx, ctx_init), then .cuda(gpu).

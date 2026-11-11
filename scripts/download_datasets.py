@@ -71,6 +71,7 @@ class Archive:
     moves: List[Tuple[Tuple[str, ...], str]] = field(default_factory=list)
     extract: bool = True  # False: a plain file copied to ``plain_dest`` in the dataset dir
     plain_dest: str = ""
+    inner: str = ""  # an archive inside this one (path in staging) to extract before ``moves``
 
 
 @dataclass
@@ -86,7 +87,7 @@ class DatasetSpec:
     folder: str  # folder under data_root (== data/datautils.py ID_to_DIRNAME)
     archives: List[Archive]
     drive: List[DriveFile]
-    kind: str  # "json" (CoOp split JSON) or "aircraft" (images_variant_*.txt)
+    kind: str  # "json" (CoOp split JSON), "aircraft" (images_variant_*.txt), "imagefolder" (test only)
     image_dir: str  # == data/fewshot_datasets.py path_dict[key][0] ("images" for aircraft)
     split_file: str = ""  # json kind: split JSON relative to folder
     expected_test: int = 0
@@ -167,6 +168,54 @@ SOURCES: Dict[str, DatasetSpec] = {
                   "images_variant_train.txt", "images_variant_trainval.txt"),
     ),
 }
+
+# T14 development datasets (not part of the docs/DATASETS.md contract; `--datasets` opt-in).
+DRIVE_DIRECT = "https://drive.usercontent.google.com/download?id={}&export=download&confirm=t"
+DEV_SOURCES: Dict[str, DatasetSpec] = {
+    "imagenetv2": DatasetSpec(
+        key="imagenetv2", folder="imagenetv2", kind="imagefolder",
+        image_dir="imagenetv2-matched-frequency-format-val",
+        archives=[Archive("imagenetv2-matched-frequency.tar.gz",
+                          ["https://huggingface.co/datasets/vaishaal/ImageNetV2/resolve/main/"
+                           "imagenetv2-matched-frequency.tar.gz",
+                           "https://s3-us-west-2.amazonaws.com/imagenetv2public/"
+                           "imagenetv2-matched-frequency.tar.gz"],
+                          1206, moves=[(("imagenetv2-matched-frequency-format-val",),
+                                        "imagenetv2-matched-frequency-format-val")])],
+        drive=[], expected_test=10000, reference_counts={"test": 10000},
+        required=("imagenetv2-matched-frequency-format-val",),
+    ),
+    "caltech101": DatasetSpec(
+        key="caltech101", folder="caltech-101", kind="json", image_dir="101_ObjectCategories",
+        split_file="split_zhou_Caltech101.json",
+        archives=[Archive("caltech-101.zip",
+                          ["https://data.caltech.edu/records/mzrjq-6wc02/files/caltech-101.zip"],
+                          131, inner="caltech-101/101_ObjectCategories.tar.gz",
+                          moves=[(("101_ObjectCategories",), "101_ObjectCategories")])],
+        drive=[DriveFile("1hyarUivQE36mY6jSomru6Fjd-JzwcCzN", "split_zhou_Caltech101.json", SPLIT_KEYS)],
+        expected_test=2465, reference_counts={"train": 4128, "val": 1649, "test": 2465},
+        required=("101_ObjectCategories",),
+    ),
+    "food101": DatasetSpec(
+        key="food101", folder="food-101", kind="json", image_dir="images",
+        split_file="split_zhou_Food101.json",
+        archives=[Archive("food-101.tar.gz", ["https://data.vision.ee.ethz.ch/cvl/food-101.tar.gz"],
+                          4765, moves=[(("food-101/images",), "images"), (("food-101/meta",), "meta")])],
+        drive=[DriveFile("1QK0tGi096I0Ba6kggatX1ee6dJFIcEJl", "split_zhou_Food101.json", SPLIT_KEYS)],
+        expected_test=30300, reference_counts={"train": 50500, "val": 20200, "test": 30300},
+        required=("images",),
+    ),
+    "ucf101": DatasetSpec(
+        key="ucf101", folder="ucf101", kind="json", image_dir="UCF-101-midframes",
+        split_file="split_zhou_UCF101.json",
+        archives=[Archive("UCF-101-midframes.zip", [DRIVE_DIRECT.format("10Jqome3vtUA2keJkNanAiFpgbyC9Hc2O")],
+                          134, moves=[(("UCF-101-midframes",), "UCF-101-midframes")])],
+        drive=[DriveFile("1I0S0q91hJfsV9Gf4xDIjgDq4AqBNJb1y", "split_zhou_UCF101.json", SPLIT_KEYS)],
+        expected_test=3783, reference_counts={"train": 7639, "val": 1898, "test": 3783},
+        required=("UCF-101-midframes",),
+    ),
+}
+ALL_SOURCES: Dict[str, DatasetSpec] = {**SOURCES, **DEV_SOURCES}
 
 CLIP_SHA256 = "5806e77cd80f8b59890b7e101eabd078d9fb84e6937f9e85e4ecb61988df416f"
 CLIP_URLS = [
@@ -566,6 +615,12 @@ def layout_archive(arch: Archive, archive_path: str, dataset_dir: str, staging_r
         retry_fs(shutil.rmtree, staging)
     log(f"  extracting {arch.filename} ...")
     extract_archive(archive_path, staging)
+    if arch.inner:
+        inner = os.path.join(staging, arch.inner)
+        if not os.path.isfile(inner):
+            raise DownloadError(f"{arch.filename}: inner archive {arch.inner} not found")
+        log(f"  extracting {arch.inner} ...")
+        extract_archive(inner, staging)
     for alternatives, dst_rel in arch.moves:
         src = next((os.path.join(staging, a) for a in alternatives
                     if os.path.exists(os.path.join(staging, a))), None)
@@ -601,6 +656,10 @@ def _split_entries(spec: DatasetSpec, ds_dir: str) -> Dict[str, List[str]]:
             splits = json.load(f)
         for s in SPLIT_KEYS:
             out[s] = [os.path.join(spec.image_dir, e[0]) for e in splits.get(s, [])]
+    elif spec.kind == "imagefolder":
+        root = os.path.join(ds_dir, spec.image_dir)
+        out["test"] = sorted(os.path.relpath(os.path.join(d, n), ds_dir)
+                             for d, _, names in os.walk(root) for n in names)
     else:
         with open(os.path.join(ds_dir, "variants.txt"), encoding="utf-8") as f:
             variants = {l.rstrip("\n") for l in f}
@@ -766,13 +825,14 @@ def _check_disk(data_root: str, specs: Sequence[DatasetSpec], keep: bool) -> Non
 
 
 def parse_args(argv=None, sources: Optional[Dict[str, DatasetSpec]] = None):
-    sources = SOURCES if sources is None else sources
+    default = list(SOURCES) if sources is None else list(sources)
+    sources = ALL_SOURCES if sources is None else sources
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--data-root", default=os.environ.get("DATA_ROOT"),
                    help="dataset root (default: $DATA_ROOT)")
-    p.add_argument("--datasets", nargs="+", default=list(sources), choices=list(sources),
-                   metavar="NAME", help=f"subset of {' '.join(sources)} (default: all)")
+    p.add_argument("--datasets", nargs="+", default=default, choices=list(sources),
+                   metavar="NAME", help=f"subset of {' '.join(sources)} (default: {' '.join(default)})")
     p.add_argument("--keep-archives", action="store_true",
                    help="keep downloaded archives in <data-root>/_archives after extraction")
     p.add_argument("--verify-only", action="store_true", help="only run the verification")
@@ -800,8 +860,8 @@ def _clean_path(p: str) -> str:
 
 def main(argv=None, sources: Optional[Dict[str, DatasetSpec]] = None, opener=None,
          drive_url: str = DRIVE_URL, drive_fallback: Optional[str] = DRIVE_FALLBACK_URL) -> int:
-    sources = SOURCES if sources is None else sources
     args = parse_args(argv, sources)
+    sources = ALL_SOURCES if sources is None else sources
     specs = [sources[k] for k in dict.fromkeys(args.datasets)]
     os.makedirs(args.data_root, exist_ok=True)
     log(f"DATA_ROOT = {args.data_root}")

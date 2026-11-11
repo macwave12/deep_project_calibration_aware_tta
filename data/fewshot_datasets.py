@@ -132,12 +132,12 @@ DATA_ROOT = os.environ.get("DATA_ROOT", "/d/second_degree/deep/data_root")
 path_dict = {
     # dataset_name: ["image_dir", "json_split_file"]
     "flower102": ["jpg", os.path.join(DATA_ROOT, "oxford_flowers", "split_zhou_OxfordFlowers.json")],
-    "food101": ["images", "/data/shenglijun/dataset/few-shot-datasets/food-101/split_zhou_Food101.json"],
+    "food101": ["images", os.path.join(DATA_ROOT, "food-101", "split_zhou_Food101.json")],
     "dtd": ["images", os.path.join(DATA_ROOT, "dtd", "split_zhou_DescribableTextures.json")],
     "pets": ["images", os.path.join(DATA_ROOT, "oxford_pets", "split_zhou_OxfordPets.json")],
     "sun397": ["SUN397", "/data/shenglijun/dataset/few-shot-datasets/sun397/split_zhou_SUN397.json"],
-    "caltech101": ["101_ObjectCategories", "/data/shenglijun/dataset/few-shot-datasets/caltech-101/split_zhou_Caltech101.json"],
-    "ucf101": ["UCF-101-midframes", "/data/shenglijun/dataset/few-shot-datasets/ucf101/split_zhou_UCF101.json"],
+    "caltech101": ["101_ObjectCategories", os.path.join(DATA_ROOT, "caltech-101", "split_zhou_Caltech101.json")],
+    "ucf101": ["UCF-101-midframes", os.path.join(DATA_ROOT, "ucf101", "split_zhou_UCF101.json")],
     "cars": ["", "/data/shenglijun/dataset/few-shot-datasets/stanford_cars/split_zhou_StanfordCars.json"],
     "eurosat": ["2750", os.path.join(DATA_ROOT, "eurosat", "split_zhou_EuroSAT.json")]
 }
