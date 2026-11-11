@@ -1,0 +1,193 @@
+protocol,dataset,method,metric,n,seeds,mean,std,mae
+P1,aircraft,cal_tda_agree,accuracy,3,0 1 2,24.0124,0.3372,0.2467
+P1,aircraft,cal_tda_agree,ece,3,0 1 2,8.8809,0.5052,0.3775
+P1,aircraft,cal_tda_fusion,accuracy,3,0 1 2,24.3824,0.1353,0.0933
+P1,aircraft,cal_tda_fusion,ece,3,0 1 2,9.1964,0.1847,0.1236
+P1,aircraft,cal_tda_gate,accuracy,3,0 1 2,24.4524,0.2955,0.22
+P1,aircraft,cal_tda_gate,ece,3,0 1 2,3.5885,0.626,0.4303
+P1,aircraft,cal_tda_gate_temp,accuracy,3,0 1 2,24.4524,0.2955,0.22
+P1,aircraft,cal_tda_gate_temp,ece,3,0 1 2,3.2119,0.4091,0.3007
+P1,aircraft,cal_tda_margin,accuracy,3,0 1 2,18.8219,0.1808,0.1267
+P1,aircraft,cal_tda_margin,ece,3,0 1 2,32.406,0.2085,0.156
+P1,aircraft,cal_tda_temp,accuracy,3,0 1 2,23.9424,0.3935,0.28
+P1,aircraft,cal_tda_temp,ece,3,0 1 2,4.9533,0.2672,0.1853
+P1,aircraft,clipzs,accuracy,10,0 1 2 3 4 5 6 7 8 9,23.8524,0.0,0.0
+P1,aircraft,clipzs,ece,10,0 1 2 3 4 5 6 7 8 9,5.4583,0.0,0.0
+P1,aircraft,tda,accuracy,3,0 1 2,24.0824,0.3123,0.2334
+P1,aircraft,tda,ece,3,0 1 2,15.5358,0.4131,0.2989
+P1,dtd,cal_tda_agree,accuracy,3,0 1 2,46.9267,0.0591,0.0394
+P1,dtd,cal_tda_agree,ece,3,0 1 2,8.5078,0.0904,0.0689
+P1,dtd,cal_tda_fusion,accuracy,3,0 1 2,45.9417,0.3255,0.2495
+P1,dtd,cal_tda_fusion,ece,3,0 1 2,17.9089,0.3666,0.2814
+P1,dtd,cal_tda_gate,accuracy,3,0 1 2,45.6659,0.3361,0.2495
+P1,dtd,cal_tda_gate,ece,3,0 1 2,6.451,0.4301,0.287
+P1,dtd,cal_tda_gate_temp,accuracy,3,0 1 2,45.6659,0.3361,0.2495
+P1,dtd,cal_tda_gate_temp,ece,3,0 1 2,5.7713,0.2219,0.148
+P1,dtd,cal_tda_margin,accuracy,3,0 1 2,45.0749,0.0903,0.0657
+P1,dtd,cal_tda_margin,ece,3,0 1 2,19.8354,0.5511,0.4151
+P1,dtd,cal_tda_temp,accuracy,3,0 1 2,46.9464,0.2076,0.1445
+P1,dtd,cal_tda_temp,ece,3,0 1 2,5.7686,1.4269,1.0432
+P1,dtd,clipzs,accuracy,10,0 1 2 3 4 5 6 7 8 9,44.3262,0.0,0.0
+P1,dtd,clipzs,ece,10,0 1 2 3 4 5 6 7 8 9,8.2377,0.0,0.0
+P1,dtd,tda,accuracy,3,0 1 2,46.9661,0.2389,0.1707
+P1,dtd,tda,ece,3,0 1 2,17.1392,0.4135,0.2949
+P1,eurosat,cal_tda_agree,accuracy,3,0 1 2,53.4074,1.6682,1.2757
+P1,eurosat,cal_tda_agree,ece,3,0 1 2,5.7882,1.0373,0.7245
+P1,eurosat,cal_tda_fusion,accuracy,3,0 1 2,48.428,1.0482,0.7682
+P1,eurosat,cal_tda_fusion,ece,3,0 1 2,17.4354,1.0651,0.802
+P1,eurosat,cal_tda_gate,accuracy,3,0 1 2,46.3292,1.1304,0.8285
+P1,eurosat,cal_tda_gate,ece,3,0 1 2,2.5418,0.4617,0.3329
+P1,eurosat,cal_tda_gate_temp,accuracy,3,0 1 2,46.3292,1.1304,0.8285
+P1,eurosat,cal_tda_gate_temp,ece,3,0 1 2,2.5303,0.4684,0.3439
+P1,eurosat,cal_tda_margin,accuracy,3,0 1 2,49.6626,0.7294,0.5569
+P1,eurosat,cal_tda_margin,ece,3,0 1 2,25.5176,0.794,0.5415
+P1,eurosat,cal_tda_temp,accuracy,3,0 1 2,53.6749,1.6773,1.2785
+P1,eurosat,cal_tda_temp,ece,3,0 1 2,12.598,1.3762,1.0375
+P1,eurosat,clipzs,accuracy,10,0 1 2 3 4 5 6 7 8 9,41.9136,0.0,0.0
+P1,eurosat,clipzs,ece,10,0 1 2 3 4 5 6 7 8 9,7.3136,0.0,0.0
+P1,eurosat,tda,accuracy,3,0 1 2,53.6379,1.6733,1.2702
+P1,eurosat,tda,ece,3,0 1 2,13.3418,1.3573,0.9571
+P1,flower102,cal_tda_agree,accuracy,3,0 1 2,69.5899,0.1861,0.1353
+P1,flower102,cal_tda_agree,ece,3,0 1 2,3.1891,0.512,0.3933
+P1,flower102,cal_tda_fusion,accuracy,3,0 1 2,68.832,0.124,0.0902
+P1,flower102,cal_tda_fusion,ece,3,0 1 2,32.4045,0.2344,0.1677
+P1,flower102,cal_tda_gate,accuracy,3,0 1 2,68.832,0.124,0.0902
+P1,flower102,cal_tda_gate,ece,3,0 1 2,4.1252,0.1197,0.0912
+P1,flower102,cal_tda_gate_temp,accuracy,3,0 1 2,68.832,0.124,0.0902
+P1,flower102,cal_tda_gate_temp,ece,3,0 1 2,5.1407,0.4993,0.3377
+P1,flower102,cal_tda_margin,accuracy,3,0 1 2,67.0185,0.1831,0.1263
+P1,flower102,cal_tda_margin,ece,3,0 1 2,8.7441,0.2027,0.1559
+P1,flower102,cal_tda_temp,accuracy,3,0 1 2,69.6711,0.2536,0.1895
+P1,flower102,cal_tda_temp,ece,3,0 1 2,4.523,0.6262,0.4423
+P1,flower102,clipzs,accuracy,10,0 1 2 3 4 5 6 7 8 9,67.3163,0.0,0.0
+P1,flower102,clipzs,ece,10,0 1 2 3 4 5 6 7 8 9,2.905,0.0,0.0
+P1,flower102,tda,accuracy,3,0 1 2,69.6711,0.2928,0.2165
+P1,flower102,tda,ece,3,0 1 2,6.5353,0.2168,0.1643
+P1,pets,cal_tda_agree,accuracy,3,0 1 2,88.7435,0.1188,0.0909
+P1,pets,cal_tda_agree,ece,3,0 1 2,4.6776,0.2403,0.1712
+P1,pets,cal_tda_fusion,accuracy,3,0 1 2,88.5982,0.1752,0.1332
+P1,pets,cal_tda_fusion,ece,3,0 1 2,43.6795,0.1534,0.1121
+P1,pets,cal_tda_gate,accuracy,3,0 1 2,88.5982,0.1752,0.1332
+P1,pets,cal_tda_gate,ece,3,0 1 2,5.5007,0.3521,0.2709
+P1,pets,cal_tda_gate_temp,accuracy,3,0 1 2,88.5982,0.1752,0.1332
+P1,pets,cal_tda_gate_temp,ece,3,0 1 2,14.3014,1.2774,0.9358
+P1,pets,cal_tda_margin,accuracy,3,0 1 2,88.2529,0.1416,0.109
+P1,pets,cal_tda_margin,ece,3,0 1 2,2.5706,0.1005,0.0751
+P1,pets,cal_tda_temp,accuracy,3,0 1 2,88.6618,0.0818,0.0545
+P1,pets,cal_tda_temp,ece,3,0 1 2,15.5425,1.3651,0.911
+P1,pets,clipzs,accuracy,10,0 1 2 3 4 5 6 7 8 9,88.1712,0.0,0.0
+P1,pets,clipzs,ece,10,0 1 2 3 4 5 6 7 8 9,4.3583,0.0,0.0
+P1,pets,tda,accuracy,3,0 1 2,88.6254,0.0686,0.0485
+P1,pets,tda,ece,3,0 1 2,2.6486,0.1907,0.1416
+P1,mean,cal_tda_agree,accuracy,3,0 1 2,56.536,0.351,0.2472
+P1,mean,cal_tda_agree,ece,3,0 1 2,6.2087,0.3634,0.2797
+P1,mean,cal_tda_fusion,accuracy,3,0 1 2,55.2365,0.222,0.1489
+P1,mean,cal_tda_fusion,ece,3,0 1 2,24.1249,0.224,0.1537
+P1,mean,cal_tda_gate,accuracy,3,0 1 2,54.7756,0.2284,0.1698
+P1,mean,cal_tda_gate,ece,3,0 1 2,4.4414,0.0404,0.0279
+P1,mean,cal_tda_gate_temp,accuracy,3,0 1 2,54.7756,0.2284,0.1698
+P1,mean,cal_tda_gate_temp,ece,3,0 1 2,6.1911,0.24,0.1688
+P1,mean,cal_tda_margin,accuracy,3,0 1 2,53.7662,0.0955,0.0675
+P1,mean,cal_tda_margin,ece,3,0 1 2,17.8147,0.2491,0.1789
+P1,mean,cal_tda_temp,accuracy,3,0 1 2,56.5793,0.3816,0.2656
+P1,mean,cal_tda_temp,ece,3,0 1 2,8.6771,0.5903,0.4085
+P1,mean,clipzs,accuracy,10,0 1 2 3 4 5 6 7 8 9,53.1159,0.0,0.0
+P1,mean,clipzs,ece,10,0 1 2 3 4 5 6 7 8 9,5.6546,0.0,0.0
+P1,mean,tda,accuracy,3,0 1 2,56.5966,0.3807,0.2667
+P1,mean,tda,ece,3,0 1 2,11.0402,0.3929,0.2945
+P2,aircraft,cal_tda_agree,accuracy,10,0 1 2 3 4 5 6 7 8 9,24.0474,0.1681,0.126
+P2,aircraft,cal_tda_agree,ece,10,0 1 2 3 4 5 6 7 8 9,8.4279,0.3828,0.2969
+P2,aircraft,cal_tda_fusion,accuracy,3,0 1 2,24.5025,0.1929,0.1467
+P2,aircraft,cal_tda_fusion,ece,3,0 1 2,9.2068,0.1046,0.0773
+P2,aircraft,cal_tda_gate,accuracy,10,0 1 2 3 4 5 6 7 8 9,24.3264,0.2288,0.156
+P2,aircraft,cal_tda_gate,ece,10,0 1 2 3 4 5 6 7 8 9,3.8259,0.5004,0.3974
+P2,aircraft,cal_tda_gate_temp,accuracy,10,0 1 2 3 4 5 6 7 8 9,24.3264,0.2288,0.156
+P2,aircraft,cal_tda_gate_temp,ece,10,0 1 2 3 4 5 6 7 8 9,3.474,0.4707,0.3832
+P2,aircraft,cal_tda_margin,accuracy,3,0 1 2,21.0821,0.2706,0.1867
+P2,aircraft,cal_tda_margin,ece,3,0 1 2,22.3442,0.4765,0.3473
+P2,aircraft,cal_tda_temp,accuracy,10,0 1 2 3 4 5 6 7 8 9,24.0564,0.2694,0.1932
+P2,aircraft,cal_tda_temp,ece,10,0 1 2 3 4 5 6 7 8 9,5.4496,0.8688,0.6585
+P2,aircraft,tda,accuracy,10,0 1 2 3 4 5 6 7 8 9,24.0294,0.2788,0.2016
+P2,aircraft,tda,ece,10,0 1 2 3 4 5 6 7 8 9,18.3213,0.4711,0.3573
+P2,dtd,cal_tda_agree,accuracy,10,0 1 2 3 4 5 6 7 8 9,47.039,0.2371,0.1726
+P2,dtd,cal_tda_agree,ece,10,0 1 2 3 4 5 6 7 8 9,7.4129,0.27,0.2112
+P2,dtd,cal_tda_fusion,accuracy,3,0 1 2,45.8432,0.3611,0.2627
+P2,dtd,cal_tda_fusion,ece,3,0 1 2,17.749,0.4294,0.3001
+P2,dtd,cal_tda_gate,accuracy,10,0 1 2 3 4 5 6 7 8 9,45.8156,0.3652,0.3168
+P2,dtd,cal_tda_gate,ece,10,0 1 2 3 4 5 6 7 8 9,6.4037,0.617,0.4977
+P2,dtd,cal_tda_gate_temp,accuracy,10,0 1 2 3 4 5 6 7 8 9,45.8156,0.3652,0.3168
+P2,dtd,cal_tda_gate_temp,ece,10,0 1 2 3 4 5 6 7 8 9,5.8758,0.5627,0.4442
+P2,dtd,cal_tda_margin,accuracy,3,0 1 2,45.9417,0.3033,0.2233
+P2,dtd,cal_tda_margin,ece,3,0 1 2,17.7735,0.5435,0.415
+P2,dtd,cal_tda_temp,accuracy,10,0 1 2 3 4 5 6 7 8 9,46.9858,0.3366,0.26
+P2,dtd,cal_tda_temp,ece,10,0 1 2 3 4 5 6 7 8 9,7.5819,1.3794,1.098
+P2,dtd,tda,accuracy,10,0 1 2 3 4 5 6 7 8 9,46.9444,0.3492,0.266
+P2,dtd,tda,ece,10,0 1 2 3 4 5 6 7 8 9,17.5122,0.4559,0.3682
+P2,eurosat,cal_tda_agree,accuracy,10,0 1 2 3 4 5 6 7 8 9,53.5519,0.9944,0.6704
+P2,eurosat,cal_tda_agree,ece,10,0 1 2 3 4 5 6 7 8 9,3.8509,0.5665,0.3992
+P2,eurosat,cal_tda_fusion,accuracy,3,0 1 2,48.7037,1.0838,0.7984
+P2,eurosat,cal_tda_fusion,ece,3,0 1 2,17.6921,1.1235,0.8492
+P2,eurosat,cal_tda_gate,accuracy,10,0 1 2 3 4 5 6 7 8 9,46.5444,0.8008,0.6207
+P2,eurosat,cal_tda_gate,ece,10,0 1 2 3 4 5 6 7 8 9,2.4736,0.3645,0.3027
+P2,eurosat,cal_tda_gate_temp,accuracy,10,0 1 2 3 4 5 6 7 8 9,46.5444,0.8008,0.6207
+P2,eurosat,cal_tda_gate_temp,ece,10,0 1 2 3 4 5 6 7 8 9,2.4752,0.3661,0.3104
+P2,eurosat,cal_tda_margin,accuracy,3,0 1 2,50.5103,0.2816,0.203
+P2,eurosat,cal_tda_margin,ece,3,0 1 2,18.6293,0.0518,0.0377
+P2,eurosat,cal_tda_temp,accuracy,10,0 1 2 3 4 5 6 7 8 9,53.8099,1.0176,0.6756
+P2,eurosat,cal_tda_temp,ece,10,0 1 2 3 4 5 6 7 8 9,6.7127,0.6584,0.5382
+P2,eurosat,tda,accuracy,10,0 1 2 3 4 5 6 7 8 9,53.8074,1.0224,0.6938
+P2,eurosat,tda,ece,10,0 1 2 3 4 5 6 7 8 9,6.9493,0.6522,0.5226
+P2,flower102,cal_tda_agree,accuracy,10,0 1 2 3 4 5 6 7 8 9,69.9472,0.3444,0.2517
+P2,flower102,cal_tda_agree,ece,10,0 1 2 3 4 5 6 7 8 9,3.3227,0.3264,0.2598
+P2,flower102,cal_tda_fusion,accuracy,3,0 1 2,68.832,0.124,0.0902
+P2,flower102,cal_tda_fusion,ece,3,0 1 2,32.4045,0.2344,0.1677
+P2,flower102,cal_tda_gate,accuracy,10,0 1 2 3 4 5 6 7 8 9,68.6886,0.1912,0.1559
+P2,flower102,cal_tda_gate,ece,10,0 1 2 3 4 5 6 7 8 9,4.0499,0.3866,0.2905
+P2,flower102,cal_tda_gate_temp,accuracy,10,0 1 2 3 4 5 6 7 8 9,68.6886,0.1912,0.1559
+P2,flower102,cal_tda_gate_temp,ece,10,0 1 2 3 4 5 6 7 8 9,4.7391,0.6146,0.4288
+P2,flower102,cal_tda_margin,accuracy,3,0 1 2,66.5719,0.2703,0.2075
+P2,flower102,cal_tda_margin,ece,3,0 1 2,12.7271,0.0482,0.0363
+P2,flower102,cal_tda_temp,accuracy,10,0 1 2 3 4 5 6 7 8 9,70.272,0.3745,0.3102
+P2,flower102,cal_tda_temp,ece,10,0 1 2 3 4 5 6 7 8 9,4.441,0.7094,0.6013
+P2,flower102,tda,accuracy,10,0 1 2 3 4 5 6 7 8 9,70.268,0.3804,0.3151
+P2,flower102,tda,ece,10,0 1 2 3 4 5 6 7 8 9,9.5372,0.442,0.3695
+P2,pets,cal_tda_agree,accuracy,10,0 1 2 3 4 5 6 7 8 9,88.7326,0.1391,0.1003
+P2,pets,cal_tda_agree,ece,10,0 1 2 3 4 5 6 7 8 9,4.5365,0.1964,0.1543
+P2,pets,cal_tda_fusion,accuracy,3,0 1 2,88.6163,0.1855,0.1393
+P2,pets,cal_tda_fusion,ece,3,0 1 2,43.6578,0.1875,0.1395
+P2,pets,cal_tda_gate,accuracy,10,0 1 2 3 4 5 6 7 8 9,88.6318,0.1386,0.1172
+P2,pets,cal_tda_gate,ece,10,0 1 2 3 4 5 6 7 8 9,5.5411,0.239,0.1898
+P2,pets,cal_tda_gate_temp,accuracy,10,0 1 2 3 4 5 6 7 8 9,88.6318,0.1386,0.1172
+P2,pets,cal_tda_gate_temp,ece,10,0 1 2 3 4 5 6 7 8 9,13.9752,1.8967,1.3909
+P2,pets,cal_tda_margin,accuracy,3,0 1 2,88.2438,0.0787,0.0606
+P2,pets,cal_tda_margin,ece,3,0 1 2,2.3221,0.1761,0.1207
+P2,pets,cal_tda_temp,accuracy,10,0 1 2 3 4 5 6 7 8 9,88.7026,0.1749,0.139
+P2,pets,cal_tda_temp,ece,10,0 1 2 3 4 5 6 7 8 9,15.3617,2.1094,1.5226
+P2,pets,tda,accuracy,10,0 1 2 3 4 5 6 7 8 9,88.6999,0.1432,0.1221
+P2,pets,tda,ece,10,0 1 2 3 4 5 6 7 8 9,2.5026,0.2203,0.1863
+P2,aircraft,clipzs,accuracy,10,0 1 2 3 4 5 6 7 8 9,23.8524,0.0,0.0
+P2,aircraft,clipzs,ece,10,0 1 2 3 4 5 6 7 8 9,5.4583,0.0,0.0
+P2,dtd,clipzs,accuracy,10,0 1 2 3 4 5 6 7 8 9,44.3262,0.0,0.0
+P2,dtd,clipzs,ece,10,0 1 2 3 4 5 6 7 8 9,8.2377,0.0,0.0
+P2,eurosat,clipzs,accuracy,10,0 1 2 3 4 5 6 7 8 9,41.9136,0.0,0.0
+P2,eurosat,clipzs,ece,10,0 1 2 3 4 5 6 7 8 9,7.3136,0.0,0.0
+P2,flower102,clipzs,accuracy,10,0 1 2 3 4 5 6 7 8 9,67.3163,0.0,0.0
+P2,flower102,clipzs,ece,10,0 1 2 3 4 5 6 7 8 9,2.905,0.0,0.0
+P2,pets,clipzs,accuracy,10,0 1 2 3 4 5 6 7 8 9,88.1712,0.0,0.0
+P2,pets,clipzs,ece,10,0 1 2 3 4 5 6 7 8 9,4.3583,0.0,0.0
+P2,mean,cal_tda_agree,accuracy,10,0 1 2 3 4 5 6 7 8 9,56.6636,0.2329,0.152
+P2,mean,cal_tda_agree,ece,10,0 1 2 3 4 5 6 7 8 9,5.5102,0.1947,0.1401
+P2,mean,cal_tda_fusion,accuracy,3,0 1 2,55.2995,0.1962,0.1427
+P2,mean,cal_tda_fusion,ece,3,0 1 2,24.142,0.1958,0.1401
+P2,mean,cal_tda_gate,accuracy,10,0 1 2 3 4 5 6 7 8 9,54.8014,0.1861,0.1541
+P2,mean,cal_tda_gate,ece,10,0 1 2 3 4 5 6 7 8 9,4.4588,0.1505,0.1189
+P2,mean,cal_tda_gate_temp,accuracy,10,0 1 2 3 4 5 6 7 8 9,54.8014,0.1861,0.1541
+P2,mean,cal_tda_gate_temp,ece,10,0 1 2 3 4 5 6 7 8 9,6.1079,0.4973,0.3799
+P2,mean,cal_tda_margin,accuracy,3,0 1 2,54.47,0.0306,0.0235
+P2,mean,cal_tda_margin,ece,3,0 1 2,14.7593,0.045,0.034
+P2,mean,cal_tda_temp,accuracy,10,0 1 2 3 4 5 6 7 8 9,56.7654,0.2548,0.1664
+P2,mean,cal_tda_temp,ece,10,0 1 2 3 4 5 6 7 8 9,7.9094,0.6378,0.5199
+P2,mean,clipzs,accuracy,10,0 1 2 3 4 5 6 7 8 9,53.1159,0.0,0.0
+P2,mean,clipzs,ece,10,0 1 2 3 4 5 6 7 8 9,5.6546,0.0,0.0
+P2,mean,tda,accuracy,10,0 1 2 3 4 5 6 7 8 9,56.7498,0.255,0.1758
+P2,mean,tda,ece,10,0 1 2 3 4 5 6 7 8 9,10.9645,0.2736,0.213

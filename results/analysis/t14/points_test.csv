@@ -1,0 +1,25 @@
+method,dataset,gate_open,acc,ece,nll
+CLIP + negative cache,aircraft,0.571,24.5225,4.7453,2.7598
+CLIP + negative cache,dtd,0.4104,45.6265,7.0044,2.0339
+CLIP + negative cache,eurosat,0.6253,45.3128,4.3605,1.5225
+CLIP + negative cache,flower102,0.2776,68.6426,3.0055,1.6079
+CLIP + negative cache,pets,0.3378,88.5073,4.6386,0.4226
+TDA,aircraft,0.571,24.0324,18.1309,3.1362
+TDA,dtd,0.4104,47.104,17.3802,2.2019
+TDA,eurosat,0.6253,53.9342,6.9095,1.4377
+TDA,flower102,0.2776,70.3207,9.5909,1.9155
+TDA,pets,0.3378,88.6436,2.5158,0.459
+TDA + T (1.54),aircraft,0.571,24.0324,4.8703,2.8715
+TDA + T (1.54),dtd,0.4104,47.104,3.5657,2.053
+TDA + T (1.54),eurosat,0.6253,53.9342,9.4886,1.4245
+TDA + T (1.54),flower102,0.2776,70.3207,5.5737,1.6049
+TDA + T (1.54),pets,0.3378,88.6436,11.4085,0.4878
+agreement gate (ours),aircraft,0.571,24.0924,8.4015,2.9406
+agreement gate (ours),dtd,0.4104,47.1237,7.5939,2.0797
+agreement gate (ours),eurosat,0.6253,53.6872,3.7617,1.4422
+agreement gate (ours),flower102,0.2776,70.023,3.2072,1.745
+agreement gate (ours),pets,0.3378,88.689,4.5734,0.461
+CLIP + negative cache,mean,0.4444,54.5223,4.7509,1.6694
+TDA,mean,0.4444,56.807,10.9055,1.8301
+TDA + T (1.54),mean,0.4444,56.807,6.9814,1.6884
+agreement gate (ours),mean,0.4444,56.7231,5.5075,1.7337

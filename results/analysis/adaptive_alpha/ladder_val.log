@@ -1,0 +1,52 @@
+C:\Users\User\Desktop\Coding\Repositories\university\deep_project_calibration_aware_tta\utils\tools.py:122: SyntaxWarning: "is not" with 'str' literal. Did you mean "!="?
+  if device is not 'cpu':
+fold held-out=dtd
+    rung 0: const train NLL 1.5680
+    rung 1: step[cache_conf<0.108] train NLL 1.5481
+    rung 2: logistic[js] train NLL 1.5457
+    rung 4: logistic_all[13] train NLL 1.5287
+    rung 3: logistic2[cache_conf,cache_conf_rel] train NLL 1.5437
+fold held-out=flower102
+    rung 0: const train NLL 1.6890
+    rung 1: step[js<0.408] train NLL 1.6736
+    rung 2: logistic[js] train NLL 1.6708
+    rung 4: logistic_all[13] train NLL 1.6594
+    rung 3: logistic2[js,cache_support_clip_top] train NLL 1.6707
+fold held-out=pets
+    rung 0: const train NLL 1.9556
+    rung 1: step[js<0.428] train NLL 1.9373
+    rung 2: logistic[js] train NLL 1.9347
+    rung 4: logistic_all[13] train NLL 1.9222
+    rung 3: logistic2[js,cache_support_clip_top] train NLL 1.9346
+fold held-out=eurosat
+    rung 0: const train NLL 1.7074
+    rung 1: step[cache_top_mass<0.584] train NLL 1.7055
+    rung 2: logistic[clip_conf] train NLL 1.7043
+    rung 4: logistic_all[13] train NLL 1.7014
+    rung 3: logistic2[clip_margin,clip_conf_rel] train NLL 1.7074
+fold held-out=aircraft
+    rung 0: const train NLL 1.3928
+    rung 1: step[js<0.37] train NLL 1.3794
+    rung 2: logistic[js] train NLL 1.3779
+    rung 4: logistic_all[13] train NLL 1.3606
+    rung 3: logistic2[cache_conf,cache_conf_rel] train NLL 1.3740
+fold held-out=all
+    rung 0: const train NLL 1.6643
+    rung 1: step[js<0.313] train NLL 1.6507
+    rung 2: logistic[js] train NLL 1.6478
+    rung 4: logistic_all[13] train NLL 1.6366
+    rung 3: logistic2[js,cache_support_clip_top] train NLL 1.6478
+LODO (held-out dataset, mean of datasets):
+ rung    acc   ece   nll  alpha_mean
+    0 54.420 4.699 1.679       0.358
+    1 54.502 5.261 1.671       0.112
+    2 54.524 4.901 1.669       0.190
+    3 54.301 4.955 1.671       0.022
+    4 55.044 5.923 1.678       0.664
+rung            0       1       2       3       4
+dataset                                          
+aircraft   2.7642  2.7358  2.7283  2.7313  2.7780
+dtd        2.0497  2.0725  2.0606  2.0544  2.0944
+eurosat    1.5059  1.4853  1.4936  1.5059  1.4427
+flower102  1.5751  1.5594  1.5611  1.5611  1.5761
+pets       0.5002  0.5029  0.5019  0.5021  0.4983
