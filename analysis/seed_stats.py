@@ -78,6 +78,18 @@ def method_stats(frame: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+CI_MIN_SEEDS = 10  # DECISIONS 2026-11-10: no intervals with 3 seeds; 90% at wrap-up
+
+
+def ci_halfwidth(diff: pd.Series, level: float = 0.90) -> float:
+    """Half-width of the t-interval of the mean paired difference; NaN below CI_MIN_SEEDS."""
+    n = len(diff)
+    if n < CI_MIN_SEEDS:
+        return float("nan")
+    from scipy.stats import t as student_t
+    return float(student_t.ppf(0.5 + level / 2, n - 1) * diff.std(ddof=1) / n ** 0.5)
+
+
 def paired_stats(frame: pd.DataFrame, references) -> pd.DataFrame:
     rows = []
     for dataset, by_dataset in frame.groupby("dataset", sort=False):
@@ -94,12 +106,14 @@ def paired_stats(frame: pd.DataFrame, references) -> pd.DataFrame:
                     pair = wide[metric][[method, reference]].dropna()
                     diff = pair[method] - pair[reference]
                     better = sign * diff
+                    half = ci_halfwidth(diff)
                     rows.append({
                         "dataset": dataset, "method": method, "reference": reference,
                         "metric": metric, "n": len(diff),
                         "seeds": " ".join(map(str, diff.index)),
                         "mean_diff": diff.mean(), "std_diff": diff.std(ddof=1),
                         "mae_diff": diff.abs().mean(),
+                        "ci90_lo": diff.mean() - half, "ci90_hi": diff.mean() + half,
                         "wins": int((better > 0).sum()), "ties": int((better == 0).sum()),
                         "losses": int((better < 0).sum()),
                     })

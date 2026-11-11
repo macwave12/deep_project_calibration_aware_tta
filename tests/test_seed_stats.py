@@ -112,3 +112,13 @@ def test_main_writes_both_csvs(tmp_path):
     assert set(methods["dataset"]) == {"dtd", "mean"}
     gate = paired.query("dataset == 'dtd' and metric == 'accuracy'").iloc[0]
     assert gate["method"] == "gate" and gate["wins"] == 2
+
+
+def test_ci90_only_with_enough_seeds():
+    from analysis.seed_stats import ci_halfwidth
+    from scipy.stats import t as student_t
+    few = pd.Series([1.0, 2.0, 3.0])
+    assert ci_halfwidth(few) != ci_halfwidth(few)  # NaN below 10 seeds
+    many = pd.Series([float(i) for i in range(10)])
+    expected = student_t.ppf(0.95, 9) * many.std(ddof=1) / 10 ** 0.5
+    assert ci_halfwidth(many) == pytest.approx(expected)
