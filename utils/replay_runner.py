@@ -52,7 +52,13 @@ def record_name(algorithm: str, run_name: str | None, protocol: str) -> str:
 def replay_one(features_root, dataset: str, *, algorithm: str, split: str = "test", seed: int = 0,
                config: str | None = None, protocol: str = "published", run_name: str | None = None,
                out_dir="replay_results/raw", autocast: str = "emulate", limit: int | None = None,
-               log=print) -> Path:
+               trace: str = "off", log=print) -> Path:
+    """`trace`: "off", "top" (T04 trace) or "full" (plus full-length vectors, T14); cal_tda
+    only. The trace is written next to the record as `<dataset>_<name>.trace.pt`."""
+    if trace not in ("off", "top", "full"):
+        raise ValueError(f"trace must be off/top/full, got {trace!r}")
+    if trace != "off" and algorithm != "cal_tda":
+        raise ValueError("--trace needs --method cal_tda (configs/method/tda_equivalent.yaml reproduces TDA)")
     store = FeatureStore(features_root, dataset)
     meta = store.meta()
     order = store.permutation(split, seed)
@@ -64,6 +70,7 @@ def replay_one(features_root, dataset: str, *, algorithm: str, split: str = "tes
         algorithm=algorithm, config=config, test_sets=UPSTREAM_SET_ID[dataset],
         protocol=protocol, batch_size=1, gpu=None, loader_len=len(order), seed=seed,
         run_name=run_name, arch=meta.get("arch", "ViT-B/16"),
+        trace=trace != "off", trace_full=trace == "full",
     )
     method_config = load_method_config(args)
 
@@ -119,5 +126,8 @@ def replay_one(features_root, dataset: str, *, algorithm: str, split: str = "tes
         probs.numpy(), labels.numpy(), dataset=dataset, method=name, backbone=args.arch,
         seed=seed, hyperparams=hyperparams, out_dir=out_dir,
     )
+    if trace != "off":
+        trace_path = trainer.save_trace(Path(path).with_suffix(".trace.pt"))
+        log(f"[{dataset}/{split}/seed{seed}] {name}: trace -> {trace_path}")
     log(f"[{dataset}/{split}/seed{seed}] {name}: {len(order)} steps in {seconds:.1f}s -> {path}")
     return path

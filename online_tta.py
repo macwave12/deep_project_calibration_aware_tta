@@ -92,6 +92,8 @@ def load_method_config(args):
         config = CalTdaConfig.from_dict(data)
         if getattr(args, 'trace', False):
             config.trace = True  # --trace: record the label-free trace (T04)
+        if getattr(args, 'trace_full', False):
+            config.trace = config.trace_full = True  # --trace-full: plus full z, n, c (T14)
         return config
     return data
 
@@ -498,6 +500,8 @@ def build_parser():
                              "'clean' = alpha=2, beta=5 on every dataset")
     parser.add_argument('--trace', action='store_true',
                         help='cal_tda only: write a label-free per-sample trace next to the run record')
+    parser.add_argument('--trace-full', dest='trace_full', action='store_true',
+                        help='as --trace, plus full-length CLIP, negative- and positive-cache logits per step')
     return parser
 
 

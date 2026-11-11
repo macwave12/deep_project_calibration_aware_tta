@@ -113,6 +113,13 @@ class CalTdaConfig:
     fusion_gate_min_mass: float = 0.6
     fusion_sharpen_cache: bool = False
     use_loo_temperature: bool = True
+    # T14 agreement gate (additive branch only): the positive cache is used only on
+    # samples where its argmax differs from CLIP's pseudo-label. Where they agree,
+    # the cache (built from CLIP's own labels) can only echo CLIP and inflate its
+    # confidence; where they disagree it is the only term that can change the
+    # decision. `agreement_temperature` divides the logits of the gated samples.
+    agreement_gate: bool = False
+    agreement_temperature: float = 1.0
 
     # Inherited from TDA; kept so `cal_tda` with all flags off == `tda`.
     entropy_threshold: float = 0.5
@@ -125,6 +132,8 @@ class CalTdaConfig:
     # either way. Left out of `as_record_dict` while off, so records of runs
     # without a trace are unchanged.
     trace: bool = False
+    # T14: also record full-length z, n, z-n and c per step (implies `trace`).
+    trace_full: bool = False
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -164,8 +173,13 @@ class CalTdaConfig:
         """
         inert = self.inert_fields()
         data = {k: v for k, v in self.as_dict().items() if k not in inert}
-        if not data.get('trace'):
-            data.pop('trace', None)
+        for flag in ('trace', 'trace_full'):
+            if not data.get(flag):
+                data.pop(flag, None)
+        if not data.get('agreement_gate'):
+            # Off: leave records of every pre-T14 config unchanged.
+            data.pop('agreement_gate', None)
+            data.pop('agreement_temperature', None)
         data['inert'] = inert
         return data
 
@@ -273,14 +287,21 @@ class CalTDA(TDA):
         self.config = config or CalTdaConfig()
         self._confidence = RunningConfidence()
         self._last_estimate = None
-        self.trace = TraceRecorder() if self.config.trace else None
+        self.trace = self._new_trace()
         self.temperature = 1.0
         self.temperatures = []
         self._n_estimated = 0
         self._n_admit_offered = 0
         self._n_admit_admitted = 0
 
+    def _new_trace(self):
+        if not (self.config.trace or self.config.trace_full):
+            return None
+        return TraceRecorder(full_vectors=self.config.trace_full)
+
     def prepare_model_and_optimization(self, args):
+        if self.config.agreement_gate and self.config.use_prob_fusion:
+            raise ValueError("agreement_gate needs the additive branch (use_prob_fusion: false)")
         super().prepare_model_and_optimization(args)
 
         # Ruled decision: where the per-dataset TDA table and the method config
@@ -296,7 +317,7 @@ class CalTDA(TDA):
 
         self._confidence = RunningConfidence()
         self._last_estimate = None
-        self.trace = TraceRecorder() if self.config.trace else None
+        self.trace = self._new_trace()
         self.temperature = 1.0
         self.temperatures = []
         self._n_estimated = 0
@@ -497,6 +518,18 @@ class CalTDA(TDA):
         if fusion_fallback:
             config = replace(config, use_prob_fusion=False)
 
+        # --- T14: agreement gate -----------------------------------------------
+        # `scored_*` are what the output is computed from; the trace keeps the raw logits.
+        scored_base, scored_cache = base_logits, cache_logits
+        self._gate_open = None
+        if config.agreement_gate:
+            self._gate_open = bool(has_cache and int(cache_logits.reshape(-1).argmax()) != pred0)
+            if not self._gate_open:
+                config = replace(config, alpha=0.0)
+            elif config.agreement_temperature != 1.0:
+                scored_base = base_logits / config.agreement_temperature
+                scored_cache = cache_logits / config.agreement_temperature
+
         # --- Contribution 3: label-free temperature ---------------------------
         # Estimated from the scores collected so far, which do not yet include
         # this sample's, so the current prediction never informs its own
@@ -507,7 +540,7 @@ class CalTDA(TDA):
         self._n_estimated += int(estimated)
 
         # --- Contribution 2: probabilistic fusion ------------------------------
-        probs = finalize_probs(base_logits, cache_logits, config, self.temperature)
+        probs = finalize_probs(scored_base, scored_cache, config, self.temperature)
 
         # Only collect scores produced in the configured space. The empty-cache
         # fallback above scores in additive-logit space while fusion scores in
@@ -515,7 +548,7 @@ class CalTDA(TDA):
         # search a bimodal history and skew its mean-confidence match.
         if not fusion_fallback:
             self._record_scores(
-                pre_temperature_logits(base_logits, cache_logits, config).detach()
+                pre_temperature_logits(scored_base, scored_cache, config).detach()
             )
 
         if trace is not None:
@@ -533,7 +566,9 @@ class CalTDA(TDA):
                            in_neg_cache, has_cache, base_logits, cache_logits, neg_logits,
                            config, fusion_fallback, probs):
         gate_fired = None
-        if config.use_prob_fusion and config.fusion_gate:
+        if self.config.agreement_gate:
+            gate_fired = self._gate_open  # cache let in: non-empty and disagreeing with CLIP
+        elif config.use_prob_fusion and config.fusion_gate:
             gate_fired = bool(is_two_way_tie(
                 base_logits, config.fusion_gate_max_gap, config.fusion_gate_min_mass,
             ).reshape(-1)[0])
@@ -544,7 +579,7 @@ class CalTDA(TDA):
             cache_logits=cache_logits, neg_logits=neg_logits, gate_fired=gate_fired,
             fusion_fallback=fusion_fallback, a_hat=self._last_estimate,
             temperature=self.temperature, probs=probs,
-            pos_cache=self.pos_cache, neg_cache=self.neg_cache,
+            pos_cache=self.pos_cache, neg_cache=self.neg_cache, base_logits=base_logits,
         )
 
     def trace_dict(self):

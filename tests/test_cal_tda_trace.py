@@ -17,7 +17,7 @@ import torch
 import yaml
 
 from online_method.cal_tda import CalTDA, CalTdaConfig
-from online_method.cal_tda_trace import STEP_FIELDS, TraceRecorder
+from online_method.cal_tda_trace import FULL_FIELDS, STEP_FIELDS, TraceRecorder
 from online_method.tda import TDA
 from tests.cpu_stream import FakeCLIP, cpu_only, default_args, drive, feature_stream  # noqa: F401
 
@@ -72,9 +72,10 @@ def test_trace_off_is_bit_identical_to_the_pre_change_code(cpu_only, baseline_mo
     # Shorter stream: the baseline's temperature search is quadratic.
     features, text = stream[0][:N_BASELINE], stream[1]
     args = default_args("Pets")
-    old_cfg = baseline_module.CalTdaConfig.from_dict(
-        yaml.safe_load((ROOT / "configs" / "method" / f"{name}.yaml").read_text())
-    )
+    data = yaml.safe_load((ROOT / "configs" / "method" / f"{name}.yaml").read_text())
+    if "agreement_gate" in data:
+        pytest.skip("T14 config: the pre-T03 code has no agreement gate to compare against")
+    old_cfg = baseline_module.CalTdaConfig.from_dict(data)
     old, old_out = _run(baseline_module.CalTDA, old_cfg, features, text, args)
     new, new_out = _run(CalTDA, _config(name), features, text, args)
     assert new.trace is None
@@ -190,3 +191,110 @@ def test_cli_trace_flag_turns_the_trace_on():
     on = load_method_config(SimpleNamespace(algorithm="cal_tda", config=None, trace=True))
     off = load_method_config(SimpleNamespace(algorithm="cal_tda", config=None))
     assert on.trace is True and off.trace is False
+
+
+# --- T14: opt-in full-length vectors ------------------------------------------
+
+@pytest.mark.parametrize("name", ["tda_equivalent", "cal_tda_gate_temp"])
+def test_full_vectors_do_not_change_outputs(cpu_only, stream, name):
+    features, text, _ = stream
+    args = default_args("DTD")
+    off, off_out = _run(CalTDA, _config(name), features, text, args)
+    on, on_out = _run(CalTDA, _config(name, trace_full=True), features, text, args)
+    assert on.trace.full_vectors
+    assert all(torch.equal(a, b) for a, b in zip(off_out, on_out))
+    assert on.config.as_record_dict() == {**off.config.as_record_dict(), "trace_full": True}
+    steps = on.trace_dict()["steps"]
+    assert set(steps) == set(STEP_FIELDS) | set(FULL_FIELDS)
+    for field in FULL_FIELDS:
+        assert steps[field].shape == (N, 10) and steps[field].dtype == torch.float32
+    # The top-k fields are slices of the full vectors.
+    idx = steps["clip_topk_index"].long()
+    assert torch.equal(steps["cache_topk"], steps["cache_logits"].gather(1, idx))
+    assert torch.equal(steps["neg_topk"], steps["neg_logits"].gather(1, idx))
+
+
+def _run_with_alpha(features, text, args, alpha):
+    runner = CalTDA(FakeCLIP(features, text), None, config=_config("tda_equivalent", trace_full=True))
+    runner.prepare_model_and_optimization(args)
+    runner.config.alpha = alpha
+    return runner, drive(runner, features.shape[0], args)
+
+
+def test_full_vectors_re_evaluate_any_alpha_offline(cpu_only, stream):
+    # T14's premise: the caches never depend on alpha, so a trace taken at one
+    # alpha gives every other alpha's output exactly.
+    features, text, _ = stream
+    args = default_args("DTD")
+    ref, ref_out = _run_with_alpha(features, text, args, 2.0)
+    steps = ref.trace_dict()["steps"]
+    base, cache = steps["base_logits"], steps["cache_logits"]
+    assert torch.equal((base + 2.0 * cache).softmax(-1), torch.cat(ref_out).float())
+    for alpha in (0.0, 0.7, 3.5):
+        other, other_out = _run_with_alpha(features, text, args, alpha)
+        offline = (base + alpha * cache).softmax(-1)
+        assert torch.equal(offline, torch.cat(other_out).float())
+        other_steps = other.trace_dict()["steps"]
+        assert torch.equal(other_steps["cache_logits"], cache)
+        assert torch.equal(other_steps["base_logits"], base)
+
+
+def test_trace_full_defaults_off_and_cli_flag_implies_trace():
+    from online_tta import build_parser, load_method_config
+
+    assert CalTdaConfig().trace_full is False
+    assert "trace_full" not in CalTdaConfig().as_record_dict()
+    assert TraceRecorder().full_vectors is False
+    on = load_method_config(SimpleNamespace(algorithm="cal_tda", config=None, trace_full=True))
+    assert on.trace is True and on.trace_full is True
+    assert build_parser().parse_args(["--trace-full"]).trace_full is True
+
+
+# --- T14: agreement gate ------------------------------------------------------------
+
+def test_agreement_gate_matches_the_offline_rule(cpu_only, stream):
+    # Online gate == offline alpha(x) = 2 * [argmax c != CLIP argmax] on the TDA trace.
+    features, text, _ = stream
+    args = default_args("DTD")
+    ref, _ = _run(CalTDA, _config("tda_equivalent", trace_full=True), features, text, args)
+    gated, out = _run(CalTDA, _config("cal_tda_agree", trace_full=True), features, text, args)
+    steps = ref.trace_dict()["steps"]
+    has = steps["has_pos_cache"]
+    disagree = has & (steps["cache_logits"].argmax(-1) != steps["pred0"].long())
+    alpha = 2.0 * disagree.double()
+    offline = (steps["base_logits"].double() + alpha[:, None] * steps["cache_logits"].double()).softmax(-1)
+    online = torch.cat(out).double()
+    assert torch.equal(online.argmax(-1), offline.argmax(-1))
+    assert torch.allclose(online, offline, atol=1e-6)
+    gsteps = gated.trace_dict()["steps"]
+    assert torch.equal(gsteps["gate_fired"].bool(), disagree)
+    # The caches are untouched by the gate.
+    assert torch.equal(gsteps["cache_logits"], steps["cache_logits"])
+
+
+def test_agreement_temperature_scales_only_gated_samples(cpu_only, stream):
+    features, text, _ = stream
+    args = default_args("DTD")
+    plain, out1 = _run(CalTDA, _config("cal_tda_agree"), features, text, args)
+    hot, out2 = _run(CalTDA, _config("cal_tda_agree", agreement_temperature=2.0, trace=True),
+                     features, text, args)
+    fired = hot.trace_dict()["steps"]["gate_fired"].bool()
+    a, b = torch.cat(out1), torch.cat(out2)
+    assert torch.equal(a[~fired], b[~fired])
+    assert fired.any() and not torch.allclose(a[fired], b[fired])
+    assert torch.equal(a.argmax(-1), b.argmax(-1))  # a temperature never changes a decision
+
+
+def test_agreement_gate_defaults_off_and_stays_out_of_records():
+    config = CalTdaConfig()
+    assert config.agreement_gate is False
+    record = config.as_record_dict()
+    assert "agreement_gate" not in record and "agreement_temperature" not in record
+    on = _config("cal_tda_agree").as_record_dict()
+    assert on["agreement_gate"] is True and on["agreement_temperature"] == 1.0
+
+
+def test_agreement_gate_rejects_fusion(cpu_only, stream):
+    features, text, _ = stream
+    with pytest.raises(ValueError, match="additive"):
+        _run(CalTDA, _config("cal_tda_agree", use_prob_fusion=True), features, text, default_args("DTD"))

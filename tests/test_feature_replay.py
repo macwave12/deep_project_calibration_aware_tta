@@ -371,3 +371,22 @@ def test_compare_flags_configuration_differences_but_not_later_fields():
     assert hyperparam_diff(old_record, {**replay, "beta": 5.0}) == {"beta": (3.0, 5.0)}
     assert hyperparam_diff(old_record, {**replay, "fusion_gate": True}) == {"fusion_gate": (None, True)}
     assert hyperparam_diff(old_record, {**replay, "protocol": "clean"}) == {"protocol": ("published", "clean")}
+
+
+@pytest.mark.parametrize("mode, full", [("top", False), ("full", True)])
+def test_replay_writes_trace_next_to_record(store_root, tmp_path, mode, full):
+    path = replay_one(store_root, "dtd", algorithm="cal_tda", out_dir=tmp_path, limit=12,
+                      config="configs/method/tda_equivalent.yaml", run_name="tda_eq",
+                      trace=mode, log=lambda *_: None)
+    trace = torch.load(path.with_suffix(".trace.pt"), weights_only=True)
+    assert trace["n_steps"] == 12 and trace["full_vectors"] is full
+    assert ("cache_logits" in trace["steps"]) is full
+    record = json.loads(path.read_text())
+    assert record["hyperparams"].get("trace") is True
+    assert record["hyperparams"].get("trace_full", False) is full
+
+
+def test_replay_trace_needs_cal_tda(store_root, tmp_path):
+    with pytest.raises(ValueError, match="cal_tda"):
+        replay_one(store_root, "dtd", algorithm="tda", out_dir=tmp_path, trace="full",
+                   log=lambda *_: None)

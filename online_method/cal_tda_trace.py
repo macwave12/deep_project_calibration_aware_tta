@@ -27,6 +27,12 @@ File format (`torch.save` of a dict, written next to the run record as
 
 Snapshots are taken after the step's cache write and read, every
 `snapshot_every` steps (steps 499, 999, ...) and once at the end.
+
+With `full_vectors=True` (T14; `--trace-full`), `steps` also holds the full
+per-class vectors of FULL_FIELDS, (n_steps, n_classes) float32, and the dict
+carries `full_vectors: True`. Cache contents depend only on raw CLIP, never on
+alpha, so `softmax(base_logits + alpha * cache_logits)` re-evaluates any alpha
+rule offline exactly (additive branch, no temperature).
 """
 
 from __future__ import annotations
@@ -61,15 +67,26 @@ STEP_FIELDS = {
     'out_argmax': (torch.int32, ()),              # final prediction
 }
 
+# Opt-in full-length vectors (T14), as the method used them after its float cast.
+FULL_FIELDS = {
+    'clip_logits': torch.float32,    # z: raw CLIP logits
+    'neg_logits': torch.float32,     # n: negative-cache logits subtracted from z (0 when empty)
+    'base_logits': torch.float32,    # z - n exactly as computed (keeps autocast rounding)
+    'cache_logits': torch.float32,   # c: unscaled positive-cache logits (0 when empty)
+}
+
 
 class TraceRecorder:
     """Accumulates per-step rows and periodic cache snapshots for one run."""
 
-    def __init__(self, snapshot_every: int = DEFAULT_SNAPSHOT_EVERY, topk: int = DEFAULT_TOPK):
+    def __init__(self, snapshot_every: int = DEFAULT_SNAPSHOT_EVERY, topk: int = DEFAULT_TOPK,
+                 full_vectors: bool = False):
         if snapshot_every < 1:
             raise ValueError("snapshot_every must be >= 1")
         self.snapshot_every = snapshot_every
         self.topk = topk
+        self.full_vectors = full_vectors
+        self._full = {name: [] for name in FULL_FIELDS}
         self.n_classes = None
         self.step = 0
         self._rows = {name: [] for name in STEP_FIELDS}
@@ -118,6 +135,7 @@ class TraceRecorder:
         probs,
         pos_cache,
         neg_cache,
+        base_logits=None,
     ):
         with torch.no_grad():
             clip = clip_logits.detach().reshape(-1).float().cpu()
@@ -156,6 +174,17 @@ class TraceRecorder:
             }
             for name, value in row.items():
                 self._rows[name].append(value)
+            if self.full_vectors:
+                if base_logits is None:
+                    raise ValueError("full_vectors needs base_logits")
+                full = {
+                    'clip_logits': clip,
+                    'neg_logits': neg,
+                    'base_logits': base_logits.detach().reshape(-1).float().cpu(),
+                    'cache_logits': cache,
+                }
+                for name, value in full.items():
+                    self._full[name].append(value.clone())
 
         if (self.step + 1) % self.snapshot_every == 0:
             self.snapshot(pos_cache, neg_cache)
@@ -208,12 +237,18 @@ class TraceRecorder:
             else:
                 k = 0 if self.n_classes is None else min(self.topk, self.n_classes)
                 steps[name] = torch.zeros((0, k) if shape else (0,), dtype=dtype)
+        if self.full_vectors:
+            for name, dtype in FULL_FIELDS.items():
+                values = self._full[name]
+                steps[name] = (torch.stack(values).to(dtype) if values
+                               else torch.zeros((0, self.n_classes or 0), dtype=dtype))
         return {
             'version': TRACE_VERSION,
             'topk': self.topk if self.n_classes is None else min(self.topk, self.n_classes),
             'n_steps': self.step,
             'n_classes': self.n_classes,
             'snapshot_every': self.snapshot_every,
+            'full_vectors': self.full_vectors,
             'steps': steps,
             'snapshots': list(self.snapshots),
         }

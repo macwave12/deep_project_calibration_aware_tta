@@ -27,7 +27,7 @@ if str(REPO) not in sys.path:
 
 from online_method.tda import PROTOCOLS  # noqa: E402
 from online_tta import PROTOCOL_DEPENDENT_ALGORITHMS  # noqa: E402
-from utils.feature_cache import DATASETS  # noqa: E402
+from utils.feature_cache import ALL_DATASETS, DATASETS  # noqa: E402
 from utils.feature_replay import REPLAYABLE_ALGORITHMS  # noqa: E402
 
 # (algorithm, config, run_name), as scripts/run_all.ps1 runs them.
@@ -56,7 +56,7 @@ def suite_runs(suite: str):
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--features", default="features", help="T01 output folder (default: features/)")
-    p.add_argument("--dataset", nargs="+", default=list(DATASETS), choices=DATASETS)
+    p.add_argument("--dataset", nargs="+", default=list(DATASETS), choices=ALL_DATASETS)
     p.add_argument("--split", default="test", choices=["test", "val"])
     p.add_argument("--seed", nargs="+", type=int, default=[0])
     p.add_argument("--method", choices=REPLAYABLE_ALGORITHMS, help="single run: the --algorithm")
@@ -68,6 +68,8 @@ def parse_args(argv=None):
     p.add_argument("--autocast", default="emulate", choices=["emulate", "off"],
                    help="emulate CUDA autocast's casts (default, matches the GPU runs) or run plain fp32")
     p.add_argument("--limit", type=int, default=None, help="debug: only the first N stream positions")
+    p.add_argument("--trace", default="off", choices=["off", "top", "full"],
+                   help="cal_tda only: write the label-free trace (top-k fields; full adds whole z/n/c vectors)")
     args = p.parse_args(argv)
     if (args.method is None) == (args.suite is None):
         p.error("give exactly one of --method or --suite")
@@ -96,6 +98,7 @@ def main(argv=None):
                     args.features, dataset, algorithm=algorithm, split=args.split, seed=seed,
                     config=config, protocol=args.protocol, run_name=run_name,
                     out_dir=Path(args.out_dir) / subdir, autocast=args.autocast, limit=args.limit,
+                    trace=args.trace,
                 ))
     print(f"{len(paths)} replay run(s) in {time.time() - started:.1f}s")
     return paths
