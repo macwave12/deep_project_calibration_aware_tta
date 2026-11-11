@@ -33,9 +33,12 @@ if str(REPO) not in sys.path:
 
 DATASETS = ("dtd", "flower102", "pets", "eurosat", "aircraft")
 DEV_DATASETS = ("imagenetv2", "caltech101", "food101", "ucf101")  # T14 development sets
-FRESH_DATASETS = ("imagenet", "imagenet_a", "imagenet_r", "imagenet_sketch")  # T15 fresh evaluation
+FRESH_DATASETS = ("imagenet", "imagenet_a", "imagenet_r", "imagenet_sketch",  # T15 fresh evaluation
+                  "stl10", "cifar10", "cifar100", "voc2007", "gtsrb", "cars")
+WDS_SET_IDS = {"STL10": "stl10", "CIFAR10": "cifar10", "CIFAR100": "cifar100", "VOC2007": "voc2007",
+               "GTSRB": "gtsrb", "StanfordCarsWDS": "cars"}  # set id -> key in data/wds_classnames.json
 ALL_DATASETS = DATASETS + DEV_DATASETS + FRESH_DATASETS
-TEST_ONLY_SET_IDS = ("I", "A", "K", "R", "V")  # ImageFolder sets: build_dataset ignores `mode`
+TEST_ONLY_SET_IDS = ("I", "A", "K", "R", "V") + tuple(WDS_SET_IDS)  # ImageFolder sets ignore `mode`
 NORMALIZE_MEAN = [0.48145466, 0.4578275, 0.40821073]
 NORMALIZE_STD = [0.26862954, 0.26130258, 0.27577711]
 
@@ -76,6 +79,10 @@ def class_names(set_id: str) -> list:
     """Class names in label order. ImageNet variants use `imagenet_classes`: ImageNet-A / -R keep
     their 200 classes in ImageNet index order (= ImageFolder's sorted-wnid order, as online_tta.py
     masks them); ImageNetV2 is relabelled to ImageNet indices (`imagenetv2_numeric_labels`)."""
+    if set_id in WDS_SET_IDS:
+        import json
+        names = json.loads((REPO / "data" / "wds_classnames.json").read_text(encoding="utf-8"))
+        return list(names[WDS_SET_IDS[set_id]])
     if set_id in ("I", "V", "K", "A", "R"):
         from data.imagnet_prompts import imagenet_classes
         if set_id == "A":

@@ -79,17 +79,19 @@ class TDA():
         self.use_pos_cache = True
         self.use_neg_cache = True
 
-        self.pos_alpha = self.pos_params['alpha'][args.test_sets]
-        self.pos_beta = self.pos_params['beta'][args.test_sets]
-
         # Hyperparameter protocol (pm/PLAN.md). 'published' (the default) keeps
         # the per-dataset table above; 'clean' uses TDA's single searched
         # setting on every dataset, so no test set informed the choice. Only the
         # positive cache's alpha/beta differ: the negative cache's are global.
+        # Under 'clean' the table is not read, so datasets TDA never tuned
+        # (the T15 fresh sets) run without an entry in it.
         self.protocol = resolve_protocol(args)
         if self.protocol == 'clean':
             self.pos_alpha = CLEAN_PROTOCOL['alpha']
             self.pos_beta = CLEAN_PROTOCOL['beta']
+        else:
+            self.pos_alpha = self.pos_params['alpha'][args.test_sets]
+            self.pos_beta = self.pos_params['beta'][args.test_sets]
 
         self.neg_alpha = 0.117
         self.neg_beta = 1.0

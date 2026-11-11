@@ -13,7 +13,10 @@ from utils.feature_cache import FRESH_DATASETS as CACHE_FRESH, UPSTREAM_SET_ID
 def test_fresh_sets_are_opt_in_and_known_everywhere():
     assert set(FRESH_DATASETS) == set(CACHE_FRESH)
     assert all(d in UPSTREAM_SET_ID for d in FRESH_DATASETS)
-    assert set(dd.FRESH_SOURCES) == set(FRESH_DATASETS) - {"imagenet"}
+    from scripts.fetch_wds import WDS
+    assert set(dd.FRESH_SOURCES) <= set(FRESH_DATASETS) and set(WDS) <= set(FRESH_DATASETS)
+    # every fresh set has a source: downloader, CLIP_benchmark mirror, or the HF ImageNet script
+    assert set(FRESH_DATASETS) == set(dd.FRESH_SOURCES) | set(WDS) | {"imagenet"}
     assert dd.parse_args(["--data-root", "x"]).datasets == list(dd.SOURCES)
     assert not set(extract_args([]).datasets) & set(FRESH_DATASETS)
     assert set(FRESH_DATASETS) <= set(ALL_DATASETS)
@@ -69,3 +72,75 @@ def test_imagenet_val_rows_land_in_sorted_label_folders(tmp_path):
     assert nxt == 3
     assert (label_dir(tmp_path, 999) / "00001.JPEG").read_bytes() == b"b"
     assert sorted(p.name for p in tmp_path.iterdir()) == ["0000", "0010", "0999"]
+
+
+# --- webdataset-based fresh sets (scripts/fetch_wds.py) ----------------------------------
+
+def _wds_tar(samples):
+    import io
+    import tarfile
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tf:
+        for name, data in samples:
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tf.addfile(info, io.BytesIO(data))
+    buf.seek(0)
+    return buf
+
+
+def test_wds_tar_becomes_index_ordered_class_folders(tmp_path):
+    from scripts.fetch_wds import convert_tar
+    tar = _wds_tar([("s0000000.cls", b"2"), ("s0000000.webp", b"A"),
+                    ("s0000001.png", b"B"), ("s0000001.cls", b"10"), ("s0000002.cls", b"0")])
+    n = convert_tar(tar, tmp_path, "stl10")
+    assert n == 2  # s0000002 has no image
+    assert (tmp_path / "0002" / "s0000000.webp").read_bytes() == b"A"
+    assert (tmp_path / "0010" / "s0000001.png").read_bytes() == b"B"
+
+
+def test_wds_imagenet_r_uses_sorted_wnid_folders(tmp_path):
+    from data.imagenet_variants import imagenet_r_wnids
+    from scripts.fetch_wds import convert_tar
+    convert_tar(_wds_tar([("a.cls", b"0"), ("a.jpg", b"x"), ("b.cls", b"199"), ("b.jpg", b"y")]),
+                tmp_path, "imagenet_r")
+    wnids = sorted(imagenet_r_wnids)
+    assert (tmp_path / wnids[0] / "a.jpg").exists() and (tmp_path / wnids[199] / "b.jpg").exists()
+
+
+def test_wds_sets_have_class_names_and_loader_paths():
+    from data.datautils import ID_to_DIRNAME, WDS_SET_IDS
+    from scripts.fetch_wds import WDS
+    expected = {"STL10": 10, "CIFAR10": 10, "CIFAR100": 100, "VOC2007": 20, "GTSRB": 43,
+                "StanfordCarsWDS": 196}
+    for set_id, n in expected.items():
+        assert len(class_names(set_id)) == n and set_id in WDS_SET_IDS
+        key = next(k for k, v in UPSTREAM_SET_ID.items() if v == set_id)
+        _, folder, image_dir, _ = WDS[key]
+        assert ID_to_DIRNAME[set_id] == f"{folder}/{image_dir}"
+    assert "_" not in " ".join(class_names("CIFAR100"))
+
+
+def test_wds_loader_labels_follow_class_index(tmp_path):
+    from PIL import Image
+    from data.datautils import build_dataset
+    root = tmp_path / "gtsrb" / "images"
+    for c in (0, 2, 10):
+        (root / f"{c:04d}").mkdir(parents=True)
+        Image.new("RGB", (4, 4)).save(root / f"{c:04d}" / "x.png")
+    ds = build_dataset("GTSRB", None, str(tmp_path))
+    # Labels are the folder numbers, even with classes missing from the split.
+    assert sorted({t for _, t in ds.samples}) == [0, 2, 10] and ds.targets == [t for _, t in ds.samples]
+
+
+def test_tda_clean_protocol_runs_on_datasets_without_published_values():
+    from types import SimpleNamespace
+    from online_method.tda import TDA
+    from tests.cpu_stream import FakeCLIP, feature_stream
+    feats, text, _ = feature_stream(n_samples=4, n_classes=3)
+    clean = TDA(FakeCLIP(feats, text), None)
+    clean.prepare_model_and_optimization(SimpleNamespace(test_sets="STL10", protocol="clean"))
+    assert (clean.pos_alpha, clean.pos_beta) == (2.0, 5.0)
+    published = TDA(FakeCLIP(feats, text), None)
+    with pytest.raises(KeyError):
+        published.prepare_model_and_optimization(SimpleNamespace(test_sets="STL10", protocol="published"))

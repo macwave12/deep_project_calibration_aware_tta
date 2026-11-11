@@ -41,7 +41,8 @@ DATASETS = ("dtd", "flower102", "pets", "eurosat", "aircraft")
 # T14 development datasets: used to design the adaptive cache weight, never to evaluate it.
 DEV_DATASETS = ("imagenetv2", "caltech101", "food101", "ucf101")
 # Fresh evaluation sets for the frozen method and the ban rule (T15): never looked at before.
-FRESH_DATASETS = ("imagenet", "imagenet_a", "imagenet_r", "imagenet_sketch")
+FRESH_DATASETS = ("imagenet", "imagenet_a", "imagenet_r", "imagenet_sketch",
+                  "stl10", "cifar10", "cifar100", "voc2007", "gtsrb", "cars")
 ALL_DATASETS = DATASETS + DEV_DATASETS + FRESH_DATASETS
 
 # Our lowercase dataset key -> upstream `--test_sets` value (mixed case, and
@@ -60,6 +61,12 @@ UPSTREAM_SET_ID = {
     "imagenet_a": "A",
     "imagenet_r": "R",
     "imagenet_sketch": "K",
+    "stl10": "STL10",
+    "cifar10": "CIFAR10",
+    "cifar100": "CIFAR100",
+    "voc2007": "VOC2007",
+    "gtsrb": "GTSRB",
+    "cars": "StanfordCarsWDS",
 }
 
 # text_feats.pt is a dict with these keys:

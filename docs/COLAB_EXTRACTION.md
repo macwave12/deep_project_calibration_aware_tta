@@ -109,3 +109,22 @@ Face, and on a T4 it takes 30–45 min.
 Layout written by `scripts/fetch_imagenet_val_hf.py`:
 `/content/data_root/imagenet/images/val/<label:04d>/*.JPEG`. The zero-padded folders sort in
 ImageNet index order.
+
+## Fresh-dataset run for the ban rule (T15)
+
+Nine datasets the method has never seen:
+- **CLIP_benchmark mirrors on Hugging Face** (public, no token): STL-10, CIFAR-10, VOC2007,
+  CIFAR-100, GTSRB, Stanford Cars and ImageNet-R;
+- **standard sources:** ImageNet-A and ImageNet-Sketch.
+
+Test splits only, about 15 GB in total. Expect roughly 45–75 min on a T4.
+
+1. In **Settings**, set `RUN_FRESH = True` and leave `RUN_IMAGENET = False`. No secret is
+   needed.
+2. Runtime → T4 GPU → Run all. Cell c should print a commit at or after the one that added
+   `RUN_FRESH`.
+3. The result is `MyDrive/cal_tta_features/features_<date>.zip`, with `features/<dataset>/` for
+   each of the nine.
+
+If it disconnects, Run all again: finished datasets are kept on Drive, and finished shards are
+skipped.

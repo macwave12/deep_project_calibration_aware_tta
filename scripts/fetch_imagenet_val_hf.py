@@ -55,7 +55,7 @@ def download(url: str, dest: Path, token: str) -> None:
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--data-root", required=True)
-    ap.add_argument("--token", default=os.environ.get("HF_TOKEN"))
+    ap.add_argument("--token", default=os.environ.get("HF_TOKEN") or os.environ.get("HF_API_TOKEN"))
     a = ap.parse_args(argv)
     if not a.token:
         raise SystemExit("set HF_TOKEN: a token whose account accepted ILSVRC/imagenet-1k's terms")

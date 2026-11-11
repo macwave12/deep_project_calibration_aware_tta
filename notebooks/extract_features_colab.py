@@ -29,9 +29,19 @@ EXTRA_EXTRACT_ARGS = []  # passed to scripts/extract_features.py; empty = its de
 # the left bar), a Hugging Face token whose account accepted the terms on
 # https://huggingface.co/datasets/ILSVRC/imagenet-1k
 RUN_IMAGENET = False
+# T15 fresh sets for the ban-rule test: set RUN_FRESH = True (no token needed; about 15 GB).
+RUN_FRESH = False
+FRESH_ARGS = ["--splits", "test", "--train16-views", "0", "--batch-size", "64", "--workers", "2"]
 if RUN_IMAGENET:
     DATASETS = ["imagenet"]
-    EXTRA_EXTRACT_ARGS = ["--splits", "test", "--train16-views", "0", "--batch-size", "64", "--workers", "2"]
+    EXTRA_EXTRACT_ARGS = FRESH_ARGS
+if RUN_FRESH:
+    DATASETS = ["stl10", "cifar10", "voc2007", "cifar100", "gtsrb", "cars",
+                "imagenet_r", "imagenet_a", "imagenet_sketch"]
+    EXTRA_EXTRACT_ARGS = FRESH_ARGS
+# Datasets fetched by their own scripts rather than scripts/download_datasets.py:
+HF_IMAGENET = {"imagenet"}  # scripts/fetch_imagenet_val_hf.py (gated, token)
+WDS_SETS = {"stl10", "cifar10", "cifar100", "voc2007", "gtsrb", "cars", "imagenet_r"}  # fetch_wds.py
 
 REPO_DIR = "/content/deep_project_calibration_aware_tta"
 DATA_ROOT = "/content/data_root"  # local disk (fast), not Drive
@@ -250,12 +260,17 @@ if not torch_info["matmul_finite"]:
 # CLIP ViT-B/16 weights, then verifies the layout: test counts 1692 / 2463 / 3669 / 8100 / 3333
 # with 0 missing files. Rerunning skips what is already there. ~4.4 GB, typically 10–30 min.
 # With RUN_IMAGENET: ImageNet val (50k, 6.7 GB) from Hugging Face with your HF_TOKEN secret.
+# With RUN_FRESH: CLIP_benchmark mirrors on Hugging Face (public) plus ImageNet-A and -Sketch.
 
 # %%
 todo = pending_datasets(DRIVE_FEATURES, DATASETS)
 print("datasets to extract:", todo or "none (all finished)")
 ENV = {"DATA_ROOT": DATA_ROOT, "CLIP_CACHE_ROOT": CLIP_CACHE}
-downloadable = [d for d in todo if d != "imagenet"]
+downloadable = [d for d in todo if d not in HF_IMAGENET | WDS_SETS]
+wds_todo = [d for d in todo if d in WDS_SETS]
+if wds_todo:
+    run([sys.executable, "scripts/fetch_wds.py", "--data-root", DATA_ROOT, "--datasets", *wds_todo],
+        cwd=REPO_DIR, env=ENV, log_path=WORK_DIR / "download_datasets.log")
 if downloadable:
     run([sys.executable, "scripts/download_datasets.py", "--data-root", DATA_ROOT,
          "--datasets", *downloadable, "--with-clip", "--clip-cache", CLIP_CACHE],
@@ -264,12 +279,20 @@ if downloadable:
     shutil.copyfile(verify, WORK_DIR / f"datasets_verify_{'_'.join(downloadable)}.json")
 if "imagenet" in todo:
     from google.colab import userdata  # noqa: E402  (Colab only)
-    hf_token = userdata.get("HF_TOKEN")  # passed by environment, never printed
+    hf_token = None
+    for secret in ("HF_TOKEN", "HF_API_TOKEN"):  # either secret name works
+        try:
+            hf_token = hf_token or userdata.get(secret)
+        except Exception:  # SecretNotFoundError or access not granted
+            pass
+    if not hf_token:
+        raise RuntimeError("Add a Colab secret HF_TOKEN (key icon, left bar) and allow notebook access")
+    # The script always receives it as HF_TOKEN, through the environment; it is never printed.
     run([sys.executable, "scripts/fetch_imagenet_val_hf.py", "--data-root", DATA_ROOT],
         cwd=REPO_DIR, env={**ENV, "HF_TOKEN": hf_token}, log_path=WORK_DIR / "download_datasets.log")
-    if not downloadable:
-        run([sys.executable, "-c", "import sys; import scripts.download_datasets as d; "
-             "d.fetch_clip(sys.argv[1])", CLIP_CACHE], cwd=REPO_DIR, env=ENV)
+if todo and not downloadable:  # the downloader (which fetches CLIP's weights) did not run
+    run([sys.executable, "-c", "import sys; import scripts.download_datasets as d; "
+         "d.fetch_clip(sys.argv[1])", CLIP_CACHE], cwd=REPO_DIR, env=ENV)
 
 # %% [markdown]
 # ## f. Feature extraction

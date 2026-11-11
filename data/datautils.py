@@ -23,6 +23,13 @@ ID_to_DIRNAME={
     'K': 'imagenet-sketch/images',
     'R': 'imagenet-rendition/imagenet-r',
     'V': 'imagenetv2/imagenetv2-matched-frequency-format-val',
+    # T15 fresh sets, written by scripts/fetch_wds.py (class folders 0000..N, index order)
+    'STL10': 'stl10/images',
+    'CIFAR10': 'cifar10/images',
+    'CIFAR100': 'cifar100/images',
+    'VOC2007': 'voc2007/images',
+    'GTSRB': 'gtsrb/images',
+    'StanfordCarsWDS': 'stanford-cars-wds/images',
     'flower102': 'oxford_flowers',
     'dtd': 'dtd',
     'pets': 'oxford_pets',
@@ -65,6 +72,9 @@ class ImageFolder_path(datasets.ImageFolder):
 
         return sample, torch.tensor(target).long(), path
 
+WDS_SET_IDS = ('STL10', 'CIFAR10', 'CIFAR100', 'VOC2007', 'GTSRB', 'StanfordCarsWDS')
+
+
 def imagenetv2_numeric_labels(dataset):
     """ImageNetV2's class folders are named 0..999 (ImageNet indices), but ImageFolder
     sorts them as strings ("0", "1", "10", ...), which permutes the labels against
@@ -82,10 +92,12 @@ def build_dataset(set_id, transform, data_root, mode='test', n_shot=None, split=
         # ImageNet validation set
         testdir = os.path.join(os.path.join(data_root, ID_to_DIRNAME[set_id]), 'val')
         testset = datasets.ImageFolder(testdir, transform=transform)
-    elif set_id in ['A', 'K', 'R', 'V']:
+    elif set_id in ['A', 'K', 'R', 'V'] or set_id in WDS_SET_IDS:
         testdir = os.path.join(data_root, ID_to_DIRNAME[set_id])
         testset = datasets.ImageFolder(testdir, transform=transform)
-        if set_id == 'V':
+        if set_id == 'V' or set_id in WDS_SET_IDS:
+            # Folders are class indices; ImageFolder would renumber them by position
+            # (and shift every label after a class absent from the split).
             imagenetv2_numeric_labels(testset)
     elif set_id in fewshot_datasets:
         if mode == 'train' and n_shot:
