@@ -1,11 +1,14 @@
-"""DRAFT (T15 structure discussion, 2026-11-11): one figure per step of the guided story.
+"""The paper's story figures and tables (T16), from `tda_eq_clean` full traces.
 
-Steps 1-3 (diagnosis) use the val splits, where the findings were made; steps 4-6 use the test
-splits and the dev sets. Everything is P2 (alpha = 2, beta = 5), seeds 0/1/2, from
-`tda_eq_clean` full traces (`replay_results/t14/`). The self-vote removal subtracts 1 (the self
-affinity) at CLIP's argmax: approximate under fp16 autocast emulation.
+The diagnosis (self-vote, unsure vs confident CLIP, agreement vs disagreement) is drawn for the
+val splits, where it was found, and repeated on the test and dev splits. The test splits also
+get the cache ablation (the TDA paper's Fig. 3 with ECE) and reliability diagrams. Every
+dataset gets the "where it helps" relationship. Everything is P2 (alpha = 2, beta = 5), seeds
+0/1/2, `replay_results/t14/`. All variants are exact re-evaluations of one TDA trace (the caches
+do not depend on alpha or on each other); the one exception is the self-vote removal, which
+subtracts 1 (the self affinity) at CLIP's argmax and is approximate under fp16 emulation.
 
-    python analysis/t15_story_figures.py   -> analysis/figures/t15_step*.png
+    python analysis/story.py   -> analysis/figures/story_*.png, results/analysis/story/*.csv
 """
 
 from __future__ import annotations
@@ -27,8 +30,15 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 from analysis.adaptive_alpha import load_runs  # noqa: E402
-from utils.calibration import compute_ece  # noqa: E402
+from utils.calibration import compute_ece, reliability_curve  # noqa: E402
 from utils.feature_cache import DATASETS, DEV_DATASETS  # noqa: E402
+
+OUT = REPO / "results" / "analysis" / "story"
+RELIABILITY = ("clip", "tda", "gate")
+VARIANTS = {  # name -> label, as shown in the figures
+    "clip": "CLIP", "base": "CLIP + negative cache", "pos": "CLIP + positive cache",
+    "tda": "TDA (both caches)", "noself": "TDA without self-vote", "gate": "agreement gate",
+}
 
 ALPHA = 2.0
 FIG = REPO / "analysis" / "figures"
@@ -55,11 +65,15 @@ def derive(r) -> dict:
     safe = (top2[:, 0] - top2[:, 1]) > ALPHA * r.cache.max(-1).values + (n.max(-1).values - n.min(-1).values)
     out = {"y": y, "pred0": pred0, "agree": agree, "self": sv, "safe": safe,
            "clip_conf": p0.max(-1).values}
-    for k, o in (("clip", r.clip), ("base", r.base), ("tda", o_tda), ("noself", o_ns), ("gate", o_gate)):
+    o_pos = r.clip + ALPHA * r.cache
+    for k, o in (("clip", r.clip), ("base", r.base), ("pos", o_pos), ("tda", o_tda), ("noself", o_ns),
+                 ("gate", o_gate)):
         p = o.softmax(-1)
         out[f"{k}_pred"], out[f"{k}_conf"] = p.argmax(-1), p.max(-1).values
         out[f"{k}_ece"] = 100 * compute_ece(p.numpy(), y.numpy())
         out[f"{k}_acc"] = 100 * float((p.argmax(-1) == y).double().mean())
+        if k in RELIABILITY:
+            out[f"{k}_rel"] = reliability_curve(p.numpy(), y.numpy(), n_bins=10)
     return out
 
 
@@ -83,7 +97,7 @@ def acc(d, k, mask):
 
 
 # --- Step 1: self-vote -----------------------------------------------------------------------
-def fig_step1(val, path):
+def fig_step1(val, path, split="val"):
     names = list(val)
     x = np.arange(len(names))
     share = [mean_over_seeds(val[n], lambda d: 100 * float(d["self"].double().mean())) for n in names]
@@ -112,14 +126,14 @@ def fig_step1(val, path):
     for a in ax:
         a.set_xticks(x, [NAMES[n] for n in names], fontsize=8)
         a.grid(axis="y", alpha=0.3)
-    fig.suptitle("Step 1 - the self-vote (val, P2): frequent, almost always agrees with CLIP, and costs calibration")
+    fig.suptitle(f"The self-vote ({split}, P2): frequent, almost always agrees with CLIP, and costs calibration")
     fig.tight_layout()
     fig.savefig(path, dpi=140)
     plt.close(fig)
 
 
 # --- Step 2: confident CLIP cannot be changed (the echo figure, P2) --------------------------
-def fig_step2(val, path, bins=10):
+def fig_step2(val, path, split="val", bins=10):
     names = list(val)
     fig, ax = plt.subplots(3, len(names), figsize=(3.4 * len(names), 8.4), sharex="col")
     for j, n in enumerate(names):
@@ -150,15 +164,15 @@ def fig_step2(val, path, bins=10):
     ax[1, 0].set_ylabel("confidence - accuracy\n(pts)")
     ax[1, 0].legend(fontsize=8)
     ax[2, 0].set_ylabel("no-flip region\n(% of bin, Lemma 2)")
-    fig.suptitle("Step 2 - the cache fixes decisions only when CLIP is unsure, but inflates confidence in most bins "
-                 "(val, P2, 10 equal-count bins)")
+    fig.suptitle("The cache fixes decisions only when CLIP is unsure, but inflates confidence in most bins "
+                 f"({split}, P2, 10 equal-count bins)")
     fig.tight_layout()
     fig.savefig(path, dpi=140)
     plt.close(fig)
 
 
 # --- Step 3: agreement vs disagreement -------------------------------------------------------
-def fig_step3(val, path):
+def fig_step3(val, path, split="val"):
     names = list(val)
     x = np.arange(len(names))
     fig, ax = plt.subplots(2, 2, figsize=(13, 6.4), sharex=True)
@@ -180,8 +194,8 @@ def fig_step3(val, path):
     ax[0, 0].set_ylabel("accuracy (%)")
     ax[1, 0].set_ylabel("confidence - accuracy (pts)")
     ax[0, 0].legend(fontsize=8)
-    fig.suptitle("Step 3 - where the cache agrees it adds no accuracy, only confidence; "
-                 "all of TDA's gain is where it disagrees (val, P2)")
+    fig.suptitle("Where the cache agrees it adds no accuracy, only confidence; "
+                 f"all of TDA's gain is where it disagrees ({split}, P2)")
     fig.tight_layout()
     fig.savefig(path, dpi=140)
     plt.close(fig)
@@ -243,16 +257,112 @@ def fig_step5(runs, data_by_group, path):
     plt.close(fig)
 
 
-def main():
-    val = per_dataset(load_runs("replay_results/t14", DATASETS, [0, 1, 2], "val", "tda_eq_clean"))
-    fig_step1(val, FIG / "t15_step1_self_vote_val.png")
-    fig_step2(val, FIG / "t15_step2_echo_val.png")
-    fig_step3(val, FIG / "t15_step3_agreement_val.png")
-    test_runs = load_runs("replay_results/t14", DATASETS, [0, 1, 2], "test", "tda_eq_clean")
-    dev_runs = load_runs("replay_results/t14", DEV_DATASETS, [0, 1, 2], "test", "tda_eq_clean")
-    fig_step5(test_runs + dev_runs, {"test": per_dataset(test_runs), "dev": per_dataset(dev_runs)},
-              FIG / "t15_step5_where_it_helps.png")
-    print("wrote", *sorted(p.name for p in FIG.glob("t15_step*.png")))
+# --- Cache ablation (TDA paper Fig. 3, with ECE) --------------------------------------------
+ABLATION = ("clip", "base", "pos", "tda", "gate")
+
+
+def summary_table(data) -> pd.DataFrame:
+    """Per dataset (mean over seeds) and the unweighted dataset mean: accuracy and ECE of every
+    variant, the self-vote and agreement shares, and the agreeing / disagreeing split."""
+    rows = []
+    for n, ds in data.items():
+        row = {"dataset": n}
+        for k in VARIANTS:
+            row[f"{k}_acc"] = mean_over_seeds(ds, lambda d, k=k: d[f"{k}_acc"])
+            row[f"{k}_ece"] = mean_over_seeds(ds, lambda d, k=k: d[f"{k}_ece"])
+        row["self_vote_share"] = mean_over_seeds(ds, lambda d: 100 * float(d["self"].double().mean()))
+        row["agree_share"] = mean_over_seeds(ds, lambda d: 100 * float(d["agree"].double().mean()))
+        row["p_agree_given_self"] = mean_over_seeds(ds, lambda d: 100 * float(d["agree"][d["self"]].double().mean()))
+        row["p_agree_given_no_self"] = mean_over_seeds(ds, lambda d: 100 * float(d["agree"][~d["self"]].double().mean()))
+        for part, sel in (("agree", lambda d: d["agree"]), ("disagree", lambda d: ~d["agree"])):
+            for k in ("base", "tda"):
+                row[f"{k}_acc_{part}"] = mean_over_seeds(ds, lambda d, k=k: acc(d, k, sel(d)))
+                row[f"{k}_gap_{part}"] = mean_over_seeds(ds, lambda d, k=k: gap(d, k, sel(d)))
+        rows.append(row)
+    frame = pd.DataFrame(rows)
+    mean = frame.drop(columns="dataset").mean().to_frame().T
+    mean.insert(0, "dataset", "mean")
+    return pd.concat([frame, mean], ignore_index=True)
+
+
+def fig_cache_ablation(table, path, split="test"):
+    names = list(table["dataset"])
+    x = np.arange(len(names))
+    colors = {"clip": C_CLIP, "base": C_BASE, "pos": "#f4a261", "tda": C_TDA, "gate": C_GATE}
+    fig, ax = plt.subplots(1, 2, figsize=(14, 3.9))
+    w = 0.16
+    for i, k in enumerate(ABLATION):
+        for j, metric in enumerate(("acc", "ece")):
+            ax[j].bar(x + (i - 2) * w, table[f"{k}_{metric}"], w, color=colors[k], label=VARIANTS[k])
+    ax[0].set_title("accuracy (%)")
+    ax[1].set_title("ECE (%, lower is better)")
+    for a in ax:
+        a.set_xticks(x, [NAMES.get(n, n) for n in names], fontsize=8)
+        a.grid(axis="y", alpha=0.3)
+    ax[0].set_ylim(max(0, float(table[[f"{k}_acc" for k in ABLATION]].min().min()) - 10), None)
+    ax[1].legend(fontsize=8)
+    fig.suptitle(f"Which cache does what ({split}, P2): the positive cache brings the gain and all the "
+                 "overconfidence; the negative cache helps both")
+    fig.tight_layout()
+    fig.savefig(path, dpi=140)
+    plt.close(fig)
+
+
+def fig_reliability(data, path, split="test"):
+    """Reliability diagrams (10 bins, seeds pooled) of CLIP, TDA and the gate, one panel per dataset."""
+    names = list(data)
+    fig, axes = plt.subplots(1, len(names), figsize=(3.3 * len(names), 3.5))
+    for ax, n in zip(np.atleast_1d(axes), names):
+        ax.plot([0, 1], [0, 1], color="#999999", lw=0.8, ls="--")
+        for k, color in (("clip", C_CLIP), ("tda", C_TDA), ("gate", C_GATE)):
+            conf = np.zeros(10); acc_ = np.zeros(10); cnt = np.zeros(10)
+            for d in data[n]:
+                rel = d[f"{k}_rel"]
+                c = np.asarray(rel["bin_count"], dtype=float)
+                conf += np.asarray(rel["bin_conf"]) * c
+                acc_ += np.asarray(rel["bin_acc"]) * c
+                cnt += c
+            m = cnt > 0
+            ax.plot(conf[m] / cnt[m], acc_[m] / cnt[m], "o-", color=color, ms=4, label=VARIANTS[k])
+        ax.set_title(NAMES.get(n, n))
+        ax.set_xlabel("confidence")
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.grid(alpha=0.3)
+    np.atleast_1d(axes)[0].set_ylabel("accuracy")
+    np.atleast_1d(axes)[0].legend(fontsize=7)
+    fig.suptitle(f"Reliability ({split}, P2, seeds pooled): below the diagonal = overconfident")
+    fig.tight_layout()
+    fig.savefig(path, dpi=140)
+    plt.close(fig)
+
+
+def main(argv=None):
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--trace-root", default="replay_results/t14")
+    ap.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2])
+    a = ap.parse_args(argv)
+    OUT.mkdir(parents=True, exist_ok=True)
+    groups = {
+        "val": load_runs(a.trace_root, DATASETS, a.seeds, "val", "tda_eq_clean"),
+        "test": load_runs(a.trace_root, DATASETS, a.seeds, "test", "tda_eq_clean"),
+        "dev": load_runs(a.trace_root, DEV_DATASETS, a.seeds, "test", "tda_eq_clean"),
+    }
+    data = {g: per_dataset(runs) for g, runs in groups.items()}
+    for split, d in data.items():
+        table = summary_table(d)
+        table.round(3).to_csv(OUT / f"summary_{split}.csv", index=False)
+        fig_step1(d, FIG / f"story_selfvote_{split}.png", split)
+        fig_step2(d, FIG / f"story_echo_{split}.png", split)
+        fig_step3(d, FIG / f"story_agreement_{split}.png", split)
+        fig_cache_ablation(table, FIG / f"story_cache_ablation_{split}.png", split)
+    fig_reliability(data["test"], FIG / "story_reliability_test.png", "test")
+    signals = confidence_signals(groups["test"] + groups["dev"])
+    signals.round(3).to_csv(OUT / "confidence_signals.csv")
+    fig_step5(groups["test"] + groups["dev"], {"test": data["test"], "dev": data["dev"]},
+              FIG / "story_where_it_helps.png")
+    print("wrote", *sorted(p.name for p in FIG.glob("story_*.png")), "and", OUT)
 
 
 if __name__ == "__main__":
