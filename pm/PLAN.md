@@ -1,6 +1,6 @@
 # Plan — wrap-up and refinement
 
-Approved 2026-11-07 (Idan). Lead: Claude. Owners of record: Gal Machlin (macwave), Idan Yehuda.
+Approved 2026-11-07 (Idan); storyline and order revised 2026-11-10 (Idan, DECISIONS). Lead: Claude. Owners of record: Gal Machlin (macwave), Idan Yehuda.
 
 ## Goal
 
@@ -15,8 +15,34 @@ LOO temperature) to the professor as a rigorous, evidence-backed piece of work:
 - Positioned against the literature: the method landscape, ≤2 more zero-shot methods run
   by us, 1 few-shot method, and reported numbers for calibration-specific methods.
 
-Out of scope until the wrap-up is finished: new methods (reservoir cache, soft-label cache,
-self-vote removal). They are planned in `docs/plans/` and `research/`.
+In scope since 2026-11-10: one new method, the dataset-independent adaptive cache weight
+α(x) (T14), and calibration inside the region where the cache is active (R13 or R4).
+Still out of scope until the wrap-up: the other ideas in `research/BACKLOG.md`.
+
+## Storyline (2026-11-10)
+
+1. **Setting and baseline.** Zero-shot CLIP, TDA as the strongest simple online method,
+   evaluated under P2 (clean) with P1 alongside (T07: P2-TDA beats CLIP by +3.66 acc).
+2. **Diagnosis: where the cache helps and where it only inflates.** TDA's cache fixes
+   decisions only when CLIP is unsure (CLIP confidence ≲ 0.6), yet its push on CLIP's
+   top-2 gap grows with CLIP's confidence and TDA is overconfident in every bin, including
+   bins with no flips (A11, `analysis/figures/echo_val.png`). Mechanism: the cache is
+   built from CLIP's own labels, so adding its logits double-counts CLIP when they agree.
+3. **Our earlier changes as findings.** Margin admission, probability fusion, the gate and
+   LOO temperature, with their evidence. The gate is "right idea, wrong criterion": it
+   limits the cache by two-way ties and so misses EuroSAT's gains, which sit in diffuse
+   low-confidence samples.
+4. **Method: agreement-gated cache** (T14, frozen 2026-11-10). α(x) = α·[argmax c ≠ argmax z]:
+   the cache is used only where it disagrees with CLIP. It has no new parameter, so it is
+   dataset-independent by construction. Designed on the val splits, evaluated on four
+   development datasets (2 clear wins, 1 tie, 1 loss), and evaluated once on the test sets (`pm/research/T14-agreement-gate.md`).
+   The fitted α(x) ladder is kept as the negative result that motivates it (NLL-fitted rules
+   switch the cache off).
+5. **Calibration where the cache is active:** the gated branch is still overconfident (K42).
+   Next step, label-free.
+6. **Fair evaluation.** Five test sets evaluated once; P1/P2; 3 seeds (10 at wrap-up),
+   paired by seed; vs CLIP, TDA, gate, temperature and the T08 baselines.
+7. **Limitations and next steps.**
 
 ## Hyperparameter protocols
 
@@ -42,19 +68,24 @@ are a pure function of the image. Plan:
    method code (`T02`). The replay must reproduce `results/summary.csv` before any new
    number is trusted.
 
-## Phases and tasks
+## Phases and tasks (order revised 2026-11-10)
 
-| Phase | Tasks | Needs data? |
-|---|---|---|
-| A. Infrastructure | T01 extraction script · T02 feature replay · T03 O(N) temperature · T04 trace logging | no (synthetic tests) |
-| B. GPU handoff | macwave runs T01 | — |
-| C. Evidence | T05 analyses · T06 TDA-paper figures with ECE · T07 protocols P1/P2 | yes |
-| D. Positioning | T08 baselines (ECALP, DMN-weak, Tip-Adapter) · T09 related-work audit | T08 yes, T09 no |
-| E. Deck | T10 rebuild `presentation/build_pptx.py` to the new outline | yes |
-| F. Review | T11 three independent reviewers, ≤3 refinement rounds | yes |
-| G. Report | T12 bring `report/main_v2` in line with the deck (after deck sign-off) | yes |
+| # | Phase | Tasks | Status |
+|---|---|---|---|
+| A | Infrastructure | T01 extraction · T02 replay · T03 O(N) temperature · T04 trace | done |
+| B | Protocols and seeds | T07 P1/P2 · seed statistics | review |
+| 1 | Dev-set extraction | T14 step 7: Colab run for ImageNet-val (subset), Caltech101, UCF101, Food101 (Idan; ImageNet needs an account) | open |
+| 2 | Diagnosis evidence | A11 echo analysis (done, val) · T05 analyses · T06 TDA-paper figures with ECE | open |
+| 3 | Adaptive cache weight | T14 steps 1–6 (proof of concept on the five val splits) → 8 (fit and freeze on dev sets) | open |
+| 4 | Calibration in the active region | R13 or R4 on top of α(x) | open |
+| 5 | Fair evaluation | T14 step 9 · T08 baselines · final seeds | open |
+| 6 | Deck | T10 rebuild to the storyline above | open |
+| 7 | Review and report | T11 reviewers · T12 report | open |
 
-## Deck outline (target ~33 slides; TDA ≥ 25%)
+Phase 1 is a Colab job and can run while phase 3's proof of concept (steps 1–6) uses the
+val splits; T14 step 8 needs both. T09 related work runs alongside.
+
+## Deck outline (target ~33 slides; TDA ≥ 25%) — slides 20–31 to be redone in T10 to follow the storyline
 
 1–2 title, agenda · 3–7 background (problem setting; CLIP, both encoders frozen, prompt
 "a photo of a {class}."; why it fails: domain shift and caption granularity; method

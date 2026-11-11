@@ -1,6 +1,6 @@
 # T14 — Dataset-independent adaptive cache weight α(x)
 
-Status: open · Owner: local session (lead) + agents · Depends on: echo analysis (A11,
+Status: review (2026-11-11; steps 1–9 done in adapted form, see Outcome) · Owner: local session (lead) + agents · Depends on: echo analysis (A11,
 `analysis/echo_analysis.py`, patch `echo-analysis.patch`) · Approved by Idan 2026-11-10
 
 ## Why
@@ -75,3 +75,14 @@ sample (full vectors), any α-rule is evaluated exactly offline, without re-runn
   cache weight → calibration inside the active region (R13 or R4) → fair evaluation
   (P1/P2, seeds, baselines) → deck rebuild → report. Original changes become findings;
   the gate is reframed as "right idea, wrong criterion".
+
+## Outcome (2026-11-11)
+Report: `pm/research/T14-agreement-gate.md`. Handoff: `pm/handoffs/2026-11-11-T14-agreement-gate.md`.
+- Steps 1–4 done as planned (trace, signals, oracle, ranking). Finding: the NLL-optimal α is ≈ 0
+  outside EuroSAT in every signal bin (K38), so step 5's NLL-fitted ladder selects "cache off".
+- The criterion was amended to Idan's dominance rule (DECISIONS). The method became the
+  parameter-free agreement gate (K40–K41). With nothing to fit, steps 7–8 turned into an
+  independent confirmation on four dev sets, extracted on CPU (ImageNetV2, Caltech101, UCF101,
+  Food101 10k), instead of a fit.
+- Step 9: test once, P2 with 10 seeds (CIs) and P1 with 3 seeds (appendix), with the matched
+  comparison against TDA's α-curve and TDA + T.

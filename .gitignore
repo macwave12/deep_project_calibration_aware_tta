@@ -45,3 +45,6 @@ report/*.bbl
 report/*.out
 report/*.toc
 report/*.xdv
+
+# T14 per-sample analysis dump (regenerable: python analysis/adaptive_alpha.py oracle)
+results/analysis/adaptive_alpha/samples_*.csv.gz

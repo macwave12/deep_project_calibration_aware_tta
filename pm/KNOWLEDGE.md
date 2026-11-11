@@ -124,3 +124,47 @@ Established facts, each with its evidence. Add new facts with a source; mark a f
   gate gives 45.64. TDA-family online caches are path-dependent: a last-bit difference early in
   the stream changes cache contents and the trajectory. Single-seed EuroSAT numbers carry
   ±1.5–3 pts of noise; temperature ECE is sensitive because 1-NN LOO choices flip.
+- K36. T07, replay seeds 0/1/2 (`results/protocols.csv`, `results/analysis/protocols_paired.csv`).
+  P2 TDA beats CLIP on the 5-dataset mean, +3.66 acc (3/3 seeds), and on every dataset's mean
+  (Aircraft +0.12, 2/3 seeds). The clean protocol costs nothing on average: TDA's mean acc is
+  56.78 under P2 vs 56.60 under P1, and its ECE 10.96 vs 11.04. Per dataset the TDA ECE moves a
+  lot (EuroSAT −6.36, Flowers +3.01, Aircraft +2.66), so the per-dataset α/β trade calibration
+  differently, without being better on average.
+- K37. Our variants under P2 (paired vs P2 TDA, mean of 5): gate acc −2.02 / ECE −6.52 (3/3
+  ECE wins, 0/3 acc), gate+temp −2.02 / −4.77, temp +0.03 / −3.24 (3/3 on both), margin
+  −2.31 / +3.80, ungated fusion −1.48 / +13.19. Gate, gate+temp and fusion barely move between
+  protocols (|P2−P1| ≤ 0.3 acc, ≤ 0.3 ECE everywhere), consistent with α being inert under
+  fusion (record `hyperparams.inert`), so only β differs. Margin admission is the most
+  protocol-sensitive (mean acc +0.70, ECE −3.06 from P1 to P2; Aircraft ECE −10.06).
+
+## T14: agreement-gated cache (2026-11-10/11)
+- K38. Val, P2, 3 seeds (`results/analysis/adaptive_alpha/binned_alpha_val.csv`): the bin-optimal
+  α by NLL is ≈ 0 in every bin on DTD and Flowers; ≈ 1–2 in every bin on EuroSAT; and > 0 only in
+  the most confident bins on Pets (1.5–2.9, which hold most of Pets' samples) and Aircraft
+  (2.4–4.0). The same signal value calls for different α on different datasets, so no per-sample
+  signal we tried gives a dataset-independent α by NLL. The NLL-fitted ladder (LODO, with a
+  joint T; `ladder_lodo_summary_val.csv`) gives held-out accuracy 54.3–55.0 and mean α
+  0.02–0.66, against TDA 56.29: every NLL-fitted rule shrinks the cache and loses 1.3–2 points. [Corrected 2026-11-11 after review: the first version said
+  "≈ 0 everywhere but EuroSAT".]
+- K39. The negative cache alone (α = 0) gives about half of TDA's accuracy gain over CLIP: val
+  52.29 → 54.25 (TDA 56.29); test 53.12 → 54.52 (TDA 56.81), with ECE 4.75 vs TDA 10.91.
+- K40. Echo, quantified (test, P2, mean of 5; `results/analysis/t14/mechanism_test.csv`): on
+  samples where the cache's argmax agrees with CLIP's (56%), TDA's positive cache changes
+  accuracy by +0.2 (68.79 → 68.96) but moves the confidence−accuracy gap from −2.6 to +11.3. On
+  disagreeing samples (44%) it carries the whole gain: 36.7 → 41.1 accuracy.
+- K41. Agreement gate (α only where the cache disagrees; parameter-free) on test, P2, 3 seeds:
+  56.73 ± 0.25 / 5.49 ± 0.18 vs TDA 56.78 ± 0.30 / 10.96 ± 0.27; paired Δ −0.05 acc, −5.46 ECE
+  (3/3). ECE better on DTD −9.9, Aircraft −9.9, Flowers −6.4, EuroSAT −3.2; worse on Pets +2.0.
+  P1: Δ −0.06 / −4.83. Matched: TDA's best ECE at the gate's accuracy on its α-curve is 10.39;
+  TDA's best accuracy at the gate's ECE is 55.35 (`matched_test.csv`). TDA + one global T (fit on
+  val, 1.54): 56.81 / 6.98 — better than the gate on DTD and Aircraft, worse on EuroSAT and Pets.
+- K42. Where the gate loses: datasets where CLIP is underconfident on the agreeing samples (Pets,
+  CLIP gap −3.5; Caltech101 dev set, agreeing-sample gap −5.6 → TDA −0.7, gate −5.6;
+  `results/analysis/t14/mechanism_dev.csv`). TDA's echo inflation happens to correct underconfidence there; the gate
+  removes it. The gate's remaining miscalibration is in the disagree branch (gap +8.4 mean,
+  DTD +15.9) — the natural place for calibration inside the active region.
+- K43. Dev sets (never used for design; P2, 3 seeds; `results/analysis/t14/dev_protocols.csv`):
+  gate 76.78 / 3.27 vs TDA 76.79 / 7.35 vs CLIP 75.75 / 3.32 (mean of ImageNetV2, Caltech101,
+  UCF101, Food101-10k). Per dataset vs TDA: ImageNetV2 −0.03 / −11.87, UCF101 +0.10 / −6.30,
+  Food101 +0.08 / +0.04, Caltech101 −0.19 / +1.83. CLIP ImageNetV2 60.89% (published level),
+  confirming the ImageNetV2 relabel.
