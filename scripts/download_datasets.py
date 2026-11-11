@@ -215,7 +215,31 @@ DEV_SOURCES: Dict[str, DatasetSpec] = {
         required=("UCF-101-midframes",),
     ),
 }
-ALL_SOURCES: Dict[str, DatasetSpec] = {**SOURCES, **DEV_SOURCES}
+HENDRYCKS = "https://people.eecs.berkeley.edu/~hendrycks"
+# T15 fresh evaluation sets (public; ImageNet-val itself is gated: scripts/fetch_imagenet_val_hf.py).
+FRESH_SOURCES: Dict[str, DatasetSpec] = {
+    "imagenet_a": DatasetSpec(
+        key="imagenet_a", folder="imagenet-adversarial", kind="imagefolder", image_dir="imagenet-a",
+        archives=[Archive("imagenet-a.tar", [f"{HENDRYCKS}/imagenet-a.tar"], 656,
+                          moves=[(("imagenet-a",), "imagenet-a")])],
+        drive=[], expected_test=7500, reference_counts={"test": 7500}, required=("imagenet-a",),
+    ),
+    "imagenet_r": DatasetSpec(
+        key="imagenet_r", folder="imagenet-rendition", kind="imagefolder", image_dir="imagenet-r",
+        archives=[Archive("imagenet-r.tar", [f"{HENDRYCKS}/imagenet-r.tar"], 2090,
+                          moves=[(("imagenet-r",), "imagenet-r")])],
+        drive=[], expected_test=30000, reference_counts={"test": 30000}, required=("imagenet-r",),
+    ),
+    "imagenet_sketch": DatasetSpec(
+        key="imagenet_sketch", folder="imagenet-sketch", kind="imagefolder", image_dir="images",
+        archives=[Archive("ImageNet-Sketch.zip",
+                          ["https://huggingface.co/datasets/songweig/imagenet_sketch/resolve/main/data/"
+                           "ImageNet-Sketch.zip"], 7242,
+                          moves=[(("sketch", "ImageNet-Sketch/sketch"), "images")])],
+        drive=[], expected_test=50889, reference_counts={"test": 50889}, required=("images",),
+    ),
+}
+ALL_SOURCES: Dict[str, DatasetSpec] = {**SOURCES, **DEV_SOURCES, **FRESH_SOURCES}
 
 CLIP_SHA256 = "5806e77cd80f8b59890b7e101eabd078d9fb84e6937f9e85e4ecb61988df416f"
 CLIP_URLS = [
@@ -658,8 +682,9 @@ def _split_entries(spec: DatasetSpec, ds_dir: str) -> Dict[str, List[str]]:
             out[s] = [os.path.join(spec.image_dir, e[0]) for e in splits.get(s, [])]
     elif spec.kind == "imagefolder":
         root = os.path.join(ds_dir, spec.image_dir)
+        # Only files inside class folders count, as torchvision's ImageFolder sees them.
         out["test"] = sorted(os.path.relpath(os.path.join(d, n), ds_dir)
-                             for d, _, names in os.walk(root) for n in names)
+                             for d, _, names in os.walk(root) if d != root for n in names)
     else:
         with open(os.path.join(ds_dir, "variants.txt"), encoding="utf-8") as f:
             variants = {l.rstrip("\n") for l in f}

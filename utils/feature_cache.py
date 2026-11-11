@@ -40,7 +40,9 @@ SPLITS = ("test", "val", "train16")
 DATASETS = ("dtd", "flower102", "pets", "eurosat", "aircraft")
 # T14 development datasets: used to design the adaptive cache weight, never to evaluate it.
 DEV_DATASETS = ("imagenetv2", "caltech101", "food101", "ucf101")
-ALL_DATASETS = DATASETS + DEV_DATASETS
+# Fresh evaluation sets for the frozen method and the ban rule (T15): never looked at before.
+FRESH_DATASETS = ("imagenet", "imagenet_a", "imagenet_r", "imagenet_sketch")
+ALL_DATASETS = DATASETS + DEV_DATASETS + FRESH_DATASETS
 
 # Our lowercase dataset key -> upstream `--test_sets` value (mixed case, and
 # `eurosat` stays lowercase). Same mapping as scripts/run_one.* and tests/helpers.py.
@@ -54,6 +56,10 @@ UPSTREAM_SET_ID = {
     "caltech101": "Caltech101",
     "food101": "Food101",
     "ucf101": "UCF101",
+    "imagenet": "I",
+    "imagenet_a": "A",
+    "imagenet_r": "R",
+    "imagenet_sketch": "K",
 }
 
 # text_feats.pt is a dict with these keys:

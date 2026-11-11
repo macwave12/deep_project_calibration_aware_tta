@@ -25,6 +25,13 @@ BRANCH = "deck/refinement"
 DRIVE_FOLDER = "cal_tta_features"  # under MyDrive/
 DATASETS = ["dtd", "flower102", "pets", "eurosat", "aircraft"]
 EXTRA_EXTRACT_ARGS = []  # passed to scripts/extract_features.py; empty = its defaults
+# T15 ImageNet-val run: set RUN_IMAGENET = True. Needs a Colab secret named HF_TOKEN (key icon in
+# the left bar), a Hugging Face token whose account accepted the terms on
+# https://huggingface.co/datasets/ILSVRC/imagenet-1k
+RUN_IMAGENET = False
+if RUN_IMAGENET:
+    DATASETS = ["imagenet"]
+    EXTRA_EXTRACT_ARGS = ["--splits", "test", "--train16-views", "0", "--batch-size", "64", "--workers", "2"]
 
 REPO_DIR = "/content/deep_project_calibration_aware_tta"
 DATA_ROOT = "/content/data_root"  # local disk (fast), not Drive
@@ -242,17 +249,27 @@ if not torch_info["matmul_finite"]:
 # Downloads only the datasets not finished yet, to local disk (`/content/data_root`), plus the
 # CLIP ViT-B/16 weights, then verifies the layout: test counts 1692 / 2463 / 3669 / 8100 / 3333
 # with 0 missing files. Rerunning skips what is already there. ~4.4 GB, typically 10–30 min.
+# With RUN_IMAGENET: ImageNet val (50k, 6.7 GB) from Hugging Face with your HF_TOKEN secret.
 
 # %%
 todo = pending_datasets(DRIVE_FEATURES, DATASETS)
 print("datasets to extract:", todo or "none (all finished)")
 ENV = {"DATA_ROOT": DATA_ROOT, "CLIP_CACHE_ROOT": CLIP_CACHE}
-if todo:
+downloadable = [d for d in todo if d != "imagenet"]
+if downloadable:
     run([sys.executable, "scripts/download_datasets.py", "--data-root", DATA_ROOT,
-         "--datasets", *todo, "--with-clip", "--clip-cache", CLIP_CACHE],
+         "--datasets", *downloadable, "--with-clip", "--clip-cache", CLIP_CACHE],
         cwd=REPO_DIR, env=ENV, log_path=WORK_DIR / "download_datasets.log")
     verify = Path(DATA_ROOT) / "_state" / "verify.json"
-    shutil.copyfile(verify, WORK_DIR / f"datasets_verify_{'_'.join(todo)}.json")
+    shutil.copyfile(verify, WORK_DIR / f"datasets_verify_{'_'.join(downloadable)}.json")
+if "imagenet" in todo:
+    from google.colab import userdata  # noqa: E402  (Colab only)
+    hf_token = userdata.get("HF_TOKEN")  # passed by environment, never printed
+    run([sys.executable, "scripts/fetch_imagenet_val_hf.py", "--data-root", DATA_ROOT],
+        cwd=REPO_DIR, env={**ENV, "HF_TOKEN": hf_token}, log_path=WORK_DIR / "download_datasets.log")
+    if not downloadable:
+        run([sys.executable, "-c", "import sys; import scripts.download_datasets as d; "
+             "d.fetch_clip(sys.argv[1])", CLIP_CACHE], cwd=REPO_DIR, env=ENV)
 
 # %% [markdown]
 # ## f. Feature extraction

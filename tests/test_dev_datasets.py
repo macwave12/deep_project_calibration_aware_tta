@@ -21,7 +21,9 @@ def test_dev_sets_are_opt_in_everywhere():
     a = dd.parse_args(["--data-root", "x"])
     assert a.datasets == list(dd.SOURCES)
     assert dd.parse_args(["--data-root", "x", "--datasets", "ucf101"]).datasets == ["ucf101"]
-    assert extract_args([]).datasets == [d for d in ALL_DATASETS if d not in DEV_DATASETS]
+    from scripts.extract_features import DATASETS as PROJECT
+    assert extract_args([]).datasets == list(PROJECT)
+    assert set(DEV_DATASETS) <= set(ALL_DATASETS)
     assert all(d in UPSTREAM_SET_ID for d in DEV_DATASETS)
 
 

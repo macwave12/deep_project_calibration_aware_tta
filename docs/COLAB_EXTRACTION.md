@@ -89,3 +89,23 @@ while the session lasts.
 
 **Your Drive is full.** The run needs ~250 MB on Drive (work folder + zip). Free some space and
 rerun cell h (or Run all).
+
+## ImageNet validation run (T15)
+
+The fresh-evaluation run for ImageNet val (50,000 images). About 6.7 GB comes from Hugging
+Face, and on a T4 it takes 30–45 min.
+
+1. One-time setup:
+   - Sign in at huggingface.co and accept the terms on
+     https://huggingface.co/datasets/ILSVRC/imagenet-1k (approval is automatic).
+   - Create a **read** token at https://huggingface.co/settings/tokens.
+2. In Colab, open the key icon (Secrets) in the left bar. Add a secret named `HF_TOKEN` with the
+   token as its value, and allow notebook access. The token is passed to the download script
+   through the environment and is never printed.
+3. In **Settings**, set `RUN_IMAGENET = True`. Then choose Runtime → T4 GPU and Run all.
+4. The result is `MyDrive/cal_tta_features/features_<date>.zip`. It holds
+   `features/imagenet/`: the test split only, plus stream orders for seeds 0/1/2.
+
+Layout written by `scripts/fetch_imagenet_val_hf.py`:
+`/content/data_root/imagenet/images/val/<label:04d>/*.JPEG`. The zero-padded folders sort in
+ImageNet index order.

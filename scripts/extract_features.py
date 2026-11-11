@@ -33,7 +33,8 @@ if str(REPO) not in sys.path:
 
 DATASETS = ("dtd", "flower102", "pets", "eurosat", "aircraft")
 DEV_DATASETS = ("imagenetv2", "caltech101", "food101", "ucf101")  # T14 development sets
-ALL_DATASETS = DATASETS + DEV_DATASETS
+FRESH_DATASETS = ("imagenet", "imagenet_a", "imagenet_r", "imagenet_sketch")  # T15 fresh evaluation
+ALL_DATASETS = DATASETS + DEV_DATASETS + FRESH_DATASETS
 TEST_ONLY_SET_IDS = ("I", "A", "K", "R", "V")  # ImageFolder sets: build_dataset ignores `mode`
 NORMALIZE_MEAN = [0.48145466, 0.4578275, 0.40821073]
 NORMALIZE_STD = [0.26862954, 0.26130258, 0.27577711]
@@ -72,9 +73,17 @@ def build_tip_adapter_transform(resolution: int):
 
 
 def class_names(set_id: str) -> list:
-    """Class names as online_tta.py uses them: ImageNet variants share `imagenet_classes`."""
-    if set_id in ("I", "V"):
+    """Class names in label order. ImageNet variants use `imagenet_classes`: ImageNet-A / -R keep
+    their 200 classes in ImageNet index order (= ImageFolder's sorted-wnid order, as online_tta.py
+    masks them); ImageNetV2 is relabelled to ImageNet indices (`imagenetv2_numeric_labels`)."""
+    if set_id in ("I", "V", "K", "A", "R"):
         from data.imagnet_prompts import imagenet_classes
+        if set_id == "A":
+            from data.imagenet_variants import imagenet_a_mask
+            return [imagenet_classes[i] for i in imagenet_a_mask]
+        if set_id == "R":
+            from data.imagenet_variants import imagenet_r_mask
+            return [c for c, m in zip(imagenet_classes, imagenet_r_mask) if m]
         return list(imagenet_classes)
     from data import cls_to_names
     return getattr(cls_to_names, f"{set_id.lower()}_classes")
@@ -126,7 +135,8 @@ def parse_args(argv=None):
                    help="dataset root (same as run_one's DATA_ROOT); defaults to $DATA_ROOT")
     p.add_argument("--out", default="features", help="output folder (default: features/)")
     p.add_argument("--datasets", nargs="+", default=list(DATASETS), choices=ALL_DATASETS,
-                   help="default: the five project datasets; T14 dev sets: " + " ".join(DEV_DATASETS))
+                   help="default: the five project datasets; T14 dev sets: " + " ".join(DEV_DATASETS)
+                        + "; T15 fresh sets: " + " ".join(FRESH_DATASETS))
     p.add_argument("--splits", nargs="+", default=["test", "val", "train16"], choices=["test", "val", "train16"])
     p.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2], help="stream seeds for the test split")
     p.add_argument("--val-seeds", nargs="+", type=int, default=[0, 1, 2], help="stream seeds for the val split")
