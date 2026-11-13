@@ -1,0 +1,45 @@
+measure,group,label,tier,auc,auc_ds_min,auc_ds_max
+clip_conf,CLIP,confidence,dev,0.4291,0.2925,0.4569
+clip_conf,CLIP,confidence,fresh,0.4746,0.3932,0.5118
+clip_conf,CLIP,confidence,test,0.5489,0.4565,0.5664
+clip_conf,CLIP,confidence,val,0.5575,0.4282,0.6216
+clip_margin,CLIP,top-1 − top-2 margin,dev,0.4768,0.3939,0.4966
+clip_margin,CLIP,top-1 − top-2 margin,fresh,0.4707,0.3819,0.5165
+clip_margin,CLIP,top-1 − top-2 margin,test,0.5252,0.4291,0.56
+clip_margin,CLIP,top-1 − top-2 margin,val,0.4994,0.4027,0.5645
+clip_p_cache_class,CLIP,prob. of the cache's class,dev,0.4565,0.3054,0.4916
+clip_p_cache_class,CLIP,prob. of the cache's class,fresh,0.5171,0.4144,0.6636
+clip_p_cache_class,CLIP,prob. of the cache's class,test,0.5201,0.5261,0.5711
+clip_p_cache_class,CLIP,prob. of the cache's class,val,0.5741,0.521,0.6939
+cache_conf,cache,confidence,dev,0.531,0.331,0.4796
+cache_conf,cache,confidence,fresh,0.4464,0.4397,0.6486
+cache_conf,cache,confidence,test,0.6964,0.5237,0.6363
+cache_conf,cache,confidence,val,0.6891,0.552,0.6731
+cache_mass,cache,mass of its top class,dev,0.4706,0.3205,0.4816
+cache_mass,cache,mass of its top class,fresh,0.5342,0.397,0.7025
+cache_mass,cache,mass of its top class,test,0.5131,0.4303,0.6157
+cache_mass,cache,mass of its top class,val,0.5764,0.4745,0.6637
+cache_support,cache,weight on CLIP's top-1,dev,0.4963,0.2611,0.4734
+cache_support,cache,weight on CLIP's top-1,fresh,0.4497,0.3975,0.65
+cache_support,cache,weight on CLIP's top-1,test,0.5937,0.3655,0.5631
+cache_support,cache,weight on CLIP's top-1,val,0.5695,0.3348,0.5655
+rho,relation,"ρ(cache, CLIP) over classes",dev,0.4691,0.3333,0.5247
+rho,relation,"ρ(cache, CLIP) over classes",fresh,0.5415,0.4112,0.6656
+rho,relation,"ρ(cache, CLIP) over classes",test,0.4811,0.472,0.5927
+rho,relation,"ρ(cache, CLIP) over classes",val,0.4911,0.4568,0.6475
+one_minus_js,relation,"1 − JS(cache, CLIP)",dev,0.5805,0.523,0.7494
+one_minus_js,relation,"1 − JS(cache, CLIP)",fresh,0.4798,0.5084,0.5903
+one_minus_js,relation,"1 − JS(cache, CLIP)",test,0.6322,0.4469,0.5263
+one_minus_js,relation,"1 − JS(cache, CLIP)",val,0.6378,0.394,0.5308
+weight_gap,relation,cache weight: CLIP top-1 − own top,dev,0.4471,0.4009,0.4975
+weight_gap,relation,cache weight: CLIP top-1 − own top,fresh,0.5427,0.4212,0.5447
+weight_gap,relation,cache weight: CLIP top-1 − own top,test,0.3007,0.3492,0.5084
+weight_gap,relation,cache weight: CLIP top-1 − own top,val,0.3044,0.3522,0.4998
+alpha_needed,relation,α needed to flip,dev,0.4519,0.4192,0.5256
+alpha_needed,relation,α needed to flip,fresh,0.4358,0.3714,0.644
+alpha_needed,relation,α needed to flip,test,0.4404,0.2703,0.4752
+alpha_needed,relation,α needed to flip,val,0.3828,0.3221,0.4462
+combined,combined,all ten combined (fitted on val),dev,0.4747,,
+combined,combined,all ten combined (fitted on val),fresh,0.4786,,
+combined,combined,all ten combined (fitted on val),test,0.7524,,
+combined,combined,all ten combined (fitted on val),val,0.7641,,

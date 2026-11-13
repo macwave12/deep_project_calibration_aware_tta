@@ -10,6 +10,7 @@ zero-shot CLIP's, divide its logits by the smallest T >= 1 that restores CLIP's 
 otherwise leave it. Ranking-preserving, so accuracy is unchanged.
 
     python analysis/comparison.py   -> results/analysis/t16/comparison{,_paired,_per_dataset}.csv
+    python analysis/comparison.py --generalization   -> results/analysis/t16/zaec_generalization*.csv
 """
 
 from __future__ import annotations
@@ -26,10 +27,10 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from analysis.adaptive_alpha import disagree_mask, load_runs, metrics  # noqa: E402
-from analysis.seed_stats import METRICS, method_stats, paired_stats, seed_dir, with_dataset_mean  # noqa: E402
+from analysis.adaptive_alpha import disagree_mask, load_runs, metrics, trace_path  # noqa: E402
+from analysis.seed_stats import MEAN_ROW, METRICS, method_stats, paired_stats, seed_dir, with_dataset_mean  # noqa: E402
 from analysis.t14_results import fit_temperature  # noqa: E402
-from utils.feature_cache import DATASETS  # noqa: E402
+from utils.feature_cache import DATASETS, DEV_DATASETS, FRESH_DATASETS  # noqa: E402
 
 ALPHA = 2.0
 OUT = REPO / "results" / "analysis" / "t16"
@@ -115,13 +116,59 @@ def summary(frame: pd.DataFrame) -> pd.DataFrame:
         ["dataset", "method", "accuracy_n", "accuracy_mean", "accuracy_std", "ece_mean", "ece_std"]]
 
 
+GEN_METHODS = ("TDA", "agreement gate", "TDA + ZAEC", "gate + ZAEC")
+
+
+def generalization_rows(runs, tier: str) -> pd.DataFrame:
+    """ZAEC vs the gate on sets never used in the design; no temperature, no read-first."""
+    rows = []
+    for r in runs:
+        lg = trace_logits(r)
+        for method in GEN_METHODS:
+            m = metrics(lg[method].softmax(-1), r.labels)
+            rows.append({"tier": tier, "dataset": r.dataset, "method": method, "seed": r.seed,
+                         "accuracy": m["acc"], "ece": m["ece"]})
+    return pd.DataFrame(rows)
+
+
+def run_generalization(a) -> None:
+    """Dev traces (t14) and fresh traces (t16_fresh); fresh sets without full traces are skipped."""
+    tiers = {"dev": (a.trace_root, DEV_DATASETS), "fresh": (a.fresh_root, FRESH_DATASETS)}
+    frames, skipped = [], []
+    for tier, (root, datasets) in tiers.items():
+        for ds in datasets:
+            if not all(trace_path(root, ds, s, "test", "tda_eq_clean").exists() for s in a.seeds):
+                skipped.append(ds)
+                continue
+            frames.append(generalization_rows(load_runs(root, [ds], a.seeds, "test", "tda_eq_clean"), tier))
+    frame = pd.concat(frames, ignore_index=True)
+    means = [with_dataset_mean(g.drop(columns="tier")).query("dataset == @MEAN_ROW").assign(tier=t)
+             for t, g in frame.groupby("tier")]
+    means.append(with_dataset_mean(frame.drop(columns="tier")).query("dataset == @MEAN_ROW").assign(tier="all"))
+    frame = pd.concat([frame, *means], ignore_index=True)
+    out = Path(a.out_dir)
+    frame.round(4).to_csv(out / "zaec_generalization_per_seed.csv", index=False)
+    paired = pd.concat([paired_stats(g.drop(columns="tier"), ["TDA + ZAEC", "TDA"]).assign(tier=t)
+                        for t, g in frame.groupby("tier")], ignore_index=True)
+    paired.round(4).to_csv(out / "zaec_generalization_paired.csv", index=False)
+    print(f"skipped (no full trace): {', '.join(skipped) or 'none'}")
+    ece = paired[(paired.metric == "ece") & (paired.reference == "TDA + ZAEC")]
+    print(ece[["tier", "dataset", "method", "mean_diff", "wins", "losses"]].round(2).to_string(index=False))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--trace-root", default="replay_results/t14")
+    ap.add_argument("--fresh-root", default="replay_results/t16_fresh")
     ap.add_argument("--baselines", default="replay_results/t16_baselines")
     ap.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2])
     ap.add_argument("--out-dir", default=str(OUT))
+    ap.add_argument("--generalization", action="store_true",
+                    help="ZAEC vs gate on the dev and fresh sets -> zaec_generalization*.csv")
     a = ap.parse_args(argv)
+    if a.generalization:
+        run_generalization(a)
+        return
     temperature = fit_temperature(load_runs(a.trace_root, DATASETS, a.seeds, "val", "tda_eq_clean"), ALPHA)
     runs = load_runs(a.trace_root, DATASETS, a.seeds, "test", "tda_eq_clean")
     rf = load_runs(a.trace_root, DATASETS, a.seeds, "test", "tda_read_first_clean")

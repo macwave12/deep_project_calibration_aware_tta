@@ -65,6 +65,12 @@ def load(root: Path = REPO) -> dict:
         "matched": pd.read_csv(an / "t14" / "matched_test.csv"),
         "p1": pd.read_csv(an / "p1_appendix_p1_vs_p2.csv"),
         "repro": pd.read_csv(an / "p1_appendix_reproduction.csv"),
+        "switch": pd.read_csv(an / "t16" / "switch.csv"),
+        "switch_sweep": pd.read_csv(an / "t16" / "switch_sweep.csv"),
+        "ni_abl": pd.read_csv(an / "t16" / "no_info_ablation.csv"),
+        "ni_auc": pd.read_csv(an / "t16" / "no_info_auc.csv"),
+        "ni_filter": pd.read_csv(an / "t16" / "no_info_filter.csv"),
+        "ni_rates": pd.read_csv(an / "t16" / "no_info_rates.csv"),
     }
 
 
@@ -203,6 +209,74 @@ def numbers(d) -> dict:
             n[f"rho{key}{dk}"] = f(float(row.iloc[0].rho), 2, sign=True) if len(row) else "n/a"
     n["signalHead"], n["confCut"] = str(SIGNAL_HEAD), f(CONF_CUT, 1)
     n["rhoN"] = str(int(rho[(rho.datasets == "all")].iloc[0].n))
+    n.update(switch_numbers(d["switch"], d["switch_sweep"]))
+    n.update(no_info_numbers(d["ni_abl"], d["ni_auc"], d["ni_filter"]))
+    rates = d["ni_rates"]
+    n["niAlphaMinRate"] = f(rates[(rates.measure == "alpha_needed") & (rates.n >= 30)].right_pct.min(), 1)
+    return n
+
+
+NI_TIERS = (("val", "Val"), ("test", "Test"), ("dev", "Dev"), ("fresh", "Fresh"))
+NI_VARIANTS = (("clip", "CLIP"), ("base", "+ negative cache ($b$)"),
+               ("apos", "$b$ + positive cache, agreeing only"), ("gate", "$b$ + positive cache, disagreeing only (gate)"),
+               ("tda", "$b$ + positive cache, all (TDA)"), ("gpos", "CLIP + positive cache, disagreeing only"))
+
+
+def no_info_numbers(abl: pd.DataFrame, aucs: pd.DataFrame, filt: pd.DataFrame) -> dict:
+    """Macros for the ablation by agreement group and the flip-information analysis."""
+    a, n = abl.set_index("tier"), {}
+    for tier, tk in NI_TIERS:
+        r = a.loc[tier]
+        n[f"niAgreeShare{tk}"] = f(r.agree_share, 0)
+        for part, pk in (("agree", "Agree"), ("disagree", "Dis")):
+            for k, kk in (("base", "Base"), ("tda", "Tda")):
+                n[f"ni{pk}{kk}Acc{tk}"] = f(r[f"{k}_acc_{part}"], 1)
+                n[f"ni{pk}{kk}Gap{tk}"] = f(r[f"{k}_gap_{part}"], 1, sign=True)
+        fr = filt.set_index("tier").loc[tier]
+        n[f"niFilter{tk}"] = f(round(fr.filter_gain, 2) + 0.0, 2, sign=True)  # no "-0.00"
+        n[f"niOracleBlock{tk}"], n[f"niOraclePick{tk}"] = f(fr.oracle_block, 1), f(fr.oracle_pick, 1)
+        n[f"niCombAuc{tk}"] = f(aucs[(aucs.measure == "combined") & (aucs.tier == tier)].auc.item())
+    n["niAposMaxDAcc"] = f((a.apos_acc - a.base_acc).abs().max(), 2)
+    n["niAgreeMaxDAcc"] = f((a.tda_acc_agree - a.base_acc_agree).abs().max(), 2)
+    single = aucs[aucs.measure != "combined"]
+    held = single[single.tier.isin(("dev", "fresh"))].auc
+    n["niHeldAucLo"], n["niHeldAucHi"] = f(held.min()), f(held.max())
+    n["niFilterMax"] = f(filt.filter_gain.abs().max(), 2)
+    n["niOraclePickLo"], n["niOraclePickHi"] = f(filt.oracle_pick.min(), 1), f(filt.oracle_pick.max(), 1)
+    n["niThresh"] = f(float(filt.threshold.iloc[0]))
+    return n
+
+
+SWITCH_METHODS = (("TDA", "Tda"), ("TDA + ZAEC", "Zaec"), ("agreement gate", "Gate"), ("confidence switch", "Sw"))
+TIERS = (("val", "Val"), ("dev", "Dev"), ("test", "Test"), ("fresh", "Fresh"))  # design tiers first
+
+
+def switch_numbers(sw: pd.DataFrame, sweep: pd.DataFrame) -> dict:
+    """Macros for the confidence switch: threshold, per-tier means, the datasets it switches on, ECE deltas, and the
+    thresholds the fresh tier alone would have preferred (within 0.1 ECE of its minimum)."""
+    n = {"swThresh": f(float(sw.threshold.iloc[0])), "swPlateauLo": f(float(sw.plateau_lo.iloc[0])),
+         "swPlateauHi": f(float(sw.plateau_hi.iloc[0]))}
+    mean = sw[sw.dataset == "mean"]
+    for tier, tk in TIERS:
+        for method, mk in SWITCH_METHODS:
+            row = mean[(mean.tier == tier) & (mean.method == method)].iloc[0]
+            n[f"sw{mk}{tk}Ece"], n[f"sw{mk}{tk}Acc"] = f(row.ece), f(row.accuracy)
+        gate = mean[(mean.tier == tier) & (mean.method == "agreement gate")].iloc[0]
+        swr = mean[(mean.tier == tier) & (mean.method == "confidence switch")].iloc[0]
+        n[f"swD{tk}Ece"] = f(swr.ece - gate.ece, 2, sign=True)
+    per = sw[(sw.dataset != "mean") & (sw.method == "confidence switch")]
+    on = per[per.switch_on_pct > 50]
+    n["swOnNames"] = ", ".join(NAMES.get(x, x) for x in dict.fromkeys(on[on.tier != "val"].dataset))
+    n["swOnN"] = str(on[on.tier != "val"].dataset.nunique())
+    n["swHeldN"] = str(per[per.tier != "val"].dataset.nunique())
+    n["swFreshOnN"] = str(on[on.tier == "fresh"].dataset.nunique())
+    off = per[per.switch_on_pct <= 50]
+    n["swMinOnConf"] = f(on.clip_conf.min() / 100)
+    n["swMaxOffConf"] = f(off.clip_conf.max() / 100)
+    fr = sweep[sweep.tier == "fresh"]
+    best = fr[fr.ece <= fr.ece.min() + 0.1]
+    n["swFreshBestEce"] = f(fr.ece.min())
+    n["swFreshBestLo"], n["swFreshBestHi"] = f(best.threshold.min()), f(best.threshold.max())
     return n
 
 
@@ -313,6 +387,57 @@ def tab_p1(d) -> str:
     return "\n".join(lines)
 
 
+def tab_switch(d) -> str:
+    mean = d["switch"][d["switch"].dataset == "mean"]
+    lines = ["\\begin{tabular}{lrrrr}", "\\toprule",
+             "ECE (acc.), P2, 3 seeds & val$^\\ast$ & dev$^\\ast$ & test & fresh \\\\", "\\midrule"]
+    for method, _ in SWITCH_METHODS:
+        cells = []
+        for tier, _ in TIERS:
+            row = mean[(mean.tier == tier) & (mean.method == method)].iloc[0]
+            cells.append(f"{f(row.ece)} ({f(row.accuracy, 1)})")
+        lines.append(f"{method} & " + " & ".join(cells) + " \\\\")
+    lines += ["\\bottomrule", "\\end{tabular}"]
+    return "\n".join(lines)
+
+
+def tab_ablation_groups(d) -> str:
+    """Accuracy / ECE of the cache ablation on every tier, then the agreeing / disagreeing groups."""
+    a = d["ni_abl"].set_index("tier")
+    lines = ["\\begin{tabular}{lrrrr}", "\\toprule",
+             "Accuracy / ECE, P2, 3 seeds & val & test & dev & fresh \\\\", "\\midrule"]
+    for k, label in NI_VARIANTS:
+        cells = [f"{f(a.loc[t, f'{k}_acc'], 1)} / {f(a.loc[t, f'{k}_ece'], 1)}" for t, _ in NI_TIERS]
+        lines.append(f"{label} & " + " & ".join(cells) + " \\\\")
+    lines.append("\\midrule")
+    for part, label in (("agree", "agreeing"), ("disagree", "disagreeing")):
+        share = " & ".join(f"{f(a.loc[t, f'{part}_share'], 0)}\\%" for t, _ in NI_TIERS)
+        lines.append(f"{label}: share of samples & {share} \\\\")
+        acc = " & ".join(f"{f(a.loc[t, f'base_acc_{part}'], 1)} $\\to$ {f(a.loc[t, f'tda_acc_{part}'], 1)}"
+                         for t, _ in NI_TIERS)
+        lines.append(f"\\quad accuracy, $b \\to$ TDA & {acc} \\\\")
+        gap = " & ".join(f"{f(a.loc[t, f'base_gap_{part}'], 1, sign=True)} $\\to$ "
+                         f"{f(a.loc[t, f'tda_gap_{part}'], 1, sign=True)}" for t, _ in NI_TIERS)
+        lines.append(f"\\quad conf.$-$acc.\\ gap, $b \\to$ TDA & {gap} \\\\")
+    lines += ["\\bottomrule", "\\end{tabular}"]
+    return "\n".join(lines)
+
+
+def tab_switch_design(d) -> str:
+    """Design sets by CLIP confidence: CLIP's accuracy minus confidence (labels, diagnostic) and the switch state."""
+    sw = d["switch"]
+    per = sw[sw.tier.isin(("val", "dev")) & (sw.method == "confidence switch") & (sw.dataset != "mean")]
+    per = per.sort_values("clip_conf")
+    lines = ["\\begin{tabular}{llrrc}", "\\toprule",
+             "Design set & split & CLIP conf. & CLIP acc.$-$conf. & switch on \\\\", "\\midrule"]
+    for _, r in per.iterrows():
+        on = "yes" if r.switch_on_pct > 50 else "no"
+        lines.append(f"{NAMES.get(r.dataset, r.dataset)} & {r.tier} & {f(r.clip_conf, 1)} & "
+                     f"{f(r.clip_gap, 1, sign=True)} & {on} \\\\")
+    lines += ["\\bottomrule", "\\end{tabular}"]
+    return "\n".join(lines)
+
+
 def write(root: Path = REPO, out: Path = OUT) -> list[Path]:
     d = load(root)
     out.mkdir(parents=True, exist_ok=True)
@@ -320,7 +445,9 @@ def write(root: Path = REPO, out: Path = OUT) -> list[Path]:
              "tab_main.tex": tab_main(d) + "\n", "tab_comparison.tex": tab_comparison(d) + "\n",
              "tab_generalization.tex": tab_generalization(d) + "\n", "tab_earlier.tex": tab_earlier(d) + "\n",
              "tab_comparison_per_dataset.tex": tab_comparison_per_dataset(d) + "\n",
-             "tab_p1.tex": tab_p1(d) + "\n"}
+             "tab_p1.tex": tab_p1(d) + "\n", "tab_switch.tex": tab_switch(d) + "\n",
+             "tab_switch_design.tex": tab_switch_design(d) + "\n",
+             "tab_ablation_groups.tex": tab_ablation_groups(d) + "\n"}
     paths = []
     for name, text in files.items():
         (out / name).write_text("% generated by analysis/report_assets.py; do not edit\n" + text, encoding="utf-8")

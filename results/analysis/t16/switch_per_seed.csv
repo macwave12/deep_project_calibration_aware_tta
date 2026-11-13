@@ -1,0 +1,265 @@
+tier,dataset,seed,method,accuracy,ece,switch_on_pct,clip_conf,clip_gap
+val,dtd,0,TDA,45.8333,19.5885,0.0,51.888,-8.6256
+val,dtd,0,agreement gate,46.3652,8.3188,0.0,51.888,-8.6256
+val,dtd,0,TDA + ZAEC,45.8333,9.3032,0.0,51.888,-8.6256
+val,dtd,0,confidence switch,46.3652,8.3188,0.0,51.888,-8.6256
+val,dtd,1,TDA,45.7447,19.3511,0.0,51.888,-8.6256
+val,dtd,1,agreement gate,46.1879,8.9007,0.0,51.888,-8.6256
+val,dtd,1,TDA + ZAEC,45.7447,8.9674,0.0,51.888,-8.6256
+val,dtd,1,confidence switch,46.1879,8.9007,0.0,51.888,-8.6256
+val,dtd,2,TDA,45.5674,20.1028,0.0,51.888,-8.6256
+val,dtd,2,agreement gate,45.7447,7.4949,0.0,51.888,-8.6256
+val,dtd,2,TDA + ZAEC,45.5674,9.4635,0.0,51.888,-8.6256
+val,dtd,2,confidence switch,45.7447,7.4949,0.0,51.888,-8.6256
+val,flower102,0,TDA,69.3203,11.3665,0.2449,67.9209,-1.2339
+val,flower102,0,agreement gate,69.4427,3.3204,0.2449,67.9209,-1.2339
+val,flower102,0,TDA + ZAEC,69.3203,3.6279,0.2449,67.9209,-1.2339
+val,flower102,0,confidence switch,69.4427,3.309,0.2449,67.9209,-1.2339
+val,flower102,1,TDA,69.1978,11.1373,0.0,67.9209,-1.2339
+val,flower102,1,agreement gate,69.0753,3.8846,0.0,67.9209,-1.2339
+val,flower102,1,TDA + ZAEC,69.1978,3.3725,0.0,67.9209,-1.2339
+val,flower102,1,confidence switch,69.0753,3.8846,0.0,67.9209,-1.2339
+val,flower102,2,TDA,69.7489,10.924,0.1225,67.9209,-1.2339
+val,flower102,2,agreement gate,69.6265,3.6476,0.1225,67.9209,-1.2339
+val,flower102,2,TDA + ZAEC,69.7489,3.945,0.1225,67.9209,-1.2339
+val,flower102,2,confidence switch,69.6265,3.758,0.1225,67.9209,-1.2339
+val,pets,0,TDA,86.5489,3.1414,100.0,84.1505,1.7191
+val,pets,0,agreement gate,86.6848,4.4531,100.0,84.1505,1.7191
+val,pets,0,TDA + ZAEC,86.5489,4.2999,100.0,84.1505,1.7191
+val,pets,0,confidence switch,86.5489,3.1414,100.0,84.1505,1.7191
+val,pets,1,TDA,86.1413,2.7923,99.3207,84.1505,1.7191
+val,pets,1,agreement gate,86.413,4.5033,99.3207,84.1505,1.7191
+val,pets,1,TDA + ZAEC,86.1413,4.5196,99.3207,84.1505,1.7191
+val,pets,1,confidence switch,86.1413,2.8275,99.3207,84.1505,1.7191
+val,pets,2,TDA,86.9565,3.8937,100.0,84.1505,1.7191
+val,pets,2,agreement gate,87.3641,4.7863,100.0,84.1505,1.7191
+val,pets,2,TDA + ZAEC,86.9565,4.7128,100.0,84.1505,1.7191
+val,pets,2,confidence switch,86.9565,3.8937,100.0,84.1505,1.7191
+val,eurosat,0,TDA,55.5185,3.4468,0.0,47.4225,-4.8854
+val,eurosat,0,agreement gate,55.2778,3.3649,0.0,47.4225,-4.8854
+val,eurosat,0,TDA + ZAEC,55.5185,6.4134,0.0,47.4225,-4.8854
+val,eurosat,0,confidence switch,55.2778,3.3649,0.0,47.4225,-4.8854
+val,eurosat,1,TDA,57.1296,4.9203,0.0,47.4225,-4.8854
+val,eurosat,1,agreement gate,56.9815,5.6442,0.0,47.4225,-4.8854
+val,eurosat,1,TDA + ZAEC,57.1296,7.9575,0.0,47.4225,-4.8854
+val,eurosat,1,confidence switch,56.9815,5.6442,0.0,47.4225,-4.8854
+val,eurosat,2,TDA,55.5556,3.4419,0.0,47.4225,-4.8854
+val,eurosat,2,agreement gate,55.3704,4.033,0.0,47.4225,-4.8854
+val,eurosat,2,TDA + ZAEC,55.5556,6.8163,0.0,47.4225,-4.8854
+val,eurosat,2,confidence switch,55.3704,4.033,0.0,47.4225,-4.8854
+val,aircraft,0,TDA,23.9124,17.81,0.0,27.9911,-4.9187
+val,aircraft,0,agreement gate,23.8524,8.2285,0.0,27.9911,-4.9187
+val,aircraft,0,TDA + ZAEC,23.9124,8.2707,0.0,27.9911,-4.9187
+val,aircraft,0,confidence switch,23.8524,8.2285,0.0,27.9911,-4.9187
+val,aircraft,1,TDA,23.7624,17.9068,0.0,27.9911,-4.9187
+val,aircraft,1,agreement gate,23.7324,8.0016,0.0,27.9911,-4.9187
+val,aircraft,1,TDA + ZAEC,23.7624,8.3605,0.0,27.9911,-4.9187
+val,aircraft,1,confidence switch,23.7324,8.0016,0.0,27.9911,-4.9187
+val,aircraft,2,TDA,23.4023,18.0183,0.0,27.9911,-4.9187
+val,aircraft,2,agreement gate,23.5524,8.107,0.0,27.9911,-4.9187
+val,aircraft,2,TDA + ZAEC,23.4023,8.6758,0.0,27.9911,-4.9187
+val,aircraft,2,confidence switch,23.5524,8.107,0.0,27.9911,-4.9187
+test,dtd,0,TDA,47.0449,17.774,0.0,52.2584,-7.9322
+test,dtd,0,agreement gate,47.0449,7.5985,0.0,52.2584,-7.9322
+test,dtd,0,TDA + ZAEC,47.0449,8.4898,0.0,52.2584,-7.9322
+test,dtd,0,confidence switch,47.0449,7.5985,0.0,52.2584,-7.9322
+test,dtd,1,TDA,47.2813,17.0338,0.0,52.2584,-7.9322
+test,dtd,1,agreement gate,47.104,7.6128,0.0,52.2584,-7.9322
+test,dtd,1,TDA + ZAEC,47.2813,8.0524,0.0,52.2584,-7.9322
+test,dtd,1,confidence switch,47.104,7.6128,0.0,52.2584,-7.9322
+test,dtd,2,TDA,46.9858,17.3329,0.0,52.2584,-7.9322
+test,dtd,2,agreement gate,47.2222,7.5705,0.0,52.2584,-7.9322
+test,dtd,2,TDA + ZAEC,46.9858,7.912,0.0,52.2584,-7.9322
+test,dtd,2,confidence switch,47.2222,7.5705,0.0,52.2584,-7.9322
+test,flower102,0,TDA,70.5238,9.559,0.1218,67.6484,-0.3321
+test,flower102,0,agreement gate,70.3613,2.681,0.1218,67.6484,-0.3321
+test,flower102,0,TDA + ZAEC,70.5238,2.7684,0.1218,67.6484,-0.3321
+test,flower102,0,confidence switch,70.3613,2.6638,0.1218,67.6484,-0.3321
+test,flower102,1,TDA,70.0365,9.7887,0.1624,67.6484,-0.3321
+test,flower102,1,agreement gate,69.7929,3.2784,0.1624,67.6484,-0.3321
+test,flower102,1,TDA + ZAEC,70.0365,2.0164,0.1624,67.6484,-0.3321
+test,flower102,1,confidence switch,69.7929,3.3589,0.1624,67.6484,-0.3321
+test,flower102,2,TDA,70.4019,9.4251,0.0406,67.6484,-0.3321
+test,flower102,2,agreement gate,69.9147,3.6621,0.0406,67.6484,-0.3321
+test,flower102,2,TDA + ZAEC,70.4019,3.143,0.0406,67.6484,-0.3321
+test,flower102,2,confidence switch,69.9147,3.6629,0.0406,67.6484,-0.3321
+test,pets,0,TDA,88.6072,2.6706,100.0,84.6727,3.4984
+test,pets,0,agreement gate,88.7163,4.7173,100.0,84.6727,3.4984
+test,pets,0,TDA + ZAEC,88.6072,5.0718,100.0,84.6727,3.4984
+test,pets,0,confidence switch,88.6072,2.6706,100.0,84.6727,3.4984
+test,pets,1,TDA,88.7435,2.3237,99.9455,84.6727,3.4984
+test,pets,1,agreement gate,88.798,4.3818,99.9455,84.6727,3.4984
+test,pets,1,TDA + ZAEC,88.7435,4.7514,99.9455,84.6727,3.4984
+test,pets,1,confidence switch,88.7435,2.3061,99.9455,84.6727,3.4984
+test,pets,2,TDA,88.58,2.5531,100.0,84.6727,3.4984
+test,pets,2,agreement gate,88.5527,4.621,100.0,84.6727,3.4984
+test,pets,2,TDA + ZAEC,88.58,4.9389,100.0,84.6727,3.4984
+test,pets,2,confidence switch,88.58,2.5531,100.0,84.6727,3.4984
+test,eurosat,0,TDA,53.4198,7.6594,0.0123,47.3382,-5.4246
+test,eurosat,0,agreement gate,53.1235,4.0248,0.0123,47.3382,-5.4246
+test,eurosat,0,TDA + ZAEC,53.4198,5.3823,0.0123,47.3382,-5.4246
+test,eurosat,0,confidence switch,53.1235,4.0232,0.0123,47.3382,-5.4246
+test,eurosat,1,TDA,55.2346,6.4399,0.0,47.3382,-5.4246
+test,eurosat,1,agreement gate,54.9753,3.615,0.0,47.3382,-5.4246
+test,eurosat,1,TDA + ZAEC,55.2346,5.9498,0.0,47.3382,-5.4246
+test,eurosat,1,confidence switch,54.9753,3.615,0.0,47.3382,-5.4246
+test,eurosat,2,TDA,53.1481,6.6292,0.0,47.3382,-5.4246
+test,eurosat,2,agreement gate,52.963,3.6452,0.0,47.3382,-5.4246
+test,eurosat,2,TDA + ZAEC,53.1481,4.6461,0.0,47.3382,-5.4246
+test,eurosat,2,confidence switch,52.963,3.6452,0.0,47.3382,-5.4246
+test,aircraft,0,TDA,24.0024,18.1942,0.0,28.5799,-4.7275
+test,aircraft,0,agreement gate,24.0924,8.6419,0.0,28.5799,-4.7275
+test,aircraft,0,TDA + ZAEC,24.0024,8.7455,0.0,28.5799,-4.7275
+test,aircraft,0,confidence switch,24.0924,8.6419,0.0,28.5799,-4.7275
+test,aircraft,1,TDA,24.4224,17.5241,0.0,28.5799,-4.7275
+test,aircraft,1,agreement gate,24.3324,7.6815,0.0,28.5799,-4.7275
+test,aircraft,1,TDA + ZAEC,24.4224,8.2462,0.0,28.5799,-4.7275
+test,aircraft,1,confidence switch,24.3324,7.6815,0.0,28.5799,-4.7275
+test,aircraft,2,TDA,23.6724,18.6743,0.0,28.5799,-4.7275
+test,aircraft,2,agreement gate,23.8524,8.881,0.0,28.5799,-4.7275
+test,aircraft,2,TDA + ZAEC,23.6724,9.0988,0.0,28.5799,-4.7275
+test,aircraft,2,confidence switch,23.8524,8.881,0.0,28.5799,-4.7275
+dev,imagenetv2,0,TDA,61.32,15.0452,0.07,62.1201,-1.2301
+dev,imagenetv2,0,agreement gate,61.23,3.3012,0.07,62.1201,-1.2301
+dev,imagenetv2,0,TDA + ZAEC,61.32,5.8757,0.07,62.1201,-1.2301
+dev,imagenetv2,0,confidence switch,61.23,3.31,0.07,62.1201,-1.2301
+dev,imagenetv2,1,TDA,61.21,15.1135,0.0,62.1201,-1.2301
+dev,imagenetv2,1,agreement gate,61.16,3.2597,0.0,62.1201,-1.2301
+dev,imagenetv2,1,TDA + ZAEC,61.21,6.118,0.0,62.1201,-1.2301
+dev,imagenetv2,1,confidence switch,61.16,3.2597,0.0,62.1201,-1.2301
+dev,imagenetv2,2,TDA,61.45,15.0448,0.0,62.1201,-1.2301
+dev,imagenetv2,2,agreement gate,61.43,3.2851,0.0,62.1201,-1.2301
+dev,imagenetv2,2,TDA + ZAEC,61.45,5.7828,0.0,62.1201,-1.2301
+dev,imagenetv2,2,confidence switch,61.43,3.2851,0.0,62.1201,-1.2301
+dev,caltech101,0,TDA,93.4686,3.1701,100.0,88.2493,5.0569
+dev,caltech101,0,agreement gate,93.3063,5.2901,100.0,88.2493,5.0569
+dev,caltech101,0,TDA + ZAEC,93.4686,4.1397,100.0,88.2493,5.0569
+dev,caltech101,0,confidence switch,93.4686,3.1701,100.0,88.2493,5.0569
+dev,caltech101,1,TDA,93.428,3.8577,100.0,88.2493,5.0569
+dev,caltech101,1,agreement gate,93.144,5.2508,100.0,88.2493,5.0569
+dev,caltech101,1,TDA + ZAEC,93.428,4.0673,100.0,88.2493,5.0569
+dev,caltech101,1,confidence switch,93.428,3.8577,100.0,88.2493,5.0569
+dev,caltech101,2,TDA,93.5903,3.3796,99.9594,88.2493,5.0569
+dev,caltech101,2,agreement gate,93.5091,5.4008,99.9594,88.2493,5.0569
+dev,caltech101,2,TDA + ZAEC,93.5903,4.2917,99.9594,88.2493,5.0569
+dev,caltech101,2,confidence switch,93.5903,3.3954,99.9594,88.2493,5.0569
+dev,food101,0,TDA,84.12,2.335,99.81,83.0841,0.5459
+dev,food101,0,agreement gate,84.17,2.5794,99.81,83.0841,0.5459
+dev,food101,0,TDA + ZAEC,84.12,2.3373,99.81,83.0841,0.5459
+dev,food101,0,confidence switch,84.12,2.2827,99.81,83.0841,0.5459
+dev,food101,1,TDA,84.0,2.3588,99.69,83.0841,0.5459
+dev,food101,1,agreement gate,84.08,2.4702,99.69,83.0841,0.5459
+dev,food101,1,TDA + ZAEC,84.0,2.3937,99.69,83.0841,0.5459
+dev,food101,1,confidence switch,84.0,2.2883,99.69,83.0841,0.5459
+dev,food101,2,TDA,83.89,2.5183,99.86,83.0841,0.5459
+dev,food101,2,agreement gate,83.98,2.2896,99.86,83.0841,0.5459
+dev,food101,2,TDA + ZAEC,83.89,2.2335,99.86,83.0841,0.5459
+dev,food101,2,confidence switch,83.89,2.4971,99.86,83.0841,0.5459
+dev,ucf101,0,TDA,68.3056,8.5895,0.0264,66.1736,-1.0137
+dev,ucf101,0,agreement gate,68.4642,1.9981,0.0264,66.1736,-1.0137
+dev,ucf101,0,TDA + ZAEC,68.3056,2.3043,0.0264,66.1736,-1.0137
+dev,ucf101,0,confidence switch,68.4642,1.998,0.0264,66.1736,-1.0137
+dev,ucf101,1,TDA,68.2791,8.6208,0.0,66.1736,-1.0137
+dev,ucf101,1,agreement gate,68.4642,2.2691,0.0,66.1736,-1.0137
+dev,ucf101,1,TDA + ZAEC,68.2791,2.4917,0.0,66.1736,-1.0137
+dev,ucf101,1,confidence switch,68.4642,2.2691,0.0,66.1736,-1.0137
+dev,ucf101,2,TDA,68.4642,8.1274,0.0264,66.1736,-1.0137
+dev,ucf101,2,agreement gate,68.4377,2.2327,0.0264,66.1736,-1.0137
+dev,ucf101,2,TDA + ZAEC,68.4642,2.352,0.0264,66.1736,-1.0137
+dev,ucf101,2,confidence switch,68.4377,2.2312,0.0264,66.1736,-1.0137
+fresh,imagenet_a,0,TDA,49.3867,14.7971,0.0133,56.0788,-8.2121
+fresh,imagenet_a,0,agreement gate,49.4267,8.0272,0.0133,56.0788,-8.2121
+fresh,imagenet_a,0,TDA + ZAEC,49.3867,8.6643,0.0133,56.0788,-8.2121
+fresh,imagenet_a,0,confidence switch,49.4267,8.0281,0.0133,56.0788,-8.2121
+fresh,imagenet_a,1,TDA,49.0533,15.2313,0.0,56.0788,-8.2121
+fresh,imagenet_a,1,agreement gate,49.1467,8.3946,0.0,56.0788,-8.2121
+fresh,imagenet_a,1,TDA + ZAEC,49.0533,8.7951,0.0,56.0788,-8.2121
+fresh,imagenet_a,1,confidence switch,49.1467,8.3946,0.0,56.0788,-8.2121
+fresh,imagenet_a,2,TDA,49.24,15.2504,0.0,56.0788,-8.2121
+fresh,imagenet_a,2,agreement gate,49.2667,8.6569,0.0,56.0788,-8.2121
+fresh,imagenet_a,2,TDA + ZAEC,49.24,8.8616,0.0,56.0788,-8.2121
+fresh,imagenet_a,2,confidence switch,49.2667,8.6569,0.0,56.0788,-8.2121
+fresh,imagenet_r,0,TDA,75.3233,1.6049,0.0,70.4797,3.5036
+fresh,imagenet_r,0,agreement gate,75.3867,3.6929,0.0,70.4797,3.5036
+fresh,imagenet_r,0,TDA + ZAEC,75.3233,4.4618,0.0,70.4797,3.5036
+fresh,imagenet_r,0,confidence switch,75.3867,3.6929,0.0,70.4797,3.5036
+fresh,imagenet_r,1,TDA,75.3233,1.5735,0.0,70.4797,3.5036
+fresh,imagenet_r,1,agreement gate,75.3567,3.6564,0.0,70.4797,3.5036
+fresh,imagenet_r,1,TDA + ZAEC,75.3233,4.4272,0.0,70.4797,3.5036
+fresh,imagenet_r,1,confidence switch,75.3567,3.6564,0.0,70.4797,3.5036
+fresh,imagenet_r,2,TDA,75.1933,1.3989,0.0567,70.4797,3.5036
+fresh,imagenet_r,2,agreement gate,75.23,3.526,0.0567,70.4797,3.5036
+fresh,imagenet_r,2,TDA + ZAEC,75.1933,4.3217,0.0567,70.4797,3.5036
+fresh,imagenet_r,2,confidence switch,75.23,3.5163,0.0567,70.4797,3.5036
+fresh,stl10,0,TDA,98.3125,0.9587,100.0,96.2484,2.1266
+fresh,stl10,0,agreement gate,98.275,2.0364,100.0,96.2484,2.1266
+fresh,stl10,0,TDA + ZAEC,98.3125,2.0031,100.0,96.2484,2.1266
+fresh,stl10,0,confidence switch,98.3125,0.9587,100.0,96.2484,2.1266
+fresh,stl10,1,TDA,98.45,1.1035,100.0,96.2484,2.1266
+fresh,stl10,1,agreement gate,98.4125,2.1554,100.0,96.2484,2.1266
+fresh,stl10,1,TDA + ZAEC,98.45,2.1499,100.0,96.2484,2.1266
+fresh,stl10,1,confidence switch,98.45,1.1035,100.0,96.2484,2.1266
+fresh,stl10,2,TDA,98.375,1.0305,100.0,96.2484,2.1266
+fresh,stl10,2,agreement gate,98.3,2.1067,100.0,96.2484,2.1266
+fresh,stl10,2,TDA + ZAEC,98.375,2.0912,100.0,96.2484,2.1266
+fresh,stl10,2,confidence switch,98.375,1.0305,100.0,96.2484,2.1266
+fresh,cifar10,0,TDA,90.96,2.4453,100.0,84.8063,5.2737
+fresh,cifar10,0,agreement gate,91.01,5.995,100.0,84.8063,5.2737
+fresh,cifar10,0,TDA + ZAEC,90.96,6.045,100.0,84.8063,5.2737
+fresh,cifar10,0,confidence switch,90.96,2.4453,100.0,84.8063,5.2737
+fresh,cifar10,1,TDA,90.96,2.5234,100.0,84.8063,5.2737
+fresh,cifar10,1,agreement gate,90.94,5.8572,100.0,84.8063,5.2737
+fresh,cifar10,1,TDA + ZAEC,90.96,5.9887,100.0,84.8063,5.2737
+fresh,cifar10,1,confidence switch,90.96,2.5234,100.0,84.8063,5.2737
+fresh,cifar10,2,TDA,90.8,2.4395,100.0,84.8063,5.2737
+fresh,cifar10,2,agreement gate,90.81,5.8018,100.0,84.8063,5.2737
+fresh,cifar10,2,TDA + ZAEC,90.8,5.9307,100.0,84.8063,5.2737
+fresh,cifar10,2,confidence switch,90.8,2.4395,100.0,84.8063,5.2737
+fresh,cifar100,0,TDA,69.42,4.9516,0.01,56.2561,12.1639
+fresh,cifar100,0,agreement gate,69.34,10.2048,0.01,56.2561,12.1639
+fresh,cifar100,0,TDA + ZAEC,69.42,12.3159,0.01,56.2561,12.1639
+fresh,cifar100,0,confidence switch,69.34,10.2032,0.01,56.2561,12.1639
+fresh,cifar100,1,TDA,69.14,4.6845,0.0,56.2561,12.1639
+fresh,cifar100,1,agreement gate,69.13,9.9429,0.0,56.2561,12.1639
+fresh,cifar100,1,TDA + ZAEC,69.14,12.0882,0.0,56.2561,12.1639
+fresh,cifar100,1,confidence switch,69.13,9.9429,0.0,56.2561,12.1639
+fresh,cifar100,2,TDA,69.08,4.4483,0.0,56.2561,12.1639
+fresh,cifar100,2,agreement gate,69.11,9.9026,0.0,56.2561,12.1639
+fresh,cifar100,2,TDA + ZAEC,69.08,11.9742,0.0,56.2561,12.1639
+fresh,cifar100,2,confidence switch,69.11,9.9026,0.0,56.2561,12.1639
+fresh,voc2007,0,TDA,76.5558,7.6667,0.9415,76.2277,2.1243
+fresh,voc2007,0,agreement gate,76.4223,6.8696,0.9415,76.2277,2.1243
+fresh,voc2007,0,TDA + ZAEC,76.5558,6.7695,0.9415,76.2277,2.1243
+fresh,voc2007,0,confidence switch,76.4223,6.8736,0.9415,76.2277,2.1243
+fresh,voc2007,1,TDA,77.0232,7.268,22.3491,76.2277,2.1243
+fresh,voc2007,1,agreement gate,76.9565,6.5446,22.3491,76.2277,2.1243
+fresh,voc2007,1,TDA + ZAEC,77.0232,6.504,22.3491,76.2277,2.1243
+fresh,voc2007,1,confidence switch,76.9498,6.7284,22.3491,76.2277,2.1243
+fresh,voc2007,2,TDA,77.0566,7.4593,0.1002,76.2277,2.1243
+fresh,voc2007,2,agreement gate,76.9631,6.6566,0.1002,76.2277,2.1243
+fresh,voc2007,2,TDA + ZAEC,77.0566,6.4549,0.1002,76.2277,2.1243
+fresh,voc2007,2,confidence switch,76.9631,6.6728,0.1002,76.2277,2.1243
+fresh,gtsrb,0,TDA,38.7965,6.7675,0.0,35.4111,-0.233
+fresh,gtsrb,0,agreement gate,38.9153,8.011,0.0,35.4111,-0.233
+fresh,gtsrb,0,TDA + ZAEC,38.7965,9.8113,0.0,35.4111,-0.233
+fresh,gtsrb,0,confidence switch,38.9153,8.011,0.0,35.4111,-0.233
+fresh,gtsrb,1,TDA,37.9256,8.4029,0.0,35.4111,-0.233
+fresh,gtsrb,1,agreement gate,37.9177,8.8926,0.0,35.4111,-0.233
+fresh,gtsrb,1,TDA + ZAEC,37.9256,10.0982,0.0,35.4111,-0.233
+fresh,gtsrb,1,confidence switch,37.9177,8.8926,0.0,35.4111,-0.233
+fresh,gtsrb,2,TDA,38.1394,7.7989,0.0,35.4111,-0.233
+fresh,gtsrb,2,agreement gate,38.2898,8.5474,0.0,35.4111,-0.233
+fresh,gtsrb,2,TDA + ZAEC,38.1394,10.0005,0.0,35.4111,-0.233
+fresh,gtsrb,2,confidence switch,38.2898,8.5474,0.0,35.4111,-0.233
+fresh,cars,0,TDA,65.0044,4.3608,0.1119,60.8556,2.8429
+fresh,cars,0,agreement gate,64.7432,2.8317,0.1119,60.8556,2.8429
+fresh,cars,0,TDA + ZAEC,65.0044,2.5524,0.1119,60.8556,2.8429
+fresh,cars,0,confidence switch,64.7432,2.8118,0.1119,60.8556,2.8429
+fresh,cars,1,TDA,64.5691,4.7788,0.0249,60.8556,2.8429
+fresh,cars,1,agreement gate,64.7308,3.126,0.0249,60.8556,2.8429
+fresh,cars,1,TDA + ZAEC,64.5691,2.1114,0.0249,60.8556,2.8429
+fresh,cars,1,confidence switch,64.7308,3.1221,0.0249,60.8556,2.8429
+fresh,cars,2,TDA,65.2406,4.2495,0.0,60.8556,2.8429
+fresh,cars,2,agreement gate,64.9297,3.4302,0.0,60.8556,2.8429
+fresh,cars,2,TDA + ZAEC,65.2406,2.614,0.0,60.8556,2.8429
+fresh,cars,2,confidence switch,64.9297,3.4302,0.0,60.8556,2.8429

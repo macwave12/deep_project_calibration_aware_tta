@@ -207,3 +207,63 @@ Established facts, each with its evidence. Add new facts with a source; mark a f
   the first 500 samples are weaker: mean confidence +0.57, share > 0.6 +0.55, no-flip share +0.44, and weak on the fresh
   tier alone (+0.44 / +0.16). Exceptions to the tendency: GTSRB (CLIP +0.2, gate loses), Food101 (−0.5, loses slightly),
   VOC2007 / Cars / ImageNet (mildly underconfident, gate wins).
+- K53. ZAEC vs the gate beyond the test sets (`analysis/comparison.py --generalization` ->
+  `results/analysis/t16/zaec_generalization*.csv`; trace re-evaluation, P2, 3 seeds; 4 dev + 8 fresh sets, ImageNet and
+  ImageNet-Sketch skipped: no full traces). Mean ECE over the 12 sets: TDA 6.35, TDA + ZAEC 5.28, gate 4.82, gate + ZAEC
+  5.51. Gate vs TDA + ZAEC −0.47 (3/3 seeds; dev −0.40, fresh −0.51), better on 7 of 12 (ImageNetV2, UCF101, ImageNet-A/-R,
+  CIFAR-10/100, GTSRB), worse on Caltech101, Food101, Cars, VOC2007, STL-10. With the test sets: gate below ZAEC on 11 of 17.
+  Gate + ZAEC vs TDA + ZAEC +0.30 (worse, 3/3 seeds): helps only on ImageNetV2, ImageNet-A, VOC2007; stacking is not robust.
+  On underconfident-CLIP sets ZAEC loses to TDA even more than the gate does (CIFAR-100 12.13 vs gate 10.02).
+- K54. Confidence switch (`analysis/switch.py` -> `results/analysis/t16/switch*.csv`; exact trace re-evaluation, P2, 3 seeds;
+  ImageNet / -Sketch have no full traces, their running confidence stays < 0.78 after the first few samples so the switch =
+  gate). Keep TDA while the running mean CLIP max-softmax > 0.78 (val plateau centre; val minimum 0.83 sits at a cliff
+  where Pets drops out at 0.85). ECE vs gate: val 5.78 → 5.52, test 5.51 → 5.10, dev 3.30 → 2.82, fresh 6.04 → 5.47; better
+  in all 12 tier × seed means; accuracy within 0.06. Effectively dataset-level (on ≈ 0% or ≈ 99.5% of a stream): on for
+  Pets, Caltech101, Food101, CIFAR-10, STL-10 (final conf ≥ 0.83; all others ≤ 0.76), which carry the whole gain. Misses
+  CIFAR-100, ImageNet-R (underconfident, not confident) and GTSRB; per-dataset oracle TDA-or-gate reaches 4.44 on fresh.
+  Independent review: sound with caveats, no leakage (trace order = replay permutation, `utils/replay_runner.py:64`); beats
+  TDA + ZAEC and TDA + global T on every tier. Found after the fresh results were known: not clean evidence (K55, DECISIONS).
+  **Revised 2026-11-12 (Idan: design data must hold both kinds of stream):** threshold now chosen on val + dev (3 confident
+  sets, all CLIP-underconfident; 6 unconfident, all overconfident), test and fresh held out: plateau [0.70, 0.84], centre
+  0.77; test 5.10, fresh 5.48 (TDA 5.55, gate 6.04). No design set's confidence lies in the plateau, so the threshold is
+  underdetermined, not fitted; fresh alone would prefer 0.61–0.62 (ECE 5.17, ImageNet-R and VOC switch on), so 0.77 is not
+  tuned to it. ImageNet's per-sample CLIP reliability shows the opposite pattern (calibrated overall, mildly overconfident
+  above 0.7), so the underconfidence is a dataset-level property, not a per-sample one.
+- K55. Negative results of the 2026-11-12 search for uses of agreement (scratch, `scratchpad/research/*`, val-selected, checked
+  on test/dev/fresh): (a) α graded by disagreement (JS, cache support, α needed to flip, ≈ 60 rules) reduces to a rescaled
+  constant α, no tier-wide gain; accuracy peaks at α ≈ 2–3. (b) Softening the disagreeing branch by the CLIP–cache conflict
+  (mixtures, caps, T = 1 + γ·JS, mixture-entropy ZAEC) helps on test, hurts dev/fresh. (c) Cache–CLIP agreement rate as
+  an accuracy estimate: ρ 0.75 vs 0.97 for CLIP's mean confidence; wrong sign as a gap estimate (the cache votes with CLIP's
+  own labels). (d) Flip rules on disagreeing samples: picking the right of CLIP / cache per sample would add 4.2 (test) /
+  2.6 (dev) / 3.4 (fresh) accuracy points, but no rule on α-needed-to-flip × CLIP confidence gains on held-out tiers; the
+  per-dataset best α in hindsight gains ≤ 0.1. (e) Gate on agreeing + ZAEC on disagreeing beats ZAEC on val/test/dev (−0.86
+  ECE on test) but loses on fresh (+0.27); it wins large only on strongly overconfident sets (5 of 17 held-out).
+  (f) α ∝ per-sample correlation ρ(c, z) over classes (α₀·ρ, α₀·(1−ρ), α₀·ρ², on TDA and inside the gate): no accuracy gain
+  on any tier; gated α₀·ρ² lowers ECE on all tiers only by flipping fewer samples (−0.4 to −0.9 accuracy on val/test),
+  α₀ at the grid edge. ρ is ≈ 0.1 higher on agreeing than disagreeing samples on val/test/fresh, equal on dev.
+  Bump α₀·4ρ(1−ρ) (peak at ρ = 0.5, 0 at both ends): the val-best (gated, α₀ = 6) gains +0.2 acc on val but loses 0.4 on
+  test and 0.6 on fresh vs the gate; keeping full α below 0.5 and decaying above equals constant α (±0.1). The per-bin
+  accuracy profile peaks at ρ ≈ 0.5 only because most samples sit there; per sample, low-ρ flips are best on val/test
+  (+11 to +21 % net) and net negative on fresh.
+  ρ does not predict whether a flip (α = 2, prediction ≠ CLIP's) is right: point-biserial r(correct, ρ) = −0.004 / 0.002 /
+  −0.03 / +0.09 (val/test/dev/fresh); AUC 0.46–0.53; mean ρ of right and wrong flips within 0.04; per-dataset AUC
+  0.33–0.69 with no consistent sign. Only fresh ρ < 0 flips are mostly wrong (32 % right), ~3 % of fresh flips.
+  Top-class agreement measures do no better (93–97 % of right/wrong flips already have the gate open). AUC(right vs wrong
+  flip), val/test/dev/fresh: cache gap between CLIP's top-1 and its own top 0.30/0.30/0.44/0.55; 1 − JS 0.64/0.63/0.59/0.48;
+  cache confidence 0.69/0.70/0.54/0.45; cache support for CLIP's top-1, CLIP prob./rank of the cache's class, α needed
+  to flip, CLIP confidence all 0.39–0.59. The strong val/test values are between-dataset effects (within-dataset AUCs stay
+  0.33–0.53 for the gap) and they reverse on fresh. The exception is α needed to flip: the right-flip share falls with
+  it on every tier (AUC 0.39/0.47/0.46/0.43; about 75–88 % → 51–58 % across octiles), but it stays ≥ 50 % in every bin,
+  so blocking hard flips only removes net-positive or neutral flips and cannot raise accuracy (consistent with (d)).
+- K56. No information beyond binary agreement (`analysis/no_info.py` -> `results/analysis/t16/no_info_*.csv`,
+  `analysis/figures/no_info_{auc,rates}.png`; P2, 3 seeds, val/test/dev/fresh, ImageNet and -Sketch lack full traces).
+  (a) Ablation by agreement group: TDA's positive cache on agreeing samples only changes accuracy by <= 0.09 points on
+  every tier while ECE roughly doubles on val/test/dev (val 4.6 -> 10.8); within the agreeing group accuracy b -> TDA
+  is 67.7 -> 67.6 (val), 84.2 -> 84.2 (dev), 81.8 -> 81.8 (fresh) and the gap goes -2.3 -> +12.9 (val). All of TDA's
+  accuracy gain is in the disagreeing group (val 35.1 -> 39.5). On fresh the agreeing echo lowers ECE (CLIP
+  underconfident). (b) Ten label-free per-sample scores (CLIP: confidence, margin, prob. of the cache's class; cache:
+  confidence, mass, weight on CLIP's top-1; relation: rho, 1 - JS, weight gap, alpha needed) separate right from wrong
+  flips with AUC 0.43-0.58 on dev and fresh; all ten combined (logistic regression on val flips) reach 0.76 val /
+  0.75 test (same datasets) but 0.47 dev / 0.48 fresh: they learn datasets, not flips. As a flip filter (threshold 0.45
+  chosen on val) <= 0.05 accuracy points on any tier, vs 1.1-2.0 for the block-every-wrong-flip oracle and 3.2-6.2 for
+  picking the right one of CLIP's and the cache's top class. Supersedes the scratch analysis in K55(f).

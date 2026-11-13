@@ -126,7 +126,8 @@ def test_tda_section_shows_and_cites_the_tda_paper_figures(deck):
 def test_every_evidence_slide_names_its_split(deck):
     _, texts, _, _, _ = deck
     assert sum("DIAGNOSIS · VAL" in t for t in texts) >= 2
-    assert sum("RESULTS · TEST" in t for t in texts) >= 4
+    assert sum("RESULTS · TEST" in t for t in texts) >= 3
+    assert sum("ALL TIERS" in t for t in texts) >= 3
     for t in texts:
         if "DIAGNOSIS · VAL" in t:
             assert "(test" not in t

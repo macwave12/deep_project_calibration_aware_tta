@@ -1,4 +1,4 @@
-# The cache that echoes CLIP: agreement-gated TDA — deck v3
+# The cache that echoes CLIP: agreement-gated TDA — deck v5
 
 **Generated file — do not edit.** Produced by `python presentation/build_pptx.py`
 alongside `calibration_aware_tta.pptx`; edit the slide functions in that script instead.
@@ -79,9 +79,9 @@ Now the formal argument. Let b be CLIP plus the negative cache. If the positive 
 
 ---
 
-## 13. The echo, measured: the gain is where the cache disagrees
+## 13. Ablation: the agreeing positive cache adds only confidence
 
-The lemma says what can happen; the data say how much. On the val splits the cache agrees with CLIP on 58 percent of the samples. There, the positive cache leaves accuracy essentially unchanged, but the confidence minus accuracy gap jumps from −2.3 to +12.9 points. Where it disagrees, it carries the accuracy gain with a much smaller change in the gap. That points directly to the method: keep the disagreeing branch, drop the agreeing one.
+The ablation that tests the diagnosis on every tier. We add TDA's positive cache to CLIP plus the negative cache only on the samples where it agrees with CLIP, only where it disagrees, which is the gate, or everywhere, which is TDA. On the agreeing samples it changes accuracy by at most 0.09 points, on every tier, but the expected calibration error roughly doubles on val, test and the development sets, from 4.6 to 10.8 on val. So on the agreeing group the positive cache carries no information, only confidence, exactly as the lemma says. The whole accuracy gain comes from the disagreeing samples, and the gate keeps it. On the fresh tier the agreeing echo even helps calibration, because CLIP is underconfident there; that is the limitation we come back to.
 
 ---
 
@@ -97,60 +97,84 @@ The main result on the five test sets, 10 stream orders. The gate keeps TDA's ac
 
 ---
 
-## 16. Reliability: the gate stays near the diagonal
+## 16. Against calibration fixes and other memory methods
 
-Reliability diagrams on the five test sets, all seeds pooled, ten bins. Points below the diagonal are overconfident. TDA, in red, sits below the diagonal in the confident bins on most datasets. The gate, in green, follows CLIP's calibration where the cache agreed with CLIP and keeps TDA's corrected decisions where it disagreed. Pets is the one panel where TDA's curve is closer to the diagonal.
-
----
-
-## 17. Against calibration fixes and other memory methods
-
-Here we compare with the closest alternatives, three seeds, all paired to TDA. Removing only the self-vote, by reading before writing, reaches 8.77. A single temperature fitted on val with labels reaches 6.98. ZAEC, a recent label-free post-hoc method that restores the zero-shot entropy, reaches 5.95. The gate reaches 5.51 without any calibration step, and gate plus ZAEC 5.27: the two act at different points and compose. DMN-weak and ECALP have higher ECE than TDA; ECALP is the most accurate method here, at 58.34 percent, but has an ECE of 32.32.
+Here we compare with the closest alternatives, three seeds, all paired to TDA. Removing only the self-vote, by reading before writing, reaches 8.77. A single temperature fitted on val with labels reaches 6.98. ZAEC, a recent label-free post-hoc method that restores the zero-shot entropy, reaches 5.95. The gate reaches 5.51 without any calibration step, because it removes the cause instead of rescaling afterwards. Gate plus ZAEC reaches 5.27 here, but that stacking does not hold up on average on the development and fresh sets, so we do not claim it. DMN-weak and ECALP have higher ECE than TDA; ECALP is the most accurate method here, at 58.34 percent, but has an ECE of 32.32.
 
 ---
 
-## 18. Generalization: datasets never used in the design
+## 17. Generalization: datasets never used in the design
 
 The method was designed on the val splits of five datasets. Here are 14 datasets that played no role in the design: four development sets and the fresh sets, including the full ImageNet validation set. The gate lowers ECE on 7 of them; the mean ECE change is −1.72 points and the mean accuracy change −0.01 points. Accuracy is kept everywhere; ECE is mixed, and the next slide shows when it helps.
 
 ---
 
-## 19. Where it helps: mostly where CLIP is not underconfident
+## 18. Where it helps: mostly where CLIP is not underconfident
 
 When does the gate help? The lemmas say that on agreeing samples the echo only adds confidence. So removing it should help when CLIP is calibrated or overconfident, and hurt when CLIP is underconfident. That is the tendency we see: over 19 datasets, the gate's ECE change follows CLIP's own confidence minus accuracy gap with a rank correlation of −0.89. That variable needs labels, so it explains the result but cannot be used to switch the method. The best label-free proxy we tried, CLIP's mean confidence, reaches only +0.57, because a dataset can be unconfident and still underconfident.
 
 ---
 
+## 19. Beyond one bit: CLIP's and the cache's scores say almost nothing
+
+Could a finer use of the scores beat the one-bit gate? TDA's accuracy gain comes from flips, samples where its decision differs from CLIP's. We took ten label-free quantities: CLIP's confidence, margin and the probability it gives the cache's class; the cache's confidence, mass and weight on CLIP's class; and their relation, the correlation over classes, the JS divergence, the weight gap and the alpha needed to flip. On the development and fresh sets every one of them separates right from wrong flips with an AUC between 0.43 and 0.58, close to chance. All ten combined in a logistic regression fitted on val reach 0.75 on test, which has the same datasets as val, but 0.47 and 0.48 on new datasets: they learn which datasets flip well, not which flips are right. Used as a filter, that changes accuracy by at most 0.05 points, while an oracle picking the right one of CLIP's and the cache's class would add 3.2 to 6.2. The headroom exists, but this information is not in the scores.
+
+---
+
 ## 20. Limitations and conclusion
 
-To close. The gate is worse on datasets where CLIP is underconfident, because there the echo happened to correct CLIP, and we have not found a label-free way to detect those datasets. Its remaining overconfidence is in the disagreeing branch, where post-hoc calibration like ZAEC still helps. We tested one backbone and one cache method, and the design was done on val after earlier exploration on test, which is why the development and fresh sets matter. The main message: TDA's cache echoes CLIP, and gating it on disagreement removes the echo.
+To close. The gate is worse on datasets where CLIP is underconfident, because there the echo happened to correct CLIP. A label-free confidence switch recovers the confident ones, but we found it after the fresh results, so it stays an exploratory extension in the backup. The remaining overconfidence is in the disagreeing branch. We tested one backbone and one cache method, and the design was done on val after earlier exploration on test, which is why the development and fresh sets matter. We also tried finer uses of agreement, an alpha graded by disagreement or by the correlation between cache and CLIP, and flip rules; none held up on held-out data. The main message: TDA is overconfident largely because its cache echoes CLIP, and gating it on disagreement removes the echo at unchanged accuracy.
 
 ---
 
-## 21. Backup: cache ablation under the gate
+## 21. Backup: the echo measured on val, by agreement group
 
-The cache ablation again, now under the gate and on test. The gated positive cache alone gives 56.04 percent at ECE 5.83. Adding the negative cache, which is the full method, gives 56.72 at 5.51. Ungated TDA is at 56.81 and 10.90. So the design choice made on val, keeping the negative cache, holds on test.
+The lemma says what can happen; the data say how much. On the val splits the cache agrees with CLIP on 58 percent of the samples. There, the positive cache leaves accuracy essentially unchanged, but the confidence minus accuracy gap jumps from −2.3 to +12.9 points. Where it disagrees, it carries the accuracy gain with a much smaller change in the gap. That points directly to the method: keep the disagreeing branch, drop the agreeing one.
 
 ---
 
-## 22. Backup: protocol P1 (published per-dataset α, β)
+## 22. Backup: reliability, the gate stays near the diagonal
+
+Reliability diagrams on the five test sets, all seeds pooled, ten bins. Points below the diagonal are overconfident. TDA, in red, sits below the diagonal in the confident bins on most datasets. The gate, in green, follows CLIP's calibration where the cache agreed with CLIP and keeps TDA's corrected decisions where it disagreed. Pets is the one panel where TDA's curve is closer to the diagonal.
+
+---
+
+## 23. Backup: protocol P1 (published per-dataset α, β)
 
 For completeness, the published protocol P1 with TDA's per-dataset alpha and beta. The conclusions do not change: the gate keeps TDA's accuracy and lowers its ECE under both protocols. Our GPU reproduction of the benchmark is within 0.16 points per dataset, and every number in this talk comes from an exact CPU replay of cached features.
 
 ---
 
-## 23. Backup: proofs
+## 24. Backup: proofs
 
 The two proofs in full. For the no-flip region, the negative cache can move a margin by at most its range, and the positive cache by at most alpha times the shot capacity, so a larger CLIP gap cannot be overturned. For the agreement lemma, each output margin is at least the corresponding margin of CLIP plus negative cache, and the top softmax probability is an increasing function of the margins.
 
 ---
 
-## 24. Backup: earlier attempts
+## 25. Backup: earlier attempts
 
 These are the changes we tried before the diagnosis, all on the same protocol and paired to TDA. Margin admission starves the cache on hard datasets. Probability fusion caps every prediction's confidence. Gating fusion to two-way ties fixed calibration but lost accuracy. A leave-one-out temperature helped calibration partly. Some of this exploration was done on test, which we disclose.
 
 ---
 
-## 25. Backup: comparison per dataset (ECE, test, 3 seeds)
+## 26. Backup: comparison per dataset (ECE, test, 3 seeds)
 
 Per dataset ECE for every method in the comparison table, three seeds each. The gate is best on EuroSAT; the val-fitted temperature wins on DTD and Aircraft, ZAEC on Flowers, and plain TDA on Pets, where removing the echo costs calibration. Combining the gate with ZAEC is the strongest on the mean.
+
+---
+
+## 27. Backup (exploratory): keep the echo on confident streams
+
+An exploratory extension, not the method. The gate loses where CLIP is underconfident, and on the design sets CLIP is underconfident exactly on the confident ones. Keeping TDA's echo while the running mean CLIP confidence stays above 0.77 lowers mean ECE on the held-out test and fresh tiers with the same accuracy. The threshold was chosen on val plus the development sets, which contain both kinds of stream; any value in the flat region gives the same design result, and the fresh sets alone would have preferred a lower one, 0.61 to 0.62, so it is not tuned to them. Still, the gain comes from a handful of datasets, CIFAR-100 and ImageNet-R are missed, and we found the idea after seeing the fresh results, so it needs new datasets before it can be claimed.
+
+---
+
+## 28. Backup: share of right flips along each label-free score
+
+The same question as a rate. For each of the ten label-free scores, the flips are split into eight equal groups, and we plot the share of them that are right, one line per tier. Where a line slopes on val and test, it is flat or reverses on the fresh tier. The one score whose direction holds everywhere is the alpha needed to flip: harder flips are right less often. But even the worst group is right 49.8 percent of the time, so blocking flips by that score cannot raise accuracy.
+
+---
+
+## 29. Backup: finer uses of agreement that did not hold up
+
+We also tried to get more out of the agreement signal than a binary gate. Making alpha depend on how strongly the cache disagrees with CLIP, or on the correlation between the cache and CLIP logits, including a bump that is strongest at intermediate correlation, gave gains on val that reversed on the test and fresh sets. Softening the disagreeing branch helped on test only. The agreement rate is a worse accuracy estimate than CLIP's own confidence, because the cache is filled with CLIP's own pseudo-labels. And while an oracle that picks the right one of CLIP and the cache per sample would add several points of accuracy, no label-free flip rule captured any of it. So the binary gate is what agreement gives us.

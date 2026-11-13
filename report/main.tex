@@ -27,7 +27,10 @@ sets (CLIP ViT-B/16, \mainSeeds{} stream orders) it keeps TDA's accuracy (\mainG
 ECE (\mainGateEce{} vs \mainTdaEce{}). On \genAllN{} further datasets never used in its design it keeps accuracy
 everywhere and lowers ECE on \genAllEceWins{} of them; on the fresh tier the mean ECE moves only from
 \genFreshMeanTdaEce{} to \genFreshMeanGateEce{}, because where CLIP is underconfident TDA's echo happens to correct it. Across \rhoN{} datasets the gate's
-ECE change tends to follow CLIP's own calibration gap (Spearman $\rho = \rhoGapAll$).
+ECE change tends to follow CLIP's own calibration gap (Spearman $\rho = \rhoGapAll$). An ablation by agreement group
+confirms that on agreeing samples the positive cache adds no accuracy on any tier, only confidence; and ten label-free
+scores of CLIP, of the cache and of their relation, alone or combined, carry almost no information about which of the
+remaining flips are right, so finer agreement-based rules do not beat the binary gate.
 \end{abstract}
 
 \section{Introduction}
@@ -42,7 +45,9 @@ current sample is written, echoes CLIP. We show the echo empirically (the self-v
 (Lemmas~\ref{lem:noflip}--\ref{lem:agree}): agreement can only inflate confidence. (2) The \emph{agreement gate}, a
 cause-level fix: a parameter-free rule that uses the cache only where it can change the decision. (3) Evidence on
 \totalDatasets{} datasets in three tiers (design, development, fresh), with matched and post-hoc baselines, including where
-the gate does \emph{not} help (mostly where CLIP is underconfident).
+the gate does \emph{not} help (mostly where CLIP is underconfident). (4) Two checks of the limit: an ablation by
+agreement group (the agreeing positive cache carries no accuracy) and a flip-information analysis (CLIP's and the
+cache's scores carry almost no information about which flips are right).
 \textbf{Relation to ZAEC.} ZAEC~\cite{jiang2026zaec} observed empirically that adapted VLMs sharpen predictions they do not
 change, and corrects this post hoc with a per-sample entropy-matching temperature. We explain \emph{why} a pseudo-label
 cache does this and remove the cause inside the cache; the two act at different points and combine
@@ -161,10 +166,26 @@ than either without a calibration step (\cmpGateEce{}), though the val temperatu
 methods have higher ECE than TDA: DMN-weak \cmpDmnAcc/\cmpDmnEce{}, and ECALP, the most accurate method here, at
 \cmpEcalpAcc/\cmpEcalpEce.
 
-\textbf{Cache ablation} (test; the analogue of TDA's Fig.~3 with ECE). The negative cache alone moves CLIP
-(\ablClipAcc/\ablClipEce) to \ablBaseAcc/\ablBaseEce; the gated positive cache alone to \ablGposAcc/\ablGposEce; both
-(= the gate) to \ablGateAcc/\ablGateEce, against TDA's \ablTdaAcc/\ablTdaEce. The negative cache improves both metrics; the
-gated positive cache adds accuracy at a small ECE cost, far below the ungated one's. The method keeps both.
+\textbf{Ablation: the agreeing positive cache carries no information} (Table~\ref{tab:abl}; every tier). We add TDA's
+positive cache to $b$ (CLIP + negative cache) on the agreeing samples only, on the disagreeing samples only (= the gate),
+or on all (= TDA). On the agreeing samples it changes accuracy by at most \niAposMaxDAcc{} points on any tier, while ECE
+roughly doubles on val, test and dev: there it adds confidence and nothing else, as Lemma~\ref{lem:agree} predicts. The
+whole accuracy gain of TDA's positive cache comes from the disagreeing samples, and the gate keeps it. Within the groups:
+on agreeing samples accuracy is unchanged (val \niAgreeBaseAccVal{} $\to$ \niAgreeTdaAccVal, fresh \niAgreeBaseAccFresh{}
+$\to$ \niAgreeTdaAccFresh) while the confidence$-$accuracy gap jumps (val \niAgreeBaseGapVal{} $\to$ \niAgreeTdaGapVal);
+on disagreeing samples accuracy rises (val \niDisBaseAccVal{} $\to$ \niDisTdaAccVal) at a small change of gap. On the
+fresh tier the agreeing echo even lowers ECE, because CLIP is underconfident there (\S\ref{sec:results}, ``Where it
+helps''). The negative cache improves both metrics on the design tiers, and keeping it adds accuracy over the gated
+positive cache alone on every tier.
+
+\begin{table}[t]
+\centering\small
+\caption{Ablation by agreement group (P2, 3 seeds, mean over datasets; exact re-evaluation of TDA's traces; ImageNet and
+ImageNet-Sketch have no full traces). Top: accuracy / ECE of each variant. Bottom: the agreeing (gate closed) and
+disagreeing (gate open) samples, without ($b$) and with TDA's positive cache.}
+\label{tab:abl}
+\input{generated/tab_ablation_groups}
+\end{table}
 
 \begin{table}[t]
 \centering\small
@@ -190,6 +211,39 @@ proxies on the first \signalHead{} stream samples are weaker ($\rho = \rhoConfAl
 \rhoOverAll{} for the share above \confCut, \rhoShareAll{} for the no-flip share): confidence is not calibration
 (CIFAR-100 is unconfident \emph{and} underconfident). The gate is reported always on, with this as its stated condition.
 
+\subsection*{Is there information beyond binary agreement?}\label{sec:noinfo}
+The gate uses one bit: does the cache's top class agree with CLIP's. Could a finer, still label-free, use of the scores
+do better? Its accuracy gain comes from \emph{flips}, samples where TDA's decision differs from CLIP's; a flip is right
+if TDA is right and wrong if CLIP was. We score ten label-free per-sample quantities of CLIP's scores (confidence, margin,
+probability of the cache's class), of the cache's scores (confidence, mass, weight on CLIP's class) and of their
+relation (correlation over classes, JS divergence, weight gap, the $\alpha$ needed to flip) by how well they separate
+right from wrong flips (Fig.~\ref{fig:noinfo}). On the development and fresh sets every single quantity has an AUC
+between \niHeldAucLo{} and \niHeldAucHi, close to chance, and the ones that look informative on val and test reverse on
+the fresh tier. All ten combined in a logistic regression fitted on the val flips reach AUC \niCombAucVal{} on val and
+\niCombAucTest{} on test (the same five datasets) but only \niCombAucDev{} on dev and \niCombAucFresh{} on fresh: what it
+learns is which datasets flip well, not which flips are right. Used as a flip filter (revert to CLIP when the predicted
+probability of a right flip is below \niThresh, chosen on val) it changes accuracy by at most \niFilterMax{} points on
+any tier, whereas blocking every wrong flip would add \niOracleBlockTest{} (test) to \niOracleBlockFresh{} (fresh)
+points and picking the right one of CLIP's and the cache's top class \niOraclePickLo--\niOraclePickHi. The headroom
+exists, but CLIP's scores, the cache's scores and their relation carry almost no information about it. Within
+agreement-based control of the cache, the binary gate is close to the limit; the rates by score are in
+Appendix~\ref{app:switch}.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.78\linewidth]{no_info_auc.png}
+\caption{Right vs wrong flips of TDA (P2, 3 seeds): AUC of each label-free quantity and of all ten combined (logistic
+regression fitted on val), per tier. Dot: all flips of the tier; line: range over its datasets. Grey: 0.45--0.55.}
+\label{fig:noinfo}
+\end{figure}
+
+\textbf{Exploratory: a confidence switch} (Appendix~\ref{app:switch}; found after the fresh results were known). On the
+design sets CLIP is underconfident exactly on the confident ones, so keeping TDA's echo while the stream's running mean
+CLIP confidence exceeds \swThresh{} (chosen on val + dev, gating otherwise) targets the gate's one failure mode. On the
+held-out tiers it lowers mean ECE against the gate (test \swGateTestEce{} $\to$ \swSwTestEce, fresh \swGateFreshEce{}
+$\to$ \swSwFreshEce; TDA: \swTdaFreshEce{} on fresh) with accuracy unchanged, but the gain comes from the \swOnN{}
+confident sets it switches on for, so we do not adopt it as the method.
+
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.49\linewidth]{paper_plane_test.png}\hfill
@@ -202,10 +256,11 @@ Negative $\Delta$ECE: the gate is better.}
 
 \section{Limitations}
 (i) \emph{Underconfident CLIP.} Where CLIP is underconfident (Pets, Caltech101, CIFAR-10/100, ImageNet-R, STL-10) the echo happens to
-correct it and the gate is worse than TDA; GTSRB and Food101 also lose slightly without that explanation. We found no
-label-free signal that separates these cases reliably, so we do not fit a switch. A natural follow-up is to control the
-echo's \emph{size} rather than remove it, e.g.\ with a post-hoc temperature that can also sharpen (ZAEC only softens).
-(ii) The gated branch is still overconfident on the hardest sets (e.g.\ DTD); ZAEC on top helps. (iii) One backbone
+correct it and the gate is worse than TDA; GTSRB and Food101 also lose slightly without that explanation. The exploratory
+confidence switch recovers the confident ones but rests on about five datasets and cannot see CIFAR-100 or ImageNet-R;
+other uses of the agreement signal did not help (Appendix~\ref{app:switch}).
+(ii) The gated branch is still overconfident on the hardest sets (e.g.\ DTD); ZAEC on top helps on the test sets but not
+on average on the development and fresh tiers. (iii) One backbone
 (ViT-B/16) and one cache method; the echo argument applies to any cache filled with the model's own pseudo-labels
 (e.g.\ DMN), which we did not test. (iv) The gate was chosen on the val splits of the five core datasets after earlier
 attempts, some explored on test (Appendix~\ref{app:earlier}); the development and fresh tiers are the clean evidence.
@@ -214,7 +269,11 @@ attempts, some explored on test (Appendix~\ref{app:earlier}); the development an
 TDA's positive cache echoes CLIP: where it agrees with CLIP, it cannot change a decision and only adds confidence. Gating
 it on disagreement keeps TDA's accuracy everywhere and halves TDA's ECE on the design-tier test sets and on ImageNet. On
 the fresh tier the gain is smaller on average and not uniform (large on ImageNet-A and -Sketch, losses elsewhere), mostly because CLIP is underconfident on several of those
-sets; removing the echo is the right move when CLIP is not underconfident, and controlling its size is the open problem.
+sets; removing the echo is the right move when CLIP is not underconfident. Agreement is useful as one bit: the agreeing
+positive cache adds no accuracy, and the label-free scores of CLIP and the cache say almost nothing about which of the
+other flips are right, so the remaining accuracy headroom needs information they do not carry. Keeping the echo on
+confident streams is a promising,
+not yet clean, extension; detecting underconfidence without labels is the open problem.
 
 \bibliographystyle{plainnat}
 \bibliography{refs}
@@ -252,8 +311,72 @@ ECE on each test set (P2, 3 seeds), every method of Table~\ref{tab:comparison}:
 
 \begin{center}\small\input{generated/tab_comparison_per_dataset}\end{center}
 
+\section{Exploratory: a confidence switch and other uses of agreement}\label{app:switch}
+\textbf{Rule.} Keep TDA's logits while the running mean of CLIP's max-softmax confidence over the samples seen so far
+exceeds a threshold; use the gate otherwise. It is online and label-free. \textbf{Selection.} The threshold is chosen on
+the design tiers only, the val splits of the five original sets and the four development sets ($^\ast$ in
+Table~\ref{tab:switch}), which contain both kinds of stream: three confident sets on which CLIP is underconfident and six
+unconfident ones on which it is overconfident (Table~\ref{tab:switchdesign}). It is the centre of the design plateau (all
+thresholds within 0.1 ECE of the design minimum, [\swPlateauLo, \swPlateauHi]), giving \swThresh. No design set has a
+mean confidence inside the plateau, so any value in it gives the same design result: the threshold is underdetermined
+rather than fitted. The test splits and the fresh sets are held out. The fresh tier alone would have preferred a lower
+threshold (\swFreshBestLo--\swFreshBestHi, ECE \swFreshBestEce), so the chosen value is not tuned to it.
+
+\begin{table}[h]
+\centering\small
+\caption{Design sets ordered by CLIP's mean confidence. CLIP accuracy minus confidence uses labels (diagnostic only): CLIP
+is underconfident ($+$) exactly on the sets the switch turns on for.}
+\label{tab:switchdesign}
+\input{generated/tab_switch_design}
+\end{table}
+
+\textbf{Why per dataset, not per sample.} CLIP's own reliability on ImageNet does not show the pattern: there it is
+nearly calibrated overall and mildly \emph{over}confident at high per-sample confidence. The underconfidence is a property
+of easy datasets as a whole, which is what the running mean measures.
+
+\begin{table}[h]
+\centering\small
+\caption{Confidence switch vs references (P2, 3 seeds, exact trace re-evaluation; $^\ast$ design tiers used to choose the
+threshold; ImageNet and ImageNet-Sketch have no full traces and are left out; there the running confidence stays below
+the threshold, so the switch equals the gate).}
+\label{tab:switch}
+\input{generated/tab_switch}
+\end{table}
+
+\textbf{Reading.} The switch is effectively a dataset-level choice: on the dev, test and fresh tiers it is on for almost the whole
+stream of \swOnNames{} (final mean confidence $\ge$ \swMinOnConf) and off elsewhere ($\le$ \swMaxOffConf). Those sets carry
+the whole gain; the others are unchanged. It does not reach CIFAR-100 or ImageNet-R, where CLIP is underconfident but not
+confident. On the fresh sets it beats the gate clearly but plain TDA only narrowly, and only \swFreshOnN{} of them switch
+on.
+\textbf{Caveat:} the idea came after the per-dataset fresh results were known, and a similar dataset-level switch had been
+dropped before the fresh sets were evaluated, so the held-out tiers are not clean evidence for it; it needs new datasets
+to be confirmed.
+
+\textbf{What did not help} (exploratory, parameters chosen on val, checked on test, dev and fresh): $\alpha$ graded by the
+strength of disagreement (it reduces to a rescaled constant $\alpha$); larger $\alpha$ (accuracy peaks at $\alpha \approx 2$--3
+and the gated branch grows more overconfident); softening the disagreeing branch by the CLIP--cache conflict (helps on test,
+hurts on dev and fresh); the cache--CLIP agreement rate as a label-free accuracy estimate (worse than CLIP's own mean
+confidence, since the cache votes with CLIP's pseudo-labels); and flip rules on disagreeing samples in terms of the $\alpha$
+needed to flip and CLIP's confidence (no held-out accuracy gain, although picking the right of CLIP and the cache per
+sample would add several points); and $\alpha$ scaled by the per-sample correlation between the cache and CLIP logits
+over classes, including a bump that peaks at intermediate correlation and vanishes at both ends (no held-out accuracy
+gain; the bump's val gain reverses on test and fresh, and the variants that lower ECE do so by flipping fewer samples).
+These failures follow from \S\ref{sec:noinfo}: Fig.~\ref{fig:rates} shows the share of right flips along each label-free
+quantity. Where a curve slopes on val and test it is flat or reversed on the fresh tier; the one quantity with the same
+direction everywhere, the $\alpha$ needed to flip, leaves even its worst group of flips right \niAlphaMinRate\% of the
+time, so blocking flips by it cannot raise accuracy.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{no_info_rates.png}
+\caption{Share of right flips (CLIP wrong $\to$ TDA right, among right + wrong flips) by octile of each label-free
+quantity (octiles over all tiers; P2, 3 seeds). Dashed: 50\%.}
+\label{fig:rates}
+\end{figure}
+
 \section{Selection history}
 Per-dataset settings and the earlier attempts were explored on test before the clean protocol was adopted; the gate was
 then designed on val only; a dataset-level switch (``use TDA when CLIP is confident'') was considered, pre-registered
-and dropped in favour of the always-on gate before the fresh sets were evaluated.
+and dropped in favour of the always-on gate before the fresh sets were evaluated. The confidence switch of
+Appendix~\ref{app:switch} was explored afterwards.
 \end{document}

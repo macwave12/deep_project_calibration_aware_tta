@@ -1,4 +1,4 @@
-"""Generate deck v3: agreement-gated TDA, diagnosis first (at most 20 main slides + backup).
+"""Generate deck v5: agreement-gated TDA, diagnosis first (at most 20 main slides + backup).
 
 Outline: `pm/research/T16-wrapup-plan.md` §10. Diagnosis and design slides use the val splits; results
 slides use the test splits (and the development / fresh tiers); every figure says its split.
@@ -405,7 +405,7 @@ def add_footer(slide, index, total, label=None):
     box, frame = textbox(slide, MARGIN, Inches(7.06), Inches(8.0), Inches(0.3))
     box.name = "footer"
     run = frame.paragraphs[0].add_run()
-    run.text = "Calibration-aware TTA for CLIP  ·  deck v3"
+    run.text = "Calibration-aware TTA for CLIP  ·  deck v5"
     _style(run, 12, color=MUTED)
     box, frame = textbox(slide, SLIDE_W - MARGIN - Inches(1.4), Inches(7.06), Inches(1.4), Inches(0.3))
     box.name = "footer"
@@ -493,7 +493,7 @@ def slide_agenda(prs, r):
         ("2", "Test-time adaptation and TDA", "episodic vs online methods; how TDA's caches work"),
         ("3", "Calibration and TDA's catch", "what ECE measures; TDA gains accuracy but becomes overconfident"),
         ("4", "Diagnosis and method", "the cache echoes CLIP (with a proof); the agreement gate"),
-        ("5", "Results and limits", "test sets, baselines, unseen datasets, where it helps and where not"),
+        ("5", "Results and limits", "test sets, baselines, unseen datasets, where it helps, what agreement cannot tell"),
     ]
     top = Inches(1.8)
     for index, (number, heading, detail) in enumerate(entries):
@@ -813,7 +813,7 @@ cache is filled with CLIP's own labels, agreement is the common case: the cache 
 
 
 def slide_agreement(prs, r):
-    slide = new_slide(prs, "The echo, measured: the gain is where the cache disagrees", kicker="4 · Diagnosis · val")
+    slide = new_slide(prs, "Backup: the echo measured on val, by agreement group", kicker="Backup · Diagnosis · val")
     add_picture(slide, FIGURES / "paper_agreement_val.png", MARGIN, Inches(1.55), CONTENT_W, Inches(3.5))
     share = r.num(r.val("agree_share"), 0)
     add_bullets(slide, [
@@ -885,7 +885,7 @@ worse on Pets, where, as we saw, CLIP is underconfident and the echo happened to
 
 
 def slide_reliability(prs, r):
-    slide = new_slide(prs, "Reliability: the gate stays near the diagonal", kicker="5 · Results · test")
+    slide = new_slide(prs, "Backup: reliability, the gate stays near the diagonal", kicker="Backup · Results · test")
     add_picture(slide, FIGURES / "story_reliability_test.png", MARGIN, Inches(1.7), CONTENT_W, Inches(3.4))
     add_bullets(slide, [
         "Below the diagonal = overconfident. TDA (red) sits below it in most confident bins.",
@@ -922,33 +922,81 @@ def slide_comparison(prs, r):
     add_picture(slide, FIGURES / "paper_plane_test.png", Inches(8.1), Inches(1.6), Inches(4.7), Inches(4.0))
     add_text(slide, MARGIN, Inches(6.05), Inches(12.0), Inches(0.75), [
         ("Removing only the self-vote removes part of the excess ECE. Post-hoc temperatures (fitted on val, or "
-         "ZAEC, label-free) help less than the gate, and combine with it.", SUB, False, INK)])
+         "ZAEC, label-free) help less than the gate; ZAEC on top of the gate helps here, not on average on dev and "
+         "fresh.", SUB, False, INK)])
     set_notes(slide, f"""
 Here we compare with the closest alternatives, three seeds, all paired to TDA. Removing only the
 self-vote, by reading before writing, reaches {r.num(r.comp('read-first TDA', 'ece'))}. A single temperature fitted on val with labels
 reaches {r.num(r.comp('TDA + T (val)', 'ece'))}. ZAEC, a recent label-free post-hoc method that restores the zero-shot entropy, reaches
-{r.num(r.comp('TDA + ZAEC', 'ece'))}. The gate reaches {r.num(r.comp('agreement gate', 'ece'))} without any calibration step, and gate plus ZAEC {r.num(r.comp('gate + ZAEC', 'ece'))}:
-the two act at different points and compose. DMN-weak and ECALP have higher ECE than TDA; ECALP is the
+{r.num(r.comp('TDA + ZAEC', 'ece'))}. The gate reaches {r.num(r.comp('agreement gate', 'ece'))} without any calibration step, because it removes the cause instead
+of rescaling afterwards. Gate plus ZAEC reaches {r.num(r.comp('gate + ZAEC', 'ece'))} here, but that stacking does not hold up on
+average on the development and fresh sets, so we do not claim it. DMN-weak and ECALP have higher ECE than TDA; ECALP is the
 most accurate method here, at {r.num(r.comp('ECALP', 'accuracy'))} percent, but has an ECE of {r.num(r.comp('ECALP', 'ece'))}.
 """)
     return slide
 
 
-def slide_ablation(prs, r):
-    slide = new_slide(prs, "Backup: cache ablation under the gate", kicker="Backup · Results · test")
-    rows = [[label, r.num(r.test(f"{k}_acc")), r.num(r.test(f"{k}_ece"))]
-            for k, label in (("clip", "CLIP"), ("base", "+ negative cache"), ("gpos", "+ gated positive cache"),
-                             ("gate", "both = agreement gate"), ("tda", "TDA (ungated)"))]
-    add_table(slide, ["variant (test, mean of 5)", "accuracy", "ECE"], rows, MARGIN, Inches(1.75), Inches(6.6),
-              col_widths=[3.2, 1.2, 1.2], row_height=Inches(0.5), font_size=18, highlight_rows=(3,))
-    add_picture(slide, FIGURES / "paper_ablation_test.png", Inches(7.5), Inches(1.6), Inches(5.2), Inches(4.2))
-    add_callout(slide, "The negative cache improves both metrics; the gated positive cache adds accuracy at a small ECE cost.",
-                top=Inches(5.95))
+ABL_TIERS = ("val", "test", "dev", "fresh")
+ABL_ROWS = (("clip", "CLIP"), ("base", "+ negative cache = b"), ("apos", "b + positive cache, agreeing only"),
+            ("gate", "b + positive cache, disagreeing only (the gate)"), ("tda", "b + positive cache, all (TDA)"))
+
+
+def slide_ablation_groups(prs, r):
+    slide = new_slide(prs, "Ablation: the agreeing positive cache adds only confidence", kicker="4 · Diagnosis · all tiers")
+    a = r.d["ni_abl"].set_index("tier")
+    rows = [[label] + [f"{r.num(a.loc[t, f'{k}_acc'], 1)} / {r.num(a.loc[t, f'{k}_ece'], 1)}" for t in ABL_TIERS]
+            for k, label in ABL_ROWS]
+    add_table(slide, ["accuracy / ECE (P2, 3 seeds)"] + list(ABL_TIERS), rows, MARGIN, Inches(1.6), CONTENT_W,
+              col_widths=[5.0, 1.8, 1.8, 1.8, 1.8], row_height=Inches(0.46), font_size=16, highlight_rows=(3,))
+    d_apos = (a.apos_acc - a.base_acc).abs().max()
+    add_bullets(slide, [
+        f"Agreeing samples ({r.num(a.loc['val', 'agree_share'], 0)}% of val): accuracy moves by at most "
+        f"{r.num(d_apos)} points on any tier, while ECE roughly doubles on val, test and dev. No information, only "
+        "confidence (Lemma 2).",
+        "Disagreeing samples carry TDA's whole accuracy gain; the gate keeps it at about half TDA's ECE.",
+        "Fresh: the agreeing echo even lowers ECE, because CLIP is underconfident there.",
+    ], top=Inches(4.65), spacing=8, size=SUB)
     set_notes(slide, f"""
-The cache ablation again, now under the gate and on test. The gated positive cache alone gives
-{r.num(r.test('gpos_acc'))} percent at ECE {r.num(r.test('gpos_ece'))}. Adding the negative cache, which is the full method, gives {r.num(r.test('gate_acc'))} at
-{r.num(r.test('gate_ece'))}. Ungated TDA is at {r.num(r.test('tda_acc'))} and {r.num(r.test('tda_ece'))}. So the design choice made on val, keeping the negative
-cache, holds on test.
+The ablation that tests the diagnosis on every tier. We add TDA's positive cache to CLIP plus the
+negative cache only on the samples where it agrees with CLIP, only where it disagrees, which is the
+gate, or everywhere, which is TDA. On the agreeing samples it changes accuracy by at most {r.num(d_apos)} points,
+on every tier, but the expected calibration error roughly doubles on val, test and the development sets,
+from {r.num(a.loc['val', 'base_ece'], 1)} to {r.num(a.loc['val', 'apos_ece'], 1)} on val. So on the agreeing group the positive cache carries no information, only
+confidence, exactly as the lemma says. The whole accuracy gain comes from the disagreeing samples, and
+the gate keeps it. On the fresh tier the agreeing echo even helps calibration, because CLIP is
+underconfident there; that is the limitation we come back to.
+""")
+    return slide
+
+
+def slide_no_info(prs, r):
+    slide = new_slide(prs, "Beyond one bit: CLIP's and the cache's scores say almost nothing",
+                      kicker="5 · Results · all tiers")
+    add_picture(slide, FIGURES / "no_info_auc.png", MARGIN, Inches(1.5), Inches(7.2), Inches(4.6))
+    auc, flt = r.d["ni_auc"], r.d["ni_filter"].set_index("tier")
+    comb = auc[auc.measure == "combined"].set_index("tier").auc
+    held = auc[(auc.measure != "combined") & auc.tier.isin(("dev", "fresh"))].auc
+    add_bullets(slide, [
+        "Flip: TDA's decision differs from CLIP's. Can label-free scores tell right flips from wrong ones?",
+        f"Ten scores of CLIP, of the cache and of their relation: AUC {r.num(held.min())}–{r.num(held.max())} on dev "
+        "and fresh; the ones that look useful on val/test reverse on fresh.",
+        f"All ten combined (fitted on val): AUC {r.num(comb['test'])} on test, {r.num(comb['dev'])} on dev, "
+        f"{r.num(comb['fresh'])} on fresh. It learns datasets, not flips.",
+        f"As a flip filter: at most {r.num(flt.filter_gain.abs().max())} accuracy points; an oracle would get "
+        f"{r.num(flt.oracle_pick.min(), 1)}–{r.num(flt.oracle_pick.max(), 1)}.",
+        "Agreement is useful as one bit; finer rules cannot beat the gate.",
+    ], left=Inches(7.9), top=Inches(1.6), width=Inches(4.9), spacing=8, size=SUB)
+    set_notes(slide, f"""
+Could a finer use of the scores beat the one-bit gate? TDA's accuracy gain comes from flips, samples where
+its decision differs from CLIP's. We took ten label-free quantities: CLIP's confidence, margin and the
+probability it gives the cache's class; the cache's confidence, mass and weight on CLIP's class; and
+their relation, the correlation over classes, the JS divergence, the weight gap and the alpha needed to
+flip. On the development and fresh sets every one of them separates right from wrong flips with an AUC
+between {r.num(held.min())} and {r.num(held.max())}, close to chance. All ten combined in a logistic regression fitted on val reach
+{r.num(comb['test'])} on test, which has the same datasets as val, but {r.num(comb['dev'])} and {r.num(comb['fresh'])} on new datasets: they learn which
+datasets flip well, not which flips are right. Used as a filter, that changes accuracy by at most {r.num(flt.filter_gain.abs().max())}
+points, while an oracle picking the right one of CLIP's and the cache's class would add {r.num(flt.oracle_pick.min(), 1)} to
+{r.num(flt.oracle_pick.max(), 1)}. The headroom exists, but this information is not in the scores.
 """)
     return slide
 
@@ -991,7 +1039,7 @@ def slide_where(prs, r):
         "is calibrated or overconfident, and hurts if CLIP is underconfident.",
         f"Spearman ρ of ΔECE with CLIP's own confidence − accuracy gap: {r.num(rg.rho, sign=True)} "
         f"(n = {r.num(rg.n, 0)}). A tendency, not a rule: GTSRB and Food101 lose a little, VOC2007 and Cars gain. "
-        "Uses labels: it explains, it cannot switch.",
+        "Uses labels: it explains; a label-free switch is exploratory (backup).",
         f"Label-free proxy (CLIP's mean confidence on the first {r.num(SIGNAL_HEAD, 0)} samples): ρ = "
         f"{r.num(rc.rho, sign=True)}. Confidence is not calibration: CIFAR-100 is unconfident and underconfident.",
         "The gate stays always on; this is its stated condition.",
@@ -1012,22 +1060,26 @@ def slide_conclusion(prs, r):
     add_bullets(slide, [
         "Limitations",
         (1, "Underconfident CLIP (Pets, Caltech101, CIFAR-10/100, ImageNet-R, STL-10): the echo happens to help, the gate is worse; "
-            "no label-free signal separates these cases yet."),
-        (1, "The disagreeing branch is still overconfident on hard sets; ZAEC on top helps."),
+            "a confidence switch recovers the confident ones (exploratory, backup)."),
+        (1, "The disagreeing branch is still overconfident on hard sets; ZAEC on top helps on test, not on average elsewhere."),
         (1, "One backbone, one cache method. The argument applies to any cache of the model's own pseudo-labels (e.g. DMN), untested."),
         (1, "Designed on val after earlier attempts, some explored on test; dev and fresh tiers are the clean evidence."),
         "Conclusion",
         (1, "TDA's positive cache echoes CLIP: where it agrees it cannot change a decision, only inflate confidence."),
-        (1, "The agreement gate keeps TDA's accuracy everywhere and halves its ECE on the test sets and ImageNet, "
+        (1, "The agreement gate keeps TDA's accuracy everywhere and halves its ECE on the test and development sets, "
             "with no parameter and no label; on the fresh tier the gain is smaller and not uniform."),
+        (1, "Agreement is one bit: the agreeing positive cache adds no accuracy, and CLIP's and the cache's scores say "
+            "almost nothing about which other flips are right, so finer rules cannot beat the gate."),
     ], spacing=8)
     set_notes(slide, """
 To close. The gate is worse on datasets where CLIP is underconfident, because there the echo happened
-to correct CLIP, and we have not found a label-free way to detect those datasets. Its remaining
-overconfidence is in the disagreeing branch, where post-hoc calibration like ZAEC still helps. We tested
-one backbone and one cache method, and the design was done on val after earlier exploration on test,
-which is why the development and fresh sets matter. The main message: TDA's cache echoes CLIP, and
-gating it on disagreement removes the echo.
+to correct CLIP. A label-free confidence switch recovers the confident ones, but we found it after the
+fresh results, so it stays an exploratory extension in the backup. The remaining overconfidence is in
+the disagreeing branch. We tested one backbone and one cache method, and the design was done on val
+after earlier exploration on test, which is why the development and fresh sets matter. We also tried
+finer uses of agreement, an alpha graded by disagreement or by the correlation between cache and CLIP,
+and flip rules; none held up on held-out data. The main message: TDA is overconfident largely because
+its cache echoes CLIP, and gating it on disagreement removes the echo at unchanged accuracy.
 """)
     return slide
 
@@ -1121,17 +1173,99 @@ where removing the echo costs calibration. Combining the gate with ZAEC is the s
     return slide
 
 
+def slide_b_switch(prs, r):
+    slide = new_slide(prs, "Backup (exploratory): keep the echo on confident streams", kicker="Backup")
+    sw = r.d["switch"]
+    mean = sw[sw.dataset == "mean"]
+    tiers = (("val", "val*"), ("dev", "dev*"), ("test", "test"), ("fresh", "fresh"))
+    rows = []
+    for method, _ in ra.SWITCH_METHODS:
+        cells = []
+        for tier, _ in tiers:
+            row = mean[(mean.tier == tier) & (mean.method == method)].iloc[0]
+            cells.append(r.num(row.ece))
+        rows.append([method] + cells)
+    add_table(slide, ["mean ECE (P2, 3 seeds)"] + [label for _, label in tiers], rows, MARGIN, Inches(1.7), Inches(10.5),
+              col_widths=[3.6, 1.2, 1.2, 1.2, 1.2], row_height=Inches(0.5), font_size=17, highlight_rows=(3,))
+    thresh = float(sw.threshold.iloc[0])
+    per = sw[(sw.dataset != "mean") & (sw.method == "confidence switch") & (sw.tier != "val")]
+    on = per[per.switch_on_pct > 50].dataset.unique()
+    add_text(slide, MARGIN, Inches(4.6), CONTENT_W, Inches(1.8), [
+        (f"Rule: keep TDA's logits while the running mean CLIP confidence is above {r.num(thresh)}; gate otherwise. "
+         "Online, label-free, one threshold chosen on the design tiers (*: val + dev, 3 confident and 6 unconfident "
+         "sets); test and fresh held out.", SUB, False, INK),
+        ("Switches on for " + ", ".join(NAMES.get(x, x) for x in on) + "; they carry the whole gain. "
+         "Found after the fresh results were known: not clean evidence.", SUB, False, MUTED)], spacing=8)
+    fr = r.d["switch_sweep"][r.d["switch_sweep"].tier == "fresh"]
+    best = fr[fr.ece <= fr.ece.min() + 0.1].threshold
+    set_notes(slide, f"""
+An exploratory extension, not the method. The gate loses where CLIP is underconfident, and on the
+design sets CLIP is underconfident exactly on the confident ones. Keeping TDA's echo while the running
+mean CLIP confidence stays above {r.num(thresh)} lowers mean ECE on the held-out test and fresh tiers with the
+same accuracy. The threshold was chosen on val plus the development sets, which contain both kinds of
+stream; any value in the flat region gives the same design result, and the fresh sets alone would have
+preferred a lower one, {r.num(best.min())} to {r.num(best.max())}, so it is not tuned to them. Still, the gain comes from a handful
+of datasets, CIFAR-100 and ImageNet-R are missed, and we found the idea after seeing the fresh results,
+so it needs new datasets before it can be claimed.
+""")
+    return slide
+
+
+def slide_b_rates(prs, r):
+    slide = new_slide(prs, "Backup: share of right flips along each label-free score", kicker="Backup · all tiers")
+    add_picture(slide, FIGURES / "no_info_rates.png", MARGIN, Inches(1.5), CONTENT_W, Inches(4.4))
+    rates = r.d["ni_rates"]
+    low = rates[(rates.measure == "alpha_needed") & (rates.n >= 30)].right_pct.min()
+    add_callout(slide, "Slopes seen on val/test flatten or reverse on fresh. The α needed to flip keeps its direction, "
+                f"but even its worst group of flips is right {r.num(low, 1)}% of the time: nothing to block.",
+                top=Inches(6.0), height=Inches(0.75))
+    set_notes(slide, f"""
+The same question as a rate. For each of the ten label-free scores, the flips are split into eight equal
+groups, and we plot the share of them that are right, one line per tier. Where a line slopes on val and
+test, it is flat or reverses on the fresh tier. The one score whose direction holds everywhere is the
+alpha needed to flip: harder flips are right less often. But even the worst group is right {r.num(low, 1)} percent
+of the time, so blocking flips by that score cannot raise accuracy.
+""")
+    return slide
+
+
+def slide_b_negative(prs, r):
+    slide = new_slide(prs, "Backup: finer uses of agreement that did not hold up", kicker="Backup")
+    add_bullets(slide, [
+        "Chosen on val, checked on test, development and fresh sets:",
+        (1, "α graded by how strongly cache and CLIP disagree: reduces to a rescaled constant α."),
+        (1, "α from the correlation between cache and CLIP logits (linear, inverse, bump at mid correlation): "
+            "the val gain reverses on test and fresh."),
+        (1, "Softening the disagreeing branch by the cache–CLIP conflict: helps on test, hurts on dev and fresh."),
+        (1, "Agreement rate as a label-free accuracy estimate: worse than CLIP's own confidence (the cache votes with CLIP's labels)."),
+        (1, "Flip rules on disagreeing samples: picking the right of CLIP and cache per sample would add several points, "
+            "but no label-free rule captures it."),
+        "Agreement is useful as a binary gate; nothing finer generalized.",
+    ], spacing=10)
+    set_notes(slide, """
+We also tried to get more out of the agreement signal than a binary gate. Making alpha depend on how
+strongly the cache disagrees with CLIP, or on the correlation between the cache and CLIP logits, including
+a bump that is strongest at intermediate correlation, gave gains on val that reversed on the test and fresh
+sets. Softening the disagreeing branch helped on test only. The agreement rate is a worse accuracy
+estimate than CLIP's own confidence, because the cache is filled with CLIP's own pseudo-labels. And while an
+oracle that picks the right one of CLIP and the cache per sample would add several points of accuracy, no
+label-free flip rule captured any of it. So the binary gate is what agreement gives us.
+""")
+    return slide
+
+
 MAIN_BUILDERS = [
     slide_title, slide_agenda,
     slide_task, slide_clip,
     slide_tda_why, slide_tda_pipeline, slide_tda_math,
     slide_calibration, slide_tda_overconfident, slide_tda_caches,
-    slide_selfvote, slide_lemmas, slide_agreement,
+    slide_selfvote, slide_lemmas, slide_ablation_groups,
     slide_method,
-    slide_main, slide_reliability, slide_comparison, slide_generalization, slide_where,
+    slide_main, slide_comparison, slide_generalization, slide_where, slide_no_info,
     slide_conclusion,
 ]
-BACKUP_BUILDERS = [slide_ablation, slide_b_p1, slide_b_proofs, slide_b_earlier, slide_b_per_dataset]
+BACKUP_BUILDERS = [slide_agreement, slide_reliability, slide_b_p1, slide_b_proofs, slide_b_earlier, slide_b_per_dataset, slide_b_switch,
+                   slide_b_rates, slide_b_negative]
 SLIDE_BUILDERS = MAIN_BUILDERS + BACKUP_BUILDERS
 TDA_SECTION = [slide_tda_why, slide_tda_pipeline, slide_tda_math, slide_tda_overconfident, slide_tda_caches]
 
@@ -1147,7 +1281,7 @@ def slide_heading(slide, index):
 
 def write_markdown_mirror(prs, md_path) -> Path:
     lines = [
-        "# The cache that echoes CLIP: agreement-gated TDA — deck v3",
+        "# The cache that echoes CLIP: agreement-gated TDA — deck v5",
         "",
         "**Generated file — do not edit.** Produced by `python presentation/build_pptx.py`",
         "alongside `calibration_aware_tta.pptx`; edit the slide functions in that script instead.",

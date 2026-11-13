@@ -62,3 +62,13 @@ def test_record_rows_reads_seed_folders_and_checks_the_seed(tmp_path):
     except ValueError:
         return
     raise AssertionError("a record with the wrong seed must be rejected")
+
+
+def test_generalization_rows_keep_accuracy_under_zaec():
+    from analysis.comparison import GEN_METHODS, generalization_rows
+    frame = generalization_rows([_run()], "fresh")
+    assert tuple(frame["method"]) == GEN_METHODS
+    assert set(frame["tier"]) == {"fresh"}
+    acc = frame.set_index("method")["accuracy"]
+    assert acc["TDA + ZAEC"] == acc["TDA"]
+    assert acc["gate + ZAEC"] == acc["agreement gate"]
