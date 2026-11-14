@@ -30,6 +30,17 @@ ID_to_DIRNAME={
     'VOC2007': 'voc2007/images',
     'GTSRB': 'gtsrb/images',
     'StanfordCarsWDS': 'stanford-cars-wds/images',
+    # T17 shifted sets, also written by scripts/fetch_wds.py
+    'FER2013': 'fer2013/images',
+    'PCAM': 'pcam/images',
+    'SVHN': 'svhn/images',
+    'MNIST': 'mnist/images',
+    'CLEVRCount': 'clevr_count/images',
+    'Country211': 'country211/images',
+    'RenderedSST2': 'rendered_sst2/images',
+    'DMLab': 'dmlab/images',
+    'Retinopathy': 'retinopathy/images',
+    'SUN397': 'sun397/images',
     'flower102': 'oxford_flowers',
     'dtd': 'dtd',
     'pets': 'oxford_pets',
@@ -72,7 +83,8 @@ class ImageFolder_path(datasets.ImageFolder):
 
         return sample, torch.tensor(target).long(), path
 
-WDS_SET_IDS = ('STL10', 'CIFAR10', 'CIFAR100', 'VOC2007', 'GTSRB', 'StanfordCarsWDS')
+WDS_SET_IDS = ('STL10', 'CIFAR10', 'CIFAR100', 'VOC2007', 'GTSRB', 'StanfordCarsWDS',
+               'FER2013', 'PCAM', 'SVHN', 'MNIST', 'CLEVRCount', 'Country211', 'RenderedSST2', 'DMLab', 'Retinopathy', 'SUN397')
 
 
 def imagenetv2_numeric_labels(dataset):

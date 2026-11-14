@@ -27,6 +27,7 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from analysis.story import CONF_CUT, NAMES, SIGNAL_HEAD  # noqa: E402
+from utils.feature_cache import EXCLUDED, held_tier  # noqa: E402
 
 OUT = REPO / "report" / "generated"
 RES = REPO / "results"
@@ -59,6 +60,7 @@ def load(root: Path = REPO) -> dict:
         "dev": pd.read_csv(an / "t14" / "dev_protocols.csv"),
         "fresh": pd.read_csv(an / "t16" / "fresh.csv"),
         "helps": pd.read_csv(an / "t16" / "where_it_helps.csv"),
+        "gaps": pd.read_csv(an / "t16" / "gaps.csv"),
         "rho": pd.read_csv(an / "t16" / "where_it_helps_rho.csv"),
         "val": pd.read_csv(an / "story" / "summary_val.csv"),
         "test": pd.read_csv(an / "story" / "summary_test.csv"),
@@ -71,6 +73,7 @@ def load(root: Path = REPO) -> dict:
         "ni_auc": pd.read_csv(an / "t16" / "no_info_auc.csv"),
         "ni_filter": pd.read_csv(an / "t16" / "no_info_filter.csv"),
         "ni_rates": pd.read_csv(an / "t16" / "no_info_rates.csv"),
+        "ni_rules": pd.read_csv(an / "t16" / "no_info_rules.csv"),
     }
 
 
@@ -108,21 +111,23 @@ def comp_paired(d, method, metric, dataset="mean"):
 
 
 def generalization(d) -> pd.DataFrame:
-    """One row per dev and fresh dataset: CLIP, TDA, gate accuracy / ECE (P2, 3 seeds) and deltas vs TDA."""
+    """One row per held-out dataset (EXCLUDED left out), tagged near / far / other by `held_tier`: CLIP, TDA, gate
+    accuracy / ECE (P2, 3 seeds) and deltas vs TDA."""
     rows = []
     dev = d["dev"]
-    for ds in dict.fromkeys(dev.dataset[dev.dataset != "mean"]):
-        row = {"dataset": ds, "tier": "dev"}
+    for ds in dict.fromkeys(dev.dataset[(dev.dataset != "mean") & ~dev.dataset.isin(EXCLUDED)]):
+        row = {"dataset": ds, "tier": held_tier(ds)}
         for m, k in (("clipzs", "clip"), ("tda", "tda"), ("cal_tda_agree", "gate")):
             for metric in ("accuracy", "ece"):
                 sel = dev[(dev.protocol == "P2") & (dev.dataset == ds) & (dev.method == m) & (dev.metric == metric)]
                 row[f"{k}_{metric}"] = float(sel.iloc[0]["mean"])
         rows.append(row)
-    fresh = d["fresh"][d["fresh"].dataset != "mean"]
+    fresh = d["fresh"][(d["fresh"].dataset != "mean") & ~d["fresh"].dataset.isin(EXCLUDED)]
     for _, r in fresh.iterrows():
-        rows.append({"dataset": r.dataset, "tier": "fresh",
+        rows.append({"dataset": r.dataset, "tier": held_tier(r.dataset),
                      **{f"{k}_{m}": r[f"{k}_{m}"] for k in ("clip", "tda", "gate") for m in ("accuracy", "ece")}})
     g = pd.DataFrame(rows)
+    g = g.iloc[g.tier.map({"near": 0, "far": 1, "other": 2}).argsort(kind="stable")].reset_index(drop=True)
     g["d_accuracy"] = g.gate_accuracy - g.tda_accuracy
     g["d_ece"] = g.gate_ece - g.tda_ece
     return g
@@ -143,6 +148,8 @@ def numbers(d) -> dict:
     n["mainSeeds"] = str(int(paired(d, "cal_tda_agree", "ece").n))
     n["mainTdaOverClipAcc"] = f(prot(d, "mean", "tda", "accuracy") - prot(d, "mean", "clipzs", "accuracy"), 2, sign=True)
     n["mainTdaOverClipEce"] = f(prot(d, "mean", "tda", "ece") - prot(d, "mean", "clipzs", "ece"), 2, sign=True)
+    n["mainGateOverClipAcc"] = f(prot(d, "mean", "cal_tda_agree", "accuracy") - prot(d, "mean", "clipzs", "accuracy"), 2, sign=True)
+    n["mainGateOverClipEce"] = f(prot(d, "mean", "cal_tda_agree", "ece") - prot(d, "mean", "clipzs", "ece"), 2, sign=True)
 
     for method, key in (("CLIP", "Clip"), ("TDA", "Tda"), ("agreement gate", "Gate"), ("read-first TDA", "ReadFirst"),
                         ("TDA + T (val)", "TdaT"), ("TDA + ZAEC", "TdaZaec"), ("gate + ZAEC", "GateZaec"),
@@ -183,43 +190,76 @@ def numbers(d) -> dict:
     n["testAgreeBaseAcc"], n["testAgreeTdaAcc"] = f(tm.base_acc_agree), f(tm.tda_acc_agree)
 
     g = generalization(d)
-    for tier, key in (("dev", "Dev"), ("fresh", "Fresh"), (None, "All")):
-        sub = g if tier is None else g[g.tier == tier]
+    for tier, key in (("near", "Near"), ("far", "Far"), ("other", "Other"), (None, "All")):
+        sub = g[g.tier != "other"] if tier is None else g[g.tier == tier]
+        if not len(sub):
+            continue
         n[f"gen{key}N"] = str(len(sub))
         n[f"gen{key}DEce"] = f(sub.d_ece.mean(), 2, sign=True)
         n[f"gen{key}DAcc"] = f(sub.d_accuracy.mean(), 2, sign=True)
         n[f"gen{key}EceWins"] = str(int((sub.d_ece < 0).sum()))
-    n["totalDatasets"] = str(len(g) + len(d["test"][d["test"].dataset != "mean"]))
-    n["freshNames"] = ", ".join(NAMES.get(x, x) for x in g[g.tier == "fresh"].dataset)
-    n["genFreshMeanTdaEce"] = f(g[g.tier == "fresh"].tda_ece.mean())
-    n["genFreshMeanGateEce"] = f(g[g.tier == "fresh"].gate_ece.mean())
+        for k, kk in (("tda", "Tda"), ("gate", "Gate")):
+            n[f"gen{key}{kk}OverClipAcc"] = f((sub[f"{k}_accuracy"] - sub.clip_accuracy).mean(), 2, sign=True)
+            n[f"gen{key}{kk}OverClipEce"] = f((sub[f"{k}_ece"] - sub.clip_ece).mean(), 2, sign=True)
+    n["totalDatasets"] = str(len(g[g.tier != "other"]) + len(d["test"][d["test"].dataset != "mean"]))
+    for tier, key in (("near", "Near"), ("far", "Far"), ("other", "Other")):
+        n[f"{tier}Names"] = ", ".join(NAMES.get(x, x) for x in g[g.tier == tier].dataset)
+    for tier, key in (("near", "Near"), ("far", "Far"), ("other", "Other")):
+        for k, kk in (("clip", "Clip"), ("tda", "Tda"), ("gate", "Gate")):
+            for m, mk in (("accuracy", "Acc"), ("ece", "Ece")):
+                n[f"gen{key}Mean{kk}{mk}"] = f(g[g.tier == tier][f"{k}_{m}"].mean())
     n["reproMaxDelta"] = f(d["repro"].delta_gpu_vs_benchmark.abs().max())
-    n["genWorstDAcc"] = f(g.d_accuracy.min(), 2, sign=True)
-    n["genWorstDEce"] = f(g.d_ece.max(), 2, sign=True)
-    inet = g[g.dataset == "imagenet"]
-    if len(inet):
-        r = inet.iloc[0]
-        n["inetTdaAcc"], n["inetTdaEce"] = f(r.tda_accuracy), f(r.tda_ece)
-        n["inetGateAcc"], n["inetGateEce"] = f(r.gate_accuracy), f(r.gate_ece)
+    main = g[g.tier != "other"]
+    n["genWorstDAcc"] = f(main.d_accuracy.min(), 2, sign=True)
+    n["genWorstDEce"] = f(main.d_ece.max(), 2, sign=True)
 
     rho = d["rho"]
     for sig, key in (("conf", "Conf"), ("over06", "Over"), ("share", "Share"), ("clip_gap", "Gap")):
-        for ds, dk in (("all", "All"), ("fresh", "Fresh"), ("test+dev", "Seen")):
+        for ds, dk in (("all", "All"), ("test", "Test"), ("near", "Near"), ("far", "Far")):
             row = rho[(rho.signal == sig) & (rho.datasets == ds)]
             n[f"rho{key}{dk}"] = f(float(row.iloc[0].rho), 2, sign=True) if len(row) else "n/a"
     n["signalHead"], n["confCut"] = str(SIGNAL_HEAD), f(CONF_CUT, 1)
     n["rhoN"] = str(int(rho[(rho.datasets == "all")].iloc[0].n))
     n.update(switch_numbers(d["switch"], d["switch_sweep"]))
     n.update(no_info_numbers(d["ni_abl"], d["ni_auc"], d["ni_filter"]))
+    n.update(rule_numbers(d["ni_rules"], d["ni_filter"]))
+    n.update(gap_numbers(d["gaps"], d["helps"]))
     rates = d["ni_rates"]
     n["niAlphaMinRate"] = f(rates[(rates.measure == "alpha_needed") & (rates.n >= 30)].right_pct.min(), 1)
     return n
 
 
-NI_TIERS = (("val", "Val"), ("test", "Test"), ("dev", "Dev"), ("fresh", "Fresh"))
+NI_TIERS = (("val", "Val"), ("test", "Test"), ("near", "Near"), ("far", "Far"))
 NI_VARIANTS = (("clip", "CLIP"), ("base", "+ negative cache ($b$)"),
                ("apos", "$b$ + positive cache, agreeing only"), ("gate", "$b$ + positive cache, disagreeing only (gate)"),
                ("tda", "$b$ + positive cache, all (TDA)"), ("gpos", "CLIP + positive cache, disagreeing only"))
+
+
+def gap_numbers(gaps: pd.DataFrame, helps: pd.DataFrame) -> dict:
+    """Over- vs underconfidence on the design test, near and far sets: how often TDA raises CLIP's confidence - accuracy
+    gap and the gate lowers TDA's, tier means, and the sets where TDA's ECE beats the gate's, split by CLIP's sign."""
+    g = gaps[gaps.tier.isin(("test", "near", "far"))]
+    n = {"gapN": str(len(g)), "gapTdaUpN": str(int((g.tda_gap > g.clip_gap).sum())),
+         "gapGateDownN": str(int((g.gate_gap < g.tda_gap).sum())),
+         "gapTdaOverN": str(int((g.tda_gap > 0).sum())), "gapGateOverN": str(int((g.gate_gap > 0).sum()))}
+    for tier, tk in (("test", "Test"), ("near", "Near"), ("far", "Far")):
+        sub = g[g.tier == tier]
+        for k, kk in (("clip", "Clip"), ("tda", "Tda"), ("gate", "Gate")):
+            n[f"gap{tk}{kk}"] = f(sub[f"{k}_gap"].mean(), 1, sign=True)
+    lose = g.merge(helps[["dataset", "d_ece"]], on="dataset")
+    lose = lose[lose.d_ece > 0]
+    n["gapLoseUnderNames"] = ", ".join(NAMES.get(x, x) for x in lose[lose.clip_gap < 0].dataset)
+    n["gapLoseOtherNames"] = ", ".join(NAMES.get(x, x) for x in lose[lose.clip_gap >= 0].dataset)
+    return n
+
+
+def rule_numbers(rules: pd.DataFrame, filt: pd.DataFrame) -> dict:
+    """Best gain of any val-chosen one-score rule, on val and on the held-out tiers, against the oracle's range."""
+    held = rules[rules.tier != "val"]
+    orc = filt[filt.tier != "val"].oracle_block
+    return {"niRuleBestVal": f(rules[rules.tier == "val"].gain.max(), 2, sign=True),
+            "niRuleBestHeld": f(held.gain.max(), 2, sign=True),
+            "niOracleBlockLo": f(orc.min(), 1), "niOracleBlockHi": f(orc.max(), 1)}
 
 
 def no_info_numbers(abl: pd.DataFrame, aucs: pd.DataFrame, filt: pd.DataFrame) -> dict:
@@ -239,7 +279,7 @@ def no_info_numbers(abl: pd.DataFrame, aucs: pd.DataFrame, filt: pd.DataFrame) -
     n["niAposMaxDAcc"] = f((a.apos_acc - a.base_acc).abs().max(), 2)
     n["niAgreeMaxDAcc"] = f((a.tda_acc_agree - a.base_acc_agree).abs().max(), 2)
     single = aucs[aucs.measure != "combined"]
-    held = single[single.tier.isin(("dev", "fresh"))].auc
+    held = single[single.tier.isin(("near", "far"))].auc
     n["niHeldAucLo"], n["niHeldAucHi"] = f(held.min()), f(held.max())
     n["niFilterMax"] = f(filt.filter_gain.abs().max(), 2)
     n["niOraclePickLo"], n["niOraclePickHi"] = f(filt.oracle_pick.min(), 1), f(filt.oracle_pick.max(), 1)
@@ -248,12 +288,12 @@ def no_info_numbers(abl: pd.DataFrame, aucs: pd.DataFrame, filt: pd.DataFrame) -
 
 
 SWITCH_METHODS = (("TDA", "Tda"), ("TDA + ZAEC", "Zaec"), ("agreement gate", "Gate"), ("confidence switch", "Sw"))
-TIERS = (("val", "Val"), ("dev", "Dev"), ("test", "Test"), ("fresh", "Fresh"))  # design tiers first
+TIERS = (("val", "Val"), ("dev", "Dev"), ("test", "Test"), ("near", "Near"), ("far", "Far"))  # selection first
 
 
 def switch_numbers(sw: pd.DataFrame, sweep: pd.DataFrame) -> dict:
     """Macros for the confidence switch: threshold, per-tier means, the datasets it switches on, ECE deltas, and the
-    thresholds the fresh tier alone would have preferred (within 0.1 ECE of its minimum)."""
+    thresholds the near tier alone would have preferred (within 0.1 ECE of its minimum)."""
     n = {"swThresh": f(float(sw.threshold.iloc[0])), "swPlateauLo": f(float(sw.plateau_lo.iloc[0])),
          "swPlateauHi": f(float(sw.plateau_hi.iloc[0]))}
     mean = sw[sw.dataset == "mean"]
@@ -269,14 +309,14 @@ def switch_numbers(sw: pd.DataFrame, sweep: pd.DataFrame) -> dict:
     n["swOnNames"] = ", ".join(NAMES.get(x, x) for x in dict.fromkeys(on[on.tier != "val"].dataset))
     n["swOnN"] = str(on[on.tier != "val"].dataset.nunique())
     n["swHeldN"] = str(per[per.tier != "val"].dataset.nunique())
-    n["swFreshOnN"] = str(on[on.tier == "fresh"].dataset.nunique())
+    n["swNearOnN"] = str(on[on.tier == "near"].dataset.nunique())
     off = per[per.switch_on_pct <= 50]
     n["swMinOnConf"] = f(on.clip_conf.min() / 100)
     n["swMaxOffConf"] = f(off.clip_conf.max() / 100)
-    fr = sweep[sweep.tier == "fresh"]
+    fr = sweep[sweep.tier == "near"]
     best = fr[fr.ece <= fr.ece.min() + 0.1]
-    n["swFreshBestEce"] = f(fr.ece.min())
-    n["swFreshBestLo"], n["swFreshBestHi"] = f(best.threshold.min()), f(best.threshold.max())
+    n["swNearBestEce"] = f(fr.ece.min())
+    n["swNearBestLo"], n["swNearBestHi"] = f(best.threshold.min()), f(best.threshold.max())
     return n
 
 
@@ -344,22 +384,35 @@ def tab_comparison_per_dataset(d) -> str:
     return "\n".join(lines)
 
 
-def tab_generalization(d) -> str:
-    g = generalization(d)
-    lines = ["\\begin{tabular}{llrrrrrr}", "\\toprule",
-             " & & \\multicolumn{3}{c}{accuracy} & \\multicolumn{3}{c}{ECE} \\\\",
-             "\\cmidrule(lr){3-5}\\cmidrule(lr){6-8}",
-             "tier & dataset & CLIP & TDA & gate & CLIP & TDA & gate \\\\", "\\midrule"]
-    for tier in ("dev", "fresh"):
+GEN_TIERS = ("near", "far")
+
+
+def bold_if(v: float, on: bool) -> str:
+    return "\\textbf{" + f(v) + "}" if on else f(v)
+
+
+def tab_generalization(d, tiers=GEN_TIERS) -> str:
+    """Per-dataset rows plain; on each tier's mean row the best accuracy and the best ECE are bold. Last block: the
+    signed confidence - accuracy gap (positive: overconfident)."""
+    g = generalization(d).merge(d["gaps"].drop(columns="tier"), on="dataset", how="left")
+    lines = ["\\begin{tabular}{llrrrrrrrrr}", "\\toprule",
+             " & & \\multicolumn{3}{c}{accuracy} & \\multicolumn{3}{c}{ECE} & \\multicolumn{3}{c}{conf.$-$acc.} \\\\",
+             "\\cmidrule(lr){3-5}\\cmidrule(lr){6-8}\\cmidrule(lr){9-11}",
+             "tier & dataset & CLIP & TDA & gate & CLIP & TDA & gate & CLIP & TDA & gate \\\\", "\\midrule"]
+    gap = lambda r: " & ".join(f(r[f"{k}_gap"], 1, sign=True) for k in ("clip", "tda", "gate"))  # noqa: E731
+    tiers = [t for t in tiers if (g.tier == t).any()]
+    for tier in tiers:
         sub = g[g.tier == tier]
         for i, (_, r) in enumerate(sub.iterrows()):
-            best = "\\textbf{" + f(r.gate_ece) + "}" if r.gate_ece < r.tda_ece else f(r.gate_ece)
             lines.append(f"{tier if i == 0 else ''} & {NAMES.get(r.dataset, r.dataset)} & {f(r.clip_accuracy)} & "
-                         f"{f(r.tda_accuracy)} & {f(r.gate_accuracy)} & {f(r.clip_ece)} & {f(r.tda_ece)} & {best} \\\\")
+                         f"{f(r.tda_accuracy)} & {f(r.gate_accuracy)} & {f(r.clip_ece)} & {f(r.tda_ece)} & "
+                         f"{f(r.gate_ece)} & {gap(r)} \\\\")
         mean = sub.mean(numeric_only=True)
-        lines.append(f" & \\emph{{mean ({len(sub)})}} & {f(mean.clip_accuracy)} & {f(mean.tda_accuracy)} & "
-                     f"{f(mean.gate_accuracy)} & {f(mean.clip_ece)} & {f(mean.tda_ece)} & {f(mean.gate_ece)} \\\\")
-        lines.append("\\midrule" if tier == "dev" else "\\bottomrule")
+        acc = [round(mean[f"{k}_accuracy"], 2) for k in ("clip", "tda", "gate")]
+        ece = [round(mean[f"{k}_ece"], 2) for k in ("clip", "tda", "gate")]
+        cells = [bold_if(v, v == max(acc)) for v in acc] + [bold_if(v, v == min(ece)) for v in ece] + [gap(mean)]
+        lines.append(f" & \\emph{{mean ({len(sub)})}} & " + " & ".join(cells) + " \\\\")
+        lines.append("\\bottomrule" if tier == tiers[-1] else "\\midrule")
     lines.append("\\end{tabular}")
     return "\n".join(lines)
 
@@ -389,8 +442,8 @@ def tab_p1(d) -> str:
 
 def tab_switch(d) -> str:
     mean = d["switch"][d["switch"].dataset == "mean"]
-    lines = ["\\begin{tabular}{lrrrr}", "\\toprule",
-             "ECE (acc.), P2, 3 seeds & val$^\\ast$ & dev$^\\ast$ & test & fresh \\\\", "\\midrule"]
+    lines = ["\\begin{tabular}{lrrrrr}", "\\toprule",
+             "ECE (acc.), P2, 3 seeds & val$^\\ast$ & dev$^\\ast$ & test & near & far \\\\", "\\midrule"]
     for method, _ in SWITCH_METHODS:
         cells = []
         for tier, _ in TIERS:
@@ -405,7 +458,7 @@ def tab_ablation_groups(d) -> str:
     """Accuracy / ECE of the cache ablation on every tier, then the agreeing / disagreeing groups."""
     a = d["ni_abl"].set_index("tier")
     lines = ["\\begin{tabular}{lrrrr}", "\\toprule",
-             "Accuracy / ECE, P2, 3 seeds & val & test & dev & fresh \\\\", "\\midrule"]
+             "Accuracy / ECE, P2, 3 seeds & val & test & near & far \\\\", "\\midrule"]
     for k, label in NI_VARIANTS:
         cells = [f"{f(a.loc[t, f'{k}_acc'], 1)} / {f(a.loc[t, f'{k}_ece'], 1)}" for t, _ in NI_TIERS]
         lines.append(f"{label} & " + " & ".join(cells) + " \\\\")
@@ -424,16 +477,16 @@ def tab_ablation_groups(d) -> str:
 
 
 def tab_switch_design(d) -> str:
-    """Design sets by CLIP confidence: CLIP's accuracy minus confidence (labels, diagnostic) and the switch state."""
+    """Design sets by CLIP confidence: CLIP's confidence minus accuracy (labels, diagnostic) and the switch state."""
     sw = d["switch"]
     per = sw[sw.tier.isin(("val", "dev")) & (sw.method == "confidence switch") & (sw.dataset != "mean")]
     per = per.sort_values("clip_conf")
     lines = ["\\begin{tabular}{llrrc}", "\\toprule",
-             "Design set & split & CLIP conf. & CLIP acc.$-$conf. & switch on \\\\", "\\midrule"]
+             "Design set & split & CLIP conf. & CLIP conf.$-$acc. & switch on \\\\", "\\midrule"]
     for _, r in per.iterrows():
         on = "yes" if r.switch_on_pct > 50 else "no"
         lines.append(f"{NAMES.get(r.dataset, r.dataset)} & {r.tier} & {f(r.clip_conf, 1)} & "
-                     f"{f(r.clip_gap, 1, sign=True)} & {on} \\\\")
+                     f"{f(-r.clip_gap, 1, sign=True)} & {on} \\\\")
     lines += ["\\bottomrule", "\\end{tabular}"]
     return "\n".join(lines)
 
@@ -444,6 +497,7 @@ def write(root: Path = REPO, out: Path = OUT) -> list[Path]:
     files = {"numbers.tex": "\n".join(macro(k, v) for k, v in numbers(d).items()) + "\n",
              "tab_main.tex": tab_main(d) + "\n", "tab_comparison.tex": tab_comparison(d) + "\n",
              "tab_generalization.tex": tab_generalization(d) + "\n", "tab_earlier.tex": tab_earlier(d) + "\n",
+             "tab_generalization_other.tex": tab_generalization(d, ("other",)) + "\n",
              "tab_comparison_per_dataset.tex": tab_comparison_per_dataset(d) + "\n",
              "tab_p1.tex": tab_p1(d) + "\n", "tab_switch.tex": tab_switch(d) + "\n",
              "tab_switch_design.tex": tab_switch_design(d) + "\n",

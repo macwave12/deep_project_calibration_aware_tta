@@ -4,7 +4,7 @@ import torch
 
 from analysis.adaptive_alpha import disagree_mask
 from analysis.no_info import (MEASURES, ablation_rows, auc, filter_gain, fit_logistic, flip_records, info_tables,
-                              oracle_rows, variant_logits)
+                              oracle_rows, rule_rows, variant_logits)
 from tests.test_story import _run
 
 
@@ -66,3 +66,18 @@ def test_oracles_are_at_least_the_block_oracle_and_info_tables_cover_every_tier(
     assert set(aucs.tier) == {"val", "test"} and "combined" in set(aucs.measure)
     assert aucs.auc.between(0, 1).all() and set(comb.tier) == {"val", "test"}
     assert (comb.filter_gain <= comb.oracle_block + 1e-9).all()
+
+
+def test_rule_rows_choose_side_and_threshold_on_val_and_apply_them_unchanged():
+    rng = np.random.default_rng(0)
+    rows = []
+    for tier, informative in (("val", True), ("fresh", False)):
+        right = rng.random(400) < 0.5
+        f = pd.DataFrame({k: rng.normal(size=400) for k in MEASURES})
+        if informative:
+            f["clip_conf"] += 3 * right  # low CLIP confidence marks a wrong flip, on val only
+        rows.append(f.assign(right=right, tier=tier, dataset="a", seed=0, n=1000))
+    r = rule_rows(pd.concat(rows, ignore_index=True)).set_index(["measure", "tier"])
+    assert r.loc[("clip_conf", "val"), "side"] == "below" and r.loc[("clip_conf", "val"), "gain"] > 10
+    assert abs(r.loc[("clip_conf", "fresh"), "gain"]) < 5
+    assert r.loc[("clip_conf", "val"), "threshold"] == r.loc[("clip_conf", "fresh"), "threshold"]

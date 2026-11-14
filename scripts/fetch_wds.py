@@ -29,6 +29,17 @@ WDS = {
     "gtsrb": ("gtsrb", "gtsrb", "images", 3),
     "cars": ("cars", "stanford-cars-wds", "images", 5),
     "imagenet_r": ("imagenet-r", "imagenet-rendition", "imagenet-r", 4),
+    # T17 shifted sets; the large ones take their first shards only (a subset of the test split)
+    "fer2013": ("fer2013", "fer2013", "images", 4),
+    "pcam": ("vtab-pcam", "pcam", "images", 2),
+    "svhn": ("vtab-svhn", "svhn", "images", 2),
+    "mnist": ("mnist", "mnist", "images", 2),
+    "clevr_count": ("vtab-clevr_count_all", "clevr_count", "images", 3),
+    "country211": ("country211", "country211", "images", 4),
+    "rendered_sst2": ("renderedsst2", "rendered_sst2", "images", 4),
+    "dmlab": ("vtab-dmlab", "dmlab", "images", 2),
+    "retinopathy": ("vtab-diabetic_retinopathy", "retinopathy", "images", 3),
+    "sun397": ("sun397", "sun397", "images", 41),  # class-sorted shards: fetch all, then subset
 }
 
 

@@ -1,11 +1,4 @@
 dataset,method,seed,accuracy,ece
-imagenet,agreement gate,0,68.214,2.0821
-imagenet,CLIP,0,66.72,1.9457
-imagenet,TDA,0,68.228,6.3364
-imagenet,agreement gate,1,68.184,1.8702
-imagenet,TDA,1,68.266,6.1288
-imagenet,agreement gate,2,68.26,1.8447
-imagenet,TDA,2,68.352,6.2733
 cars,agreement gate,0,64.6934,2.8004
 cars,CLIP,0,63.6985,3.0853
 cars,TDA,0,65.0044,4.3608
@@ -87,3 +80,84 @@ stl10,TDA,2,98.375,1.0305
 voc2007,agreement gate,2,76.9631,6.6566
 voc2007,CLIP,2,78.352,5.7299
 voc2007,TDA,2,77.0566,7.4593
+clevr_count,agreement gate,0,12.8667,34.3006
+clevr_count,CLIP,0,12.5,35.5529
+clevr_count,TDA,0,12.8667,77.4165
+country211,agreement gate,0,19.2333,11.8902
+country211,CLIP,0,17.9667,12.2421
+country211,TDA,0,18.6333,28.1104
+dmlab,agreement gate,0,14.0667,29.4274
+dmlab,CLIP,0,14.1333,27.4501
+dmlab,TDA,0,14.0667,31.8314
+fer2013,agreement gate,0,50.0,4.8407
+fer2013,CLIP,0,45.1667,3.3415
+fer2013,TDA,0,49.9333,4.374
+mnist,agreement gate,0,31.7333,14.165
+mnist,CLIP,0,19.5667,26.7691
+mnist,TDA,0,31.7333,20.4218
+pcam,agreement gate,0,61.6,15.7364
+pcam,CLIP,0,57.4333,15.1574
+pcam,TDA,0,61.6,25.021
+rendered_sst2,agreement gate,0,57.6606,18.1742
+rendered_sst2,CLIP,0,57.4959,19.1206
+rendered_sst2,TDA,0,57.6606,19.5931
+retinopathy,agreement gate,0,2.3,52.923
+retinopathy,CLIP,0,2.3,53.9641
+retinopathy,TDA,0,2.3,92.2194
+svhn,agreement gate,0,32.7667,5.7578
+svhn,CLIP,0,25.7667,7.6905
+svhn,TDA,0,32.5333,9.9158
+clevr_count,agreement gate,1,12.6667,34.0215
+clevr_count,CLIP,1,12.5,35.5529
+clevr_count,TDA,1,12.6667,75.5778
+country211,agreement gate,1,19.2667,11.8155
+country211,CLIP,1,17.9667,12.2421
+country211,TDA,1,18.8333,28.0348
+dmlab,agreement gate,1,14.5667,29.419
+dmlab,CLIP,1,14.1333,27.4501
+dmlab,TDA,1,14.5333,32.148
+fer2013,agreement gate,1,49.8,3.3432
+fer2013,CLIP,1,45.1667,3.3415
+fer2013,TDA,1,49.3,4.3342
+mnist,agreement gate,1,28.4667,17.1509
+mnist,CLIP,1,19.5667,26.7691
+mnist,TDA,1,28.4667,24.8294
+pcam,agreement gate,1,60.4333,14.7635
+pcam,CLIP,1,57.4333,15.1574
+pcam,TDA,1,60.4333,25.111
+rendered_sst2,agreement gate,1,57.0016,19.055
+rendered_sst2,CLIP,1,57.4959,19.1206
+rendered_sst2,TDA,1,57.0016,21.3094
+retinopathy,agreement gate,1,2.3333,54.0716
+retinopathy,CLIP,1,2.3,53.9641
+retinopathy,TDA,1,2.3333,86.9468
+svhn,agreement gate,1,31.2333,7.4434
+svhn,CLIP,1,25.7667,7.6905
+svhn,TDA,1,30.9667,11.1067
+clevr_count,agreement gate,2,12.9667,35.0168
+clevr_count,CLIP,2,12.5,35.5529
+clevr_count,TDA,2,12.9667,78.0184
+country211,agreement gate,2,19.3667,11.5759
+country211,CLIP,2,17.9667,12.2421
+country211,TDA,2,18.5,28.2388
+dmlab,agreement gate,2,14.4333,30.1694
+dmlab,CLIP,2,14.1333,27.4501
+dmlab,TDA,2,14.4667,33.5631
+fer2013,agreement gate,2,48.8667,4.0931
+fer2013,CLIP,2,45.1667,3.3415
+fer2013,TDA,2,47.9667,6.1812
+mnist,agreement gate,2,29.0667,17.9421
+mnist,CLIP,2,19.5667,26.7691
+mnist,TDA,2,28.9,25.6705
+pcam,agreement gate,2,60.9333,15.4231
+pcam,CLIP,2,57.4333,15.1574
+pcam,TDA,2,60.9333,24.8475
+rendered_sst2,agreement gate,2,57.2213,18.9812
+rendered_sst2,CLIP,2,57.4959,19.1206
+rendered_sst2,TDA,2,57.2213,20.3766
+retinopathy,agreement gate,2,2.4667,54.5332
+retinopathy,CLIP,2,2.3,53.9641
+retinopathy,TDA,2,2.4667,86.1188
+svhn,agreement gate,2,32.8,6.722
+svhn,CLIP,2,25.7667,7.6905
+svhn,TDA,2,32.4333,10.8461

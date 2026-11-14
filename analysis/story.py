@@ -47,7 +47,9 @@ NAMES = {"dtd": "DTD", "flower102": "Flowers", "pets": "Pets", "eurosat": "EuroS
          "imagenetv2": "ImageNetV2", "caltech101": "Caltech101", "ucf101": "UCF101", "food101": "Food101",
          "imagenet": "ImageNet", "imagenet_a": "ImageNet-A", "imagenet_r": "ImageNet-R",
          "imagenet_sketch": "ImageNet-Sketch", "stl10": "STL-10", "cifar10": "CIFAR-10", "cifar100": "CIFAR-100",
-         "voc2007": "VOC2007", "gtsrb": "GTSRB", "cars": "Cars"}
+         "voc2007": "VOC2007", "gtsrb": "GTSRB", "cars": "Cars", "fer2013": "FER2013", "pcam": "PCam",
+         "svhn": "SVHN", "mnist": "MNIST", "clevr_count": "CLEVR-count", "country211": "Country211",
+         "rendered_sst2": "Rendered SST2", "dmlab": "DMLab", "retinopathy": "Retinopathy", "sun397": "SUN397"}
 C_CLIP, C_BASE, C_TDA, C_GATE = "#4c78a8", "#8d99ae", "#e45756", "#2a9d8f"
 
 

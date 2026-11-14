@@ -7,12 +7,13 @@
    positive cache.
 2. Flip information. A flip is a sample where TDA's decision differs from CLIP's; it is right if TDA is right and
    wrong if CLIP was right. Label-free per-sample measures of CLIP's scores, the cache's scores and their relation are
-   scored alone (AUC, right-flip rate by octile) and combined (logistic regression fitted on the val flips). The
+   scored alone (AUC, right-flip rate by octile, the accuracy change of the best val-chosen one-threshold rule) and
+   combined (logistic regression fitted on the val flips). The
    combination also defines a label-free flip filter (revert to CLIP below a threshold chosen on val); its accuracy
    change is compared with the oracle filter (block every wrong flip) and the oracle pick (right one of CLIP's and the
    cache's top class).
 
-    python analysis/no_info.py  -> results/analysis/t16/no_info_*.csv, analysis/figures/no_info_*.png
+    python analysis/no_info.py  -> results/analysis/t16/no_info_*.csv, analysis/figures/no_info_{gain,rates}.png
 """
 
 from __future__ import annotations
@@ -37,13 +38,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 from analysis.adaptive_alpha import disagree_mask, load_runs, metrics, trace_path  # noqa: E402
-from utils.feature_cache import DATASETS, DEV_DATASETS, FRESH_DATASETS  # noqa: E402
+from utils.feature_cache import DATASETS, FAR, NEAR, replay_root  # noqa: E402
 
 ALPHA = 2.0
 OUT = REPO / "results" / "analysis" / "t16"
 FIG = REPO / "analysis" / "figures"
 REPORT_FIG = REPO / "report" / "figures"
-TIERS = ("val", "test", "dev", "fresh")
+TIERS = ("val", "test", "near", "far")
 VARIANTS = ("clip", "base", "apos", "gate", "tda", "gpos")
 LABELS = {"clip": "CLIP", "base": "+ negative cache", "apos": "+ positive cache, agreeing samples only",
           "gate": "+ positive cache, disagreeing samples only (gate)", "tda": "+ positive cache, all samples (TDA)",
@@ -61,7 +62,7 @@ MEASURES = {
     "weight_gap": ("relation", "cache weight: CLIP top-1 − own top"),
     "alpha_needed": ("relation", "α needed to flip"),
 }
-TIER_COLORS = {"val": "#9ecae1", "test": "#3182bd", "dev": "#31a354", "fresh": "#e6550d"}
+TIER_COLORS = {"val": "#9ecae1", "test": "#3182bd", "near": "#31a354", "far": "#756bb1"}
 MIN_CLASS = 20  # flips of each kind for a per-dataset AUC
 
 
@@ -181,12 +182,38 @@ def fit_logistic(frame: pd.DataFrame, l2: float = 1e-3):
     return score
 
 
-def filter_gain(frame: pd.DataFrame, p_right: np.ndarray, threshold: float) -> pd.DataFrame:
-    """Accuracy change (points) per dataset and seed from reverting flips with P(right) < threshold to CLIP."""
-    blocked = p_right < threshold
+def block_gain(frame: pd.DataFrame, blocked: np.ndarray) -> pd.DataFrame:
+    """Accuracy change (points) per dataset and seed from reverting the `blocked` flips to CLIP."""
     g = frame.assign(gain=np.where(blocked, np.where(frame.right, -1.0, 1.0), 0.0))
     return (g.groupby(["dataset", "seed"]).agg(gain=("gain", "sum"), n=("n", "first"))
             .assign(accuracy=lambda d: 100 * d.gain / d.n).reset_index())
+
+
+def filter_gain(frame: pd.DataFrame, p_right: np.ndarray, threshold: float) -> pd.DataFrame:
+    """Accuracy change (points) per dataset and seed from reverting flips with P(right) < threshold to CLIP."""
+    return block_gain(frame, p_right < threshold)
+
+
+def rule_rows(flips: pd.DataFrame, design: str = "val") -> pd.DataFrame:
+    """Best one-score rule per measure: block flips on one side of a threshold (never "block none"). Side and threshold (a design-tier
+    quantile) maximise the design tier's accuracy change; the rule is then applied unchanged to every tier."""
+    dz = flips[flips.tier == design]
+    rows = []
+    for key in MEASURES:
+        x = dz[key].replace(np.inf, np.nan)
+        best = (-np.inf, None, None)
+        for t in np.unique(np.nanquantile(x, np.linspace(0.05, 0.95, 19))):
+            for side in ("below", "above"):
+                blocked = (dz[key] < t) if side == "below" else (dz[key] > t)
+                g = tier_mean(block_gain(dz, blocked.to_numpy()), "accuracy")
+                if g > best[0]:
+                    best = (g, t, side)
+        for tier, d in flips.groupby("tier"):
+            _, t, side = best
+            blocked = np.zeros(len(d), bool) if t is None else ((d[key] < t) if side == "below" else (d[key] > t))
+            rows.append({"measure": key, "tier": tier, "side": side, "threshold": t,
+                         "gain": tier_mean(block_gain(d, np.asarray(blocked)), "accuracy")})
+    return pd.DataFrame(rows)
 
 
 def oracle_rows(run, tier: str, alpha: float = ALPHA) -> dict:
@@ -243,29 +270,32 @@ def info_tables(flips: pd.DataFrame, oracle: pd.DataFrame, design: str = "val"):
     return pd.DataFrame(auc_rows), pd.DataFrame(rate_rows), pd.DataFrame(comb)
 
 
-def fig_auc(aucs: pd.DataFrame, path: Path):
-    keys = list(MEASURES) + ["combined"]
-    labels = [f"{MEASURES[k][0]}: {MEASURES[k][1]}" if k in MEASURES else "all ten combined (fit on val)"
-              for k in keys]
-    fig, ax = plt.subplots(figsize=(7.0, 4.4))
+HELD = ("test", "near", "far")  # every tier but the one the rules are chosen on
+
+
+def fig_gain(rules: pd.DataFrame, comb: pd.DataFrame, path: Path):
+    """Accuracy change from the best val-chosen rule on each score, per held-out tier, against the oracle."""
+    keys = ["oracle"] + list(MEASURES) + ["combined"]
+    labels = (["oracle: block every wrong flip"] + [f"{MEASURES[k][0]}: {MEASURES[k][1]}" for k in MEASURES]
+              + ["all ten combined (logistic, fit on val)"])
+    c = comb.set_index("tier")
+    vals = {k: rules[rules.measure == k].set_index("tier").gain for k in MEASURES}
+    vals["combined"], vals["oracle"] = c.filter_gain, c.oracle_block
+    fig, ax = plt.subplots(figsize=(7.6, 4.6))
     y = np.arange(len(keys))[::-1]
-    for i, tier in enumerate(TIERS):
-        d = aucs[aucs.tier == tier].set_index("measure").loc[keys]
-        off = (i - 1.5) * 0.17
-        ax.hlines(y + off, d.auc_ds_min, d.auc_ds_max, color=TIER_COLORS[tier], lw=1.6, alpha=0.4)
-        ax.plot(d.auc, y + off, "o", color=TIER_COLORS[tier], ms=4.5, label=tier)
-    ax.axvline(0.5, color="k", lw=0.8, ls="--")
-    ax.axvspan(0.45, 0.55, color="#dddddd", alpha=0.6, zorder=0)
+    tiers = [t for t in ("val",) + HELD if t in c.index]
+    h = 0.8 / len(tiers)
+    for i, tier in enumerate(tiers):
+        ax.barh(y + (len(tiers) / 2 - i - 0.5) * h, [vals[k].get(tier, np.nan) for k in keys], height=h,
+                color=TIER_COLORS[tier], label=tier)
+    ax.axvline(0, color="k", lw=0.8)
+    ax.axhline(len(keys) - 1.5, color="#999999", lw=0.6)
     ax.set_yticks(y, labels, fontsize=7.5)
-    for i in (2.5, 5.5, 9.5):  # between the CLIP, cache, relation and combined groups
-        ax.axhline(len(keys) - 1 - i, color="#999999", lw=0.6)
-    ax.set_xlim(0.2, 0.82)
-    ax.set_xlabel("AUC, right vs wrong flips (dot: pooled; line: range over datasets)", fontsize=7.5)
-    ax.set_title("Label-free scores of CLIP, of the cache and of their relation\n"
-                 "do not tell right flips from wrong ones on new datasets", fontsize=8)
-    ax.legend(fontsize=7, loc="upper left", bbox_to_anchor=(1.01, 1.0))
+    ax.set_xlabel("accuracy change (points) from reverting flips to CLIP by the rule", fontsize=7.5)
+    ax.set_title("Best rule per score (chosen on val) vs. the oracle", fontsize=8)
+    ax.legend(fontsize=7, loc="lower right")
     fig.tight_layout()
-    fig.savefig(path, dpi=200)
+    fig.savefig(path, dpi=200, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -274,15 +304,16 @@ def fig_rates(rates: pd.DataFrame, path: Path):
     for ax, (key, (group, label)) in zip(axes.flat, MEASURES.items()):
         for tier in TIERS:
             d = rates[(rates.measure == key) & (rates.tier == tier) & (rates.n >= 30)]
-            ax.plot(d.bin, d.right_pct, "o-", color=TIER_COLORS[tier], ms=3, lw=1.2, label=tier)
+            ax.plot((d.lo + d.hi) / 2, d.right_pct, "o-", color=TIER_COLORS[tier], ms=3, lw=1.2, label=tier)
         ax.axhline(50, color="k", lw=0.6, ls="--")
         ax.set_title(f"{group}: {label}", fontsize=8)
-        ax.set_xticks(range(8), [f"{i + 1}" for i in range(8)], fontsize=7)
-        ax.set_ylim(20, 100)
+        ax.set_xlabel("score value (bin centre)", fontsize=7)
+        ax.tick_params(labelsize=7)
+        if key == "alpha_needed":
+            ax.set_xscale("symlog")
+        ax.set_ylim(10, 100)
     for ax in axes[:, 0]:
         ax.set_ylabel("% right flips", fontsize=8)
-    for ax in axes[1]:
-        ax.set_xlabel("octile of the score (all tiers)", fontsize=7.5)
     axes.flat[0].legend(fontsize=7)
     fig.tight_layout()
     fig.savefig(path, dpi=200)
@@ -293,14 +324,15 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--trace-root", default="replay_results/t14")
     ap.add_argument("--fresh-root", default="replay_results/t16_fresh")
+    ap.add_argument("--shift-root", default="replay_results/t17_shift")
     ap.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2])
     ap.add_argument("--out-dir", default=str(OUT))
     a = ap.parse_args(argv)
-    spec = {"val": (a.trace_root, DATASETS, "val"), "test": (a.trace_root, DATASETS, "test"),
-            "dev": (a.trace_root, DEV_DATASETS, "test"), "fresh": (a.fresh_root, FRESH_DATASETS, "test")}
+    spec = {"val": (DATASETS, "val"), "test": (DATASETS, "test"), "near": (NEAR, "test"), "far": (FAR, "test")}
     abl, flips, orc, skipped = [], [], [], []
-    for tier, (root, datasets, split) in spec.items():
+    for tier, (datasets, split) in spec.items():
         for ds in datasets:
+            root = replay_root(ds, a.trace_root, a.fresh_root, a.shift_root)
             if not all(trace_path(root, ds, s, split, "tda_eq_clean").exists() for s in a.seeds):
                 skipped.append(ds)
                 continue
@@ -310,6 +342,7 @@ def main(argv=None):
             orc += [oracle_rows(r, tier) for r in runs]
     abl, flips, orc = pd.concat(abl, ignore_index=True), pd.concat(flips, ignore_index=True), pd.DataFrame(orc)
     aucs, rates, comb = info_tables(flips, orc)
+    rules = rule_rows(flips)
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)
     cols = [c for c in abl.columns if c not in ("tier", "dataset", "seed")]
@@ -319,17 +352,19 @@ def main(argv=None):
     aucs.round(4).to_csv(out / "no_info_auc.csv", index=False)
     rates.round(4).to_csv(out / "no_info_rates.csv", index=False)
     comb.round(4).to_csv(out / "no_info_filter.csv", index=False)
+    rules.round(4).to_csv(out / "no_info_rules.csv", index=False)
     FIG.mkdir(parents=True, exist_ok=True)
-    fig_auc(aucs, FIG / "no_info_auc.png")
+    fig_gain(rules, comb, FIG / "no_info_gain.png")
     fig_rates(rates, FIG / "no_info_rates.png")
     REPORT_FIG.mkdir(parents=True, exist_ok=True)
-    for name in ("no_info_auc.png", "no_info_rates.png"):
+    for name in ("no_info_gain.png", "no_info_rates.png"):
         shutil.copy(FIG / name, REPORT_FIG / name)
     print("skipped (no full trace):", ", ".join(skipped) or "none")
     print(abl_mean.set_index("tier")[[f"{k}_{m}" for k in VARIANTS for m in ("acc", "ece")]].round(2).T)
     print(abl_mean.set_index("tier")[[c for c in cols if "agree" in c]].round(2).T)
     print(aucs.pivot(index="measure", columns="tier", values="auc")[list(TIERS)].round(3))
     print(comb.round(3))
+    print(rules.pivot(index="measure", columns="tier", values="gain")[list(TIERS)].round(3))
 
 
 if __name__ == "__main__":

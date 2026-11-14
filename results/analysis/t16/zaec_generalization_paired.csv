@@ -1,181 +1,157 @@
 dataset,method,reference,metric,n,seeds,mean_diff,std_diff,mae_diff,ci90_lo,ci90_hi,wins,ties,losses,tier
 mean,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,all
-mean,TDA,TDA + ZAEC,ece,3,0 1 2,0.5537,0.1232,0.5537,,,0,0,3,all
-mean,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,-0.013,0.0169,0.0173,,,1,0,2,all
-mean,agreement gate,TDA + ZAEC,ece,3,0 1 2,-0.4703,0.0595,0.4703,,,3,0,0,all
-mean,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,-0.013,0.0169,0.0173,,,1,0,2,all
-mean,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,0.3018,0.0225,0.3018,,,0,0,3,all
+mean,TDA,TDA + ZAEC,ece,3,0 1 2,2.8171,0.4614,2.8171,,,0,0,3,all
+mean,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,0.0726,0.0605,0.0726,,,3,0,0,all
+mean,agreement gate,TDA + ZAEC,ece,3,0 1 2,0.8202,0.1789,0.8202,,,0,0,3,all
+mean,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,0.0726,0.0605,0.0726,,,3,0,0,all
+mean,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,0.652,0.1124,0.652,,,0,0,3,all
 mean,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,all
-mean,TDA + ZAEC,TDA,ece,3,0 1 2,-0.5537,0.1232,0.5537,,,3,0,0,all
-mean,agreement gate,TDA,accuracy,3,0 1 2,-0.013,0.0169,0.0173,,,1,0,2,all
-mean,agreement gate,TDA,ece,3,0 1 2,-1.0239,0.1043,1.0239,,,3,0,0,all
-mean,gate + ZAEC,TDA,accuracy,3,0 1 2,-0.013,0.0169,0.0173,,,1,0,2,all
-mean,gate + ZAEC,TDA,ece,3,0 1 2,-0.2519,0.1447,0.2519,,,3,0,0,all
-imagenetv2,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,dev
-imagenetv2,TDA,TDA + ZAEC,ece,3,0 1 2,9.1423,0.1353,9.1423,,,0,0,3,dev
-imagenetv2,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,-0.0533,0.0351,0.0533,,,0,0,3,dev
-imagenetv2,agreement gate,TDA + ZAEC,ece,3,0 1 2,-2.6435,0.1899,2.6435,,,3,0,0,dev
-imagenetv2,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,-0.0533,0.0351,0.0533,,,0,0,3,dev
-imagenetv2,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,-3.3983,0.2351,3.3983,,,3,0,0,dev
-imagenetv2,agreement gate,TDA,accuracy,3,0 1 2,-0.0533,0.0351,0.0533,,,0,0,3,dev
-imagenetv2,agreement gate,TDA,ece,3,0 1 2,-11.7858,0.0593,11.7858,,,3,0,0,dev
-imagenetv2,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,dev
-imagenetv2,TDA + ZAEC,TDA,ece,3,0 1 2,-9.1423,0.1353,9.1423,,,3,0,0,dev
-imagenetv2,gate + ZAEC,TDA,accuracy,3,0 1 2,-0.0533,0.0351,0.0533,,,0,0,3,dev
-imagenetv2,gate + ZAEC,TDA,ece,3,0 1 2,-12.5406,0.1474,12.5406,,,3,0,0,dev
-caltech101,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,dev
-caltech101,TDA,TDA + ZAEC,ece,3,0 1 2,-0.6972,0.4231,0.6972,,,3,0,0,dev
-caltech101,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,-0.1758,0.1021,0.1758,,,0,0,3,dev
-caltech101,agreement gate,TDA + ZAEC,ece,3,0 1 2,1.1476,0.0373,1.1476,,,0,0,3,dev
-caltech101,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,-0.1758,0.1021,0.1758,,,0,0,3,dev
-caltech101,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,1.4284,0.116,1.4284,,,0,0,3,dev
-caltech101,agreement gate,TDA,accuracy,3,0 1 2,-0.1758,0.1021,0.1758,,,0,0,3,dev
-caltech101,agreement gate,TDA,ece,3,0 1 2,1.8448,0.3942,1.8448,,,0,0,3,dev
-caltech101,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,dev
-caltech101,TDA + ZAEC,TDA,ece,3,0 1 2,0.6972,0.4231,0.6972,,,0,0,3,dev
-caltech101,gate + ZAEC,TDA,accuracy,3,0 1 2,-0.1758,0.1021,0.1758,,,0,0,3,dev
-caltech101,gate + ZAEC,TDA,ece,3,0 1 2,2.1255,0.5383,2.1255,,,0,0,3,dev
-food101,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,dev
-food101,TDA,TDA + ZAEC,ece,3,0 1 2,0.0826,0.1759,0.1073,,,2,0,1,dev
-food101,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,0.0733,0.0208,0.0733,,,3,0,0,dev
-food101,agreement gate,TDA + ZAEC,ece,3,0 1 2,0.1249,0.102,0.1249,,,0,0,3,dev
-food101,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,0.0733,0.0208,0.0733,,,3,0,0,dev
-food101,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,0.8269,0.1051,0.8269,,,0,0,3,dev
-food101,agreement gate,TDA,accuracy,3,0 1 2,0.0733,0.0208,0.0733,,,3,0,0,dev
-food101,agreement gate,TDA,ece,3,0 1 2,0.0424,0.244,0.1948,,,1,0,2,dev
-food101,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,dev
-food101,TDA + ZAEC,TDA,ece,3,0 1 2,-0.0826,0.1759,0.1073,,,1,0,2,dev
-food101,gate + ZAEC,TDA,accuracy,3,0 1 2,0.0733,0.0208,0.0733,,,3,0,0,dev
-food101,gate + ZAEC,TDA,ece,3,0 1 2,0.7443,0.2631,0.7443,,,0,0,3,dev
-ucf101,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,dev
-ucf101,TDA,TDA + ZAEC,ece,3,0 1 2,6.0632,0.2612,6.0632,,,0,0,3,dev
-ucf101,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,0.1057,0.1152,0.1234,,,2,0,1,dev
-ucf101,agreement gate,TDA + ZAEC,ece,3,0 1 2,-0.216,0.0936,0.216,,,3,0,0,dev
-ucf101,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,0.1057,0.1152,0.1234,,,2,0,1,dev
-ucf101,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,0.7586,0.09,0.7586,,,0,0,3,dev
-ucf101,agreement gate,TDA,accuracy,3,0 1 2,0.1057,0.1152,0.1234,,,2,0,1,dev
-ucf101,agreement gate,TDA,ece,3,0 1 2,-6.2792,0.354,6.2792,,,3,0,0,dev
-ucf101,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,dev
-ucf101,TDA + ZAEC,TDA,ece,3,0 1 2,-6.0632,0.2612,6.0632,,,3,0,0,dev
-ucf101,gate + ZAEC,TDA,accuracy,3,0 1 2,0.1057,0.1152,0.1234,,,2,0,1,dev
-ucf101,gate + ZAEC,TDA,ece,3,0 1 2,-5.3047,0.201,5.3047,,,3,0,0,dev
-mean,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,dev
-mean,TDA,TDA + ZAEC,ece,3,0 1 2,3.6477,0.0633,3.6477,,,0,0,3,dev
-mean,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,-0.0125,0.0042,0.0125,,,0,0,3,dev
-mean,agreement gate,TDA + ZAEC,ece,3,0 1 2,-0.3967,0.0508,0.3967,,,3,0,0,dev
-mean,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,-0.0125,0.0042,0.0125,,,0,0,3,dev
-mean,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,-0.0961,0.084,0.0961,,,3,0,0,dev
-mean,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,dev
-mean,TDA + ZAEC,TDA,ece,3,0 1 2,-3.6477,0.0633,3.6477,,,3,0,0,dev
-mean,agreement gate,TDA,accuracy,3,0 1 2,-0.0125,0.0042,0.0125,,,0,0,3,dev
-mean,agreement gate,TDA,ece,3,0 1 2,-4.0445,0.1141,4.0445,,,3,0,0,dev
-mean,gate + ZAEC,TDA,accuracy,3,0 1 2,-0.0125,0.0042,0.0125,,,0,0,3,dev
-mean,gate + ZAEC,TDA,ece,3,0 1 2,-3.7439,0.1376,3.7439,,,3,0,0,dev
-imagenet_a,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-imagenet_a,TDA,TDA + ZAEC,ece,3,0 1 2,6.3193,0.1632,6.3193,,,0,0,3,fresh
-imagenet_a,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,0.0533,0.0353,0.0533,,,3,0,0,fresh
-imagenet_a,agreement gate,TDA + ZAEC,ece,3,0 1 2,-0.4141,0.2165,0.4141,,,3,0,0,fresh
-imagenet_a,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,0.0533,0.0353,0.0533,,,3,0,0,fresh
-imagenet_a,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,-2.411,0.1249,2.411,,,3,0,0,fresh
-imagenet_a,agreement gate,TDA,accuracy,3,0 1 2,0.0533,0.0353,0.0533,,,3,0,0,fresh
-imagenet_a,agreement gate,TDA,ece,3,0 1 2,-6.7333,0.1256,6.7333,,,3,0,0,fresh
-imagenet_a,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-imagenet_a,TDA + ZAEC,TDA,ece,3,0 1 2,-6.3193,0.1632,6.3193,,,3,0,0,fresh
-imagenet_a,gate + ZAEC,TDA,accuracy,3,0 1 2,0.0533,0.0353,0.0533,,,3,0,0,fresh
-imagenet_a,gate + ZAEC,TDA,ece,3,0 1 2,-8.7303,0.2191,8.7303,,,3,0,0,fresh
-imagenet_r,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-imagenet_r,TDA,TDA + ZAEC,ece,3,0 1 2,-2.8778,0.039,2.8778,,,3,0,0,fresh
-imagenet_r,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,0.0444,0.0164,0.0444,,,3,0,0,fresh
-imagenet_r,agreement gate,TDA + ZAEC,ece,3,0 1 2,-0.7785,0.0149,0.7785,,,3,0,0,fresh
-imagenet_r,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,0.0444,0.0164,0.0444,,,3,0,0,fresh
-imagenet_r,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,0.9075,0.0133,0.9075,,,0,0,3,fresh
-imagenet_r,agreement gate,TDA,accuracy,3,0 1 2,0.0444,0.0164,0.0444,,,3,0,0,fresh
-imagenet_r,agreement gate,TDA,ece,3,0 1 2,2.0993,0.0242,2.0993,,,0,0,3,fresh
-imagenet_r,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-imagenet_r,TDA + ZAEC,TDA,ece,3,0 1 2,2.8778,0.039,2.8778,,,0,0,3,fresh
-imagenet_r,gate + ZAEC,TDA,accuracy,3,0 1 2,0.0444,0.0164,0.0444,,,3,0,0,fresh
-imagenet_r,gate + ZAEC,TDA,ece,3,0 1 2,3.7853,0.0269,3.7853,,,0,0,3,fresh
-stl10,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-stl10,TDA,TDA + ZAEC,ece,3,0 1 2,-1.0505,0.0089,1.0505,,,3,0,0,fresh
-stl10,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,-0.05,0.0217,0.05,,,0,0,3,fresh
-stl10,agreement gate,TDA + ZAEC,ece,3,0 1 2,0.0181,0.0141,0.0181,,,0,0,3,fresh
-stl10,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,-0.05,0.0217,0.05,,,0,0,3,fresh
-stl10,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,0.2062,0.035,0.2062,,,0,0,3,fresh
-stl10,agreement gate,TDA,accuracy,3,0 1 2,-0.05,0.0217,0.05,,,0,0,3,fresh
-stl10,agreement gate,TDA,ece,3,0 1 2,1.0686,0.0145,1.0686,,,0,0,3,fresh
-stl10,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-stl10,TDA + ZAEC,TDA,ece,3,0 1 2,1.0505,0.0089,1.0505,,,0,0,3,fresh
-stl10,gate + ZAEC,TDA,accuracy,3,0 1 2,-0.05,0.0217,0.05,,,0,0,3,fresh
-stl10,gate + ZAEC,TDA,ece,3,0 1 2,1.2568,0.0419,1.2568,,,0,0,3,fresh
-cifar10,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-cifar10,TDA,TDA + ZAEC,ece,3,0 1 2,-3.5187,0.0713,3.5187,,,3,0,0,fresh
-cifar10,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,0.0133,0.0351,0.0267,,,2,0,1,fresh
-cifar10,agreement gate,TDA + ZAEC,ece,3,0 1 2,-0.1035,0.0463,0.1035,,,3,0,0,fresh
-cifar10,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,0.0133,0.0351,0.0267,,,2,0,1,fresh
-cifar10,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,0.7398,0.1016,0.7398,,,0,0,3,fresh
-cifar10,agreement gate,TDA,accuracy,3,0 1 2,0.0133,0.0351,0.0267,,,2,0,1,fresh
-cifar10,agreement gate,TDA,ece,3,0 1 2,3.4153,0.1173,3.4153,,,0,0,3,fresh
-cifar10,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-cifar10,TDA + ZAEC,TDA,ece,3,0 1 2,3.5187,0.0713,3.5187,,,0,0,3,fresh
-cifar10,gate + ZAEC,TDA,accuracy,3,0 1 2,0.0133,0.0351,0.0267,,,2,0,1,fresh
-cifar10,gate + ZAEC,TDA,ece,3,0 1 2,4.2585,0.1697,4.2585,,,0,0,3,fresh
-cifar100,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-cifar100,TDA,TDA + ZAEC,ece,3,0 1 2,-7.4313,0.0843,7.4313,,,3,0,0,fresh
-cifar100,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,-0.02,0.0557,0.04,,,1,0,2,fresh
-cifar100,agreement gate,TDA + ZAEC,ece,3,0 1 2,-2.1094,0.0369,2.1094,,,3,0,0,fresh
-cifar100,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,-0.02,0.0557,0.04,,,1,0,2,fresh
-cifar100,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,1.2696,0.0187,1.2696,,,0,0,3,fresh
-cifar100,agreement gate,TDA,accuracy,3,0 1 2,-0.02,0.0557,0.04,,,1,0,2,fresh
-cifar100,agreement gate,TDA,ece,3,0 1 2,5.3219,0.1146,5.3219,,,0,0,3,fresh
-cifar100,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-cifar100,TDA + ZAEC,TDA,ece,3,0 1 2,7.4313,0.0843,7.4313,,,0,0,3,fresh
-cifar100,gate + ZAEC,TDA,accuracy,3,0 1 2,-0.02,0.0557,0.04,,,1,0,2,fresh
-cifar100,gate + ZAEC,TDA,ece,3,0 1 2,8.7009,0.103,8.7009,,,0,0,3,fresh
-voc2007,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-voc2007,TDA,TDA + ZAEC,ece,3,0 1 2,0.8886,0.1204,0.8886,,,0,0,3,fresh
-voc2007,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,-0.0979,0.0336,0.0979,,,0,0,3,fresh
-voc2007,agreement gate,TDA + ZAEC,ece,3,0 1 2,0.1142,0.0814,0.1142,,,0,0,3,fresh
-voc2007,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,-0.0979,0.0336,0.0979,,,0,0,3,fresh
-voc2007,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,-0.0417,0.0603,0.0555,,,2,0,1,fresh
-voc2007,agreement gate,TDA,accuracy,3,0 1 2,-0.0979,0.0336,0.0979,,,0,0,3,fresh
-voc2007,agreement gate,TDA,ece,3,0 1 2,-0.7744,0.0443,0.7744,,,3,0,0,fresh
-voc2007,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-voc2007,TDA + ZAEC,TDA,ece,3,0 1 2,-0.8886,0.1204,0.8886,,,3,0,0,fresh
-voc2007,gate + ZAEC,TDA,accuracy,3,0 1 2,-0.0979,0.0336,0.0979,,,0,0,3,fresh
-voc2007,gate + ZAEC,TDA,ece,3,0 1 2,-0.9303,0.061,0.9303,,,3,0,0,fresh
-gtsrb,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-gtsrb,TDA,TDA + ZAEC,ece,3,0 1 2,-2.3136,0.6811,2.3136,,,3,0,0,fresh
-gtsrb,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,0.0871,0.0838,0.0924,,,2,0,1,fresh
-gtsrb,agreement gate,TDA + ZAEC,ece,3,0 1 2,-1.4863,0.2987,1.4863,,,3,0,0,fresh
-gtsrb,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,0.0871,0.0838,0.0924,,,2,0,1,fresh
-gtsrb,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,0.9271,0.1122,0.9271,,,0,0,3,fresh
-gtsrb,agreement gate,TDA,accuracy,3,0 1 2,0.0871,0.0838,0.0924,,,2,0,1,fresh
-gtsrb,agreement gate,TDA,ece,3,0 1 2,0.8272,0.383,0.8272,,,0,0,3,fresh
-gtsrb,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-gtsrb,TDA + ZAEC,TDA,ece,3,0 1 2,2.3136,0.6811,2.3136,,,0,0,3,fresh
-gtsrb,gate + ZAEC,TDA,accuracy,3,0 1 2,0.0871,0.0838,0.0924,,,2,0,1,fresh
-gtsrb,gate + ZAEC,TDA,ece,3,0 1 2,3.2407,0.6039,3.2407,,,0,0,3,fresh
-cars,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-cars,TDA,TDA + ZAEC,ece,3,0 1 2,2.0371,0.5527,2.0371,,,0,0,3,fresh
-cars,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,-0.1368,0.2597,0.2446,,,1,0,2,fresh
-cars,agreement gate,TDA + ZAEC,ece,3,0 1 2,0.7034,0.3804,0.7034,,,0,0,3,fresh
-cars,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,-0.1368,0.2597,0.2446,,,1,0,2,fresh
-cars,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,2.4086,0.2295,2.4086,,,0,0,3,fresh
-cars,agreement gate,TDA,accuracy,3,0 1 2,-0.1368,0.2597,0.2446,,,1,0,2,fresh
-cars,agreement gate,TDA,ece,3,0 1 2,-1.3337,0.4498,1.3337,,,3,0,0,fresh
-cars,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-cars,TDA + ZAEC,TDA,ece,3,0 1 2,-2.0371,0.5527,2.0371,,,3,0,0,fresh
-cars,gate + ZAEC,TDA,accuracy,3,0 1 2,-0.1368,0.2597,0.2446,,,1,0,2,fresh
-cars,gate + ZAEC,TDA,ece,3,0 1 2,0.3715,0.4285,0.4039,,,1,0,2,fresh
-mean,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-mean,TDA,TDA + ZAEC,ece,3,0 1 2,-0.9934,0.1566,0.9934,,,3,0,0,fresh
-mean,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,-0.0133,0.0274,0.0255,,,1,0,2,fresh
-mean,agreement gate,TDA + ZAEC,ece,3,0 1 2,-0.507,0.0973,0.507,,,3,0,0,fresh
-mean,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,-0.0133,0.0274,0.0255,,,1,0,2,fresh
-mean,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,0.5008,0.0249,0.5008,,,0,0,3,fresh
-mean,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,fresh
-mean,TDA + ZAEC,TDA,ece,3,0 1 2,0.9934,0.1566,0.9934,,,0,0,3,fresh
-mean,agreement gate,TDA,accuracy,3,0 1 2,-0.0133,0.0274,0.0255,,,1,0,2,fresh
-mean,agreement gate,TDA,ece,3,0 1 2,0.4864,0.0998,0.4864,,,0,0,3,fresh
-mean,gate + ZAEC,TDA,accuracy,3,0 1 2,-0.0133,0.0274,0.0255,,,1,0,2,fresh
-mean,gate + ZAEC,TDA,ece,3,0 1 2,1.4941,0.1483,1.4941,,,0,0,3,fresh
+mean,TDA + ZAEC,TDA,ece,3,0 1 2,-2.8171,0.4614,2.8171,,,3,0,0,all
+mean,agreement gate,TDA,accuracy,3,0 1 2,0.0726,0.0605,0.0726,,,3,0,0,all
+mean,agreement gate,TDA,ece,3,0 1 2,-1.9969,0.3121,1.9969,,,3,0,0,all
+mean,gate + ZAEC,TDA,accuracy,3,0 1 2,0.0726,0.0605,0.0726,,,3,0,0,all
+mean,gate + ZAEC,TDA,ece,3,0 1 2,-2.1651,0.3594,2.1651,,,3,0,0,all
+gtsrb,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+gtsrb,TDA,TDA + ZAEC,ece,3,0 1 2,-2.3136,0.6811,2.3136,,,3,0,0,far
+gtsrb,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,0.0871,0.0838,0.0924,,,2,0,1,far
+gtsrb,agreement gate,TDA + ZAEC,ece,3,0 1 2,-1.4863,0.2987,1.4863,,,3,0,0,far
+gtsrb,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,0.0871,0.0838,0.0924,,,2,0,1,far
+gtsrb,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,0.9271,0.1122,0.9271,,,0,0,3,far
+gtsrb,agreement gate,TDA,accuracy,3,0 1 2,0.0871,0.0838,0.0924,,,2,0,1,far
+gtsrb,agreement gate,TDA,ece,3,0 1 2,0.8272,0.383,0.8272,,,0,0,3,far
+gtsrb,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+gtsrb,TDA + ZAEC,TDA,ece,3,0 1 2,2.3136,0.6811,2.3136,,,0,0,3,far
+gtsrb,gate + ZAEC,TDA,accuracy,3,0 1 2,0.0871,0.0838,0.0924,,,2,0,1,far
+gtsrb,gate + ZAEC,TDA,ece,3,0 1 2,3.2407,0.6039,3.2407,,,0,0,3,far
+fer2013,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+fer2013,TDA,TDA + ZAEC,ece,3,0 1 2,-0.5492,1.6524,1.4391,,,2,0,1,far
+fer2013,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,0.4889,0.4168,0.4889,,,3,0,0,far
+fer2013,agreement gate,TDA + ZAEC,ece,3,0 1 2,-1.42,0.7432,1.42,,,3,0,0,far
+fer2013,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,0.4889,0.4168,0.4889,,,3,0,0,far
+fer2013,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,0.8227,0.3153,0.8227,,,0,0,3,far
+fer2013,agreement gate,TDA,accuracy,3,0 1 2,0.4889,0.4168,0.4889,,,3,0,0,far
+fer2013,agreement gate,TDA,ece,3,0 1 2,-0.8708,1.2816,1.1819,,,2,0,1,far
+fer2013,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+fer2013,TDA + ZAEC,TDA,ece,3,0 1 2,0.5492,1.6524,1.4391,,,1,0,2,far
+fer2013,gate + ZAEC,TDA,accuracy,3,0 1 2,0.4889,0.4168,0.4889,,,3,0,0,far
+fer2013,gate + ZAEC,TDA,ece,3,0 1 2,1.372,1.4711,1.5897,,,1,0,2,far
+pcam,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+pcam,TDA,TDA + ZAEC,ece,3,0 1 2,8.7003,0.6529,8.7003,,,0,0,3,far
+pcam,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+pcam,agreement gate,TDA + ZAEC,ece,3,0 1 2,-0.9853,0.1002,0.9853,,,3,0,0,far
+pcam,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+pcam,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,0.0102,0.0197,0.0118,,,2,0,1,far
+pcam,agreement gate,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+pcam,agreement gate,TDA,ece,3,0 1 2,-9.6856,0.5775,9.6856,,,3,0,0,far
+pcam,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+pcam,TDA + ZAEC,TDA,ece,3,0 1 2,-8.7003,0.6529,8.7003,,,3,0,0,far
+pcam,gate + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+pcam,gate + ZAEC,TDA,ece,3,0 1 2,-8.6901,0.6592,8.6901,,,3,0,0,far
+svhn,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+svhn,TDA,TDA + ZAEC,ece,3,0 1 2,7.4238,0.3165,7.4238,,,0,0,3,far
+svhn,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,0.2889,0.0694,0.2889,,,3,0,0,far
+svhn,agreement gate,TDA + ZAEC,ece,3,0 1 2,3.442,0.5769,3.442,,,0,0,3,far
+svhn,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,0.2889,0.0694,0.2889,,,3,0,0,far
+svhn,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,-0.2044,0.2511,0.2591,,,2,0,1,far
+svhn,agreement gate,TDA,accuracy,3,0 1 2,0.2889,0.0694,0.2889,,,3,0,0,far
+svhn,agreement gate,TDA,ece,3,0 1 2,-3.9818,0.2763,3.9818,,,3,0,0,far
+svhn,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+svhn,TDA + ZAEC,TDA,ece,3,0 1 2,-7.4238,0.3165,7.4238,,,3,0,0,far
+svhn,gate + ZAEC,TDA,accuracy,3,0 1 2,0.2889,0.0694,0.2889,,,3,0,0,far
+svhn,gate + ZAEC,TDA,ece,3,0 1 2,-7.6282,0.536,7.6282,,,3,0,0,far
+mnist,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+mnist,TDA,TDA + ZAEC,ece,3,0 1 2,14.4855,1.639,14.4855,,,0,0,3,far
+mnist,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,0.0556,0.0962,0.0556,,,1,2,0,far
+mnist,agreement gate,TDA + ZAEC,ece,3,0 1 2,7.2642,0.945,7.2642,,,0,0,3,far
+mnist,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,0.0556,0.0962,0.0556,,,1,2,0,far
+mnist,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,-0.7531,0.9391,0.9263,,,2,0,1,far
+mnist,agreement gate,TDA,accuracy,3,0 1 2,0.0556,0.0962,0.0556,,,1,2,0,far
+mnist,agreement gate,TDA,ece,3,0 1 2,-7.2212,0.8356,7.2212,,,3,0,0,far
+mnist,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+mnist,TDA + ZAEC,TDA,ece,3,0 1 2,-14.4855,1.639,14.4855,,,3,0,0,far
+mnist,gate + ZAEC,TDA,accuracy,3,0 1 2,0.0556,0.0962,0.0556,,,1,2,0,far
+mnist,gate + ZAEC,TDA,ece,3,0 1 2,-15.2386,0.7528,15.2386,,,3,0,0,far
+rendered_sst2,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+rendered_sst2,TDA,TDA + ZAEC,ece,3,0 1 2,1.8795,0.4527,1.8795,,,0,0,3,far
+rendered_sst2,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+rendered_sst2,agreement gate,TDA + ZAEC,ece,3,0 1 2,0.1899,0.0633,0.1899,,,0,0,3,far
+rendered_sst2,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+rendered_sst2,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,0.1464,0.0634,0.1464,,,0,0,3,far
+rendered_sst2,agreement gate,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+rendered_sst2,agreement gate,TDA,ece,3,0 1 2,-1.6896,0.4893,1.6896,,,3,0,0,far
+rendered_sst2,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+rendered_sst2,TDA + ZAEC,TDA,ece,3,0 1 2,-1.8795,0.4527,1.8795,,,3,0,0,far
+rendered_sst2,gate + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+rendered_sst2,gate + ZAEC,TDA,ece,3,0 1 2,-1.7332,0.483,1.7332,,,3,0,0,far
+imagenet_r,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+imagenet_r,TDA,TDA + ZAEC,ece,3,0 1 2,-2.8778,0.039,2.8778,,,3,0,0,far
+imagenet_r,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,0.0444,0.0164,0.0444,,,3,0,0,far
+imagenet_r,agreement gate,TDA + ZAEC,ece,3,0 1 2,-0.7785,0.0149,0.7785,,,3,0,0,far
+imagenet_r,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,0.0444,0.0164,0.0444,,,3,0,0,far
+imagenet_r,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,0.9075,0.0133,0.9075,,,0,0,3,far
+imagenet_r,agreement gate,TDA,accuracy,3,0 1 2,0.0444,0.0164,0.0444,,,3,0,0,far
+imagenet_r,agreement gate,TDA,ece,3,0 1 2,2.0993,0.0242,2.0993,,,0,0,3,far
+imagenet_r,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+imagenet_r,TDA + ZAEC,TDA,ece,3,0 1 2,2.8778,0.039,2.8778,,,0,0,3,far
+imagenet_r,gate + ZAEC,TDA,accuracy,3,0 1 2,0.0444,0.0164,0.0444,,,3,0,0,far
+imagenet_r,gate + ZAEC,TDA,ece,3,0 1 2,3.7853,0.0269,3.7853,,,0,0,3,far
+mean,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+mean,TDA,TDA + ZAEC,ece,3,0 1 2,3.8212,0.5954,3.8212,,,0,0,3,far
+mean,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,0.1378,0.0841,0.1378,,,3,0,0,far
+mean,agreement gate,TDA + ZAEC,ece,3,0 1 2,0.8894,0.2341,0.8894,,,0,0,3,far
+mean,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,0.1378,0.0841,0.1378,,,3,0,0,far
+mean,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,0.2652,0.1453,0.2652,,,0,0,3,far
+mean,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,far
+mean,TDA + ZAEC,TDA,ece,3,0 1 2,-3.8212,0.5954,3.8212,,,3,0,0,far
+mean,agreement gate,TDA,accuracy,3,0 1 2,0.1378,0.0841,0.1378,,,3,0,0,far
+mean,agreement gate,TDA,ece,3,0 1 2,-2.9318,0.3976,2.9318,,,3,0,0,far
+mean,gate + ZAEC,TDA,accuracy,3,0 1 2,0.1378,0.0841,0.1378,,,3,0,0,far
+mean,gate + ZAEC,TDA,ece,3,0 1 2,-3.556,0.4624,3.556,,,3,0,0,far
+caltech101,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,near
+caltech101,TDA,TDA + ZAEC,ece,3,0 1 2,-0.6972,0.4231,0.6972,,,3,0,0,near
+caltech101,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,-0.1758,0.1021,0.1758,,,0,0,3,near
+caltech101,agreement gate,TDA + ZAEC,ece,3,0 1 2,1.1476,0.0373,1.1476,,,0,0,3,near
+caltech101,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,-0.1758,0.1021,0.1758,,,0,0,3,near
+caltech101,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,1.4284,0.116,1.4284,,,0,0,3,near
+caltech101,agreement gate,TDA,accuracy,3,0 1 2,-0.1758,0.1021,0.1758,,,0,0,3,near
+caltech101,agreement gate,TDA,ece,3,0 1 2,1.8448,0.3942,1.8448,,,0,0,3,near
+caltech101,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,near
+caltech101,TDA + ZAEC,TDA,ece,3,0 1 2,0.6972,0.4231,0.6972,,,0,0,3,near
+caltech101,gate + ZAEC,TDA,accuracy,3,0 1 2,-0.1758,0.1021,0.1758,,,0,0,3,near
+caltech101,gate + ZAEC,TDA,ece,3,0 1 2,2.1255,0.5383,2.1255,,,0,0,3,near
+food101,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,near
+food101,TDA,TDA + ZAEC,ece,3,0 1 2,0.0826,0.1759,0.1073,,,2,0,1,near
+food101,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,0.0733,0.0208,0.0733,,,3,0,0,near
+food101,agreement gate,TDA + ZAEC,ece,3,0 1 2,0.1249,0.102,0.1249,,,0,0,3,near
+food101,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,0.0733,0.0208,0.0733,,,3,0,0,near
+food101,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,0.8269,0.1051,0.8269,,,0,0,3,near
+food101,agreement gate,TDA,accuracy,3,0 1 2,0.0733,0.0208,0.0733,,,3,0,0,near
+food101,agreement gate,TDA,ece,3,0 1 2,0.0424,0.244,0.1948,,,1,0,2,near
+food101,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,near
+food101,TDA + ZAEC,TDA,ece,3,0 1 2,-0.0826,0.1759,0.1073,,,1,0,2,near
+food101,gate + ZAEC,TDA,accuracy,3,0 1 2,0.0733,0.0208,0.0733,,,3,0,0,near
+food101,gate + ZAEC,TDA,ece,3,0 1 2,0.7443,0.2631,0.7443,,,0,0,3,near
+cars,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,near
+cars,TDA,TDA + ZAEC,ece,3,0 1 2,2.0371,0.5527,2.0371,,,0,0,3,near
+cars,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,-0.1368,0.2597,0.2446,,,1,0,2,near
+cars,agreement gate,TDA + ZAEC,ece,3,0 1 2,0.7034,0.3804,0.7034,,,0,0,3,near
+cars,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,-0.1368,0.2597,0.2446,,,1,0,2,near
+cars,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,2.4086,0.2295,2.4086,,,0,0,3,near
+cars,agreement gate,TDA,accuracy,3,0 1 2,-0.1368,0.2597,0.2446,,,1,0,2,near
+cars,agreement gate,TDA,ece,3,0 1 2,-1.3337,0.4498,1.3337,,,3,0,0,near
+cars,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,near
+cars,TDA + ZAEC,TDA,ece,3,0 1 2,-2.0371,0.5527,2.0371,,,3,0,0,near
+cars,gate + ZAEC,TDA,accuracy,3,0 1 2,-0.1368,0.2597,0.2446,,,1,0,2,near
+cars,gate + ZAEC,TDA,ece,3,0 1 2,0.3715,0.4285,0.4039,,,1,0,2,near
+mean,TDA,TDA + ZAEC,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,near
+mean,TDA,TDA + ZAEC,ece,3,0 1 2,0.4742,0.2902,0.4742,,,0,0,3,near
+mean,agreement gate,TDA + ZAEC,accuracy,3,0 1 2,-0.0798,0.0581,0.0798,,,0,0,3,near
+mean,agreement gate,TDA + ZAEC,ece,3,0 1 2,0.6587,0.1005,0.6587,,,0,0,3,near
+mean,gate + ZAEC,TDA + ZAEC,accuracy,3,0 1 2,-0.0798,0.0581,0.0798,,,0,0,3,near
+mean,gate + ZAEC,TDA + ZAEC,ece,3,0 1 2,1.5546,0.0652,1.5546,,,0,0,3,near
+mean,TDA + ZAEC,TDA,accuracy,3,0 1 2,0.0,0.0,0.0,,,0,3,0,near
+mean,TDA + ZAEC,TDA,ece,3,0 1 2,-0.4742,0.2902,0.4742,,,3,0,0,near
+mean,agreement gate,TDA,accuracy,3,0 1 2,-0.0798,0.0581,0.0798,,,0,0,3,near
+mean,agreement gate,TDA,ece,3,0 1 2,0.1845,0.2039,0.2174,,,1,0,2,near
+mean,gate + ZAEC,TDA,accuracy,3,0 1 2,-0.0798,0.0581,0.0798,,,0,0,3,near
+mean,gate + ZAEC,TDA,ece,3,0 1 2,1.0804,0.2318,1.0804,,,0,0,3,near

@@ -36,8 +36,10 @@ DEV_DATASETS = ("imagenetv2", "caltech101", "food101", "ucf101")  # T14 developm
 FRESH_DATASETS = ("imagenet", "imagenet_a", "imagenet_r", "imagenet_sketch",  # T15 fresh evaluation
                   "stl10", "cifar10", "cifar100", "voc2007", "gtsrb", "cars")
 WDS_SET_IDS = {"STL10": "stl10", "CIFAR10": "cifar10", "CIFAR100": "cifar100", "VOC2007": "voc2007",
-               "GTSRB": "gtsrb", "StanfordCarsWDS": "cars"}  # set id -> key in data/wds_classnames.json
-ALL_DATASETS = DATASETS + DEV_DATASETS + FRESH_DATASETS
+               "GTSRB": "gtsrb", "StanfordCarsWDS": "cars",
+               "FER2013": "fer2013", "PCAM": "pcam", "SVHN": "svhn", "MNIST": "mnist", "CLEVRCount": "clevr_count", "Country211": "country211", "RenderedSST2": "rendered_sst2", "DMLab": "dmlab", "Retinopathy": "retinopathy", "SUN397": "sun397"}  # set id -> key in data/wds_classnames.json
+SHIFT_DATASETS = ('fer2013', 'pcam', 'svhn', 'mnist', 'clevr_count', 'country211', 'rendered_sst2', 'dmlab', 'retinopathy', 'sun397')  # T17 sets
+ALL_DATASETS = DATASETS + DEV_DATASETS + FRESH_DATASETS + SHIFT_DATASETS
 TEST_ONLY_SET_IDS = ("I", "A", "K", "R", "V") + tuple(WDS_SET_IDS)  # ImageFolder sets ignore `mode`
 NORMALIZE_MEAN = [0.48145466, 0.4578275, 0.40821073]
 NORMALIZE_STD = [0.26862954, 0.26130258, 0.27577711]

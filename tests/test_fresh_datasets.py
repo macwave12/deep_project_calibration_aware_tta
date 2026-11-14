@@ -7,18 +7,19 @@ from scripts.extract_features import ALL_DATASETS, FRESH_DATASETS, class_names
 from scripts.extract_features import parse_args as extract_args
 from scripts.fetch_imagenet_val_hf import label_dir, write_rows
 from scripts.make_imagefolder_subset import class_files, make_subset
-from utils.feature_cache import FRESH_DATASETS as CACHE_FRESH, UPSTREAM_SET_ID
+from utils.feature_cache import FRESH_DATASETS as CACHE_FRESH, SHIFT_DATASETS, UPSTREAM_SET_ID
 
 
 def test_fresh_sets_are_opt_in_and_known_everywhere():
     assert set(FRESH_DATASETS) == set(CACHE_FRESH)
     assert all(d in UPSTREAM_SET_ID for d in FRESH_DATASETS)
     from scripts.fetch_wds import WDS
-    assert set(dd.FRESH_SOURCES) <= set(FRESH_DATASETS) and set(WDS) <= set(FRESH_DATASETS)
-    # every fresh set has a source: downloader, CLIP_benchmark mirror, or the HF ImageNet script
-    assert set(FRESH_DATASETS) == set(dd.FRESH_SOURCES) | set(WDS) | {"imagenet"}
+    assert set(dd.FRESH_SOURCES) <= set(FRESH_DATASETS) and set(WDS) <= set(FRESH_DATASETS) | set(SHIFT_DATASETS)
+    # every fresh set has a source: downloader, CLIP_benchmark mirror, or the HF ImageNet script; shift sets: the mirror
+    assert set(FRESH_DATASETS) == set(dd.FRESH_SOURCES) | (set(WDS) - set(SHIFT_DATASETS)) | {"imagenet"}
+    assert set(SHIFT_DATASETS) <= set(WDS) and all(d in UPSTREAM_SET_ID for d in SHIFT_DATASETS)
     assert dd.parse_args(["--data-root", "x"]).datasets == list(dd.SOURCES)
-    assert not set(extract_args([]).datasets) & set(FRESH_DATASETS)
+    assert not set(extract_args([]).datasets) & (set(FRESH_DATASETS) | set(SHIFT_DATASETS))
     assert set(FRESH_DATASETS) <= set(ALL_DATASETS)
 
 
@@ -112,7 +113,7 @@ def test_wds_sets_have_class_names_and_loader_paths():
     from data.datautils import ID_to_DIRNAME, WDS_SET_IDS
     from scripts.fetch_wds import WDS
     expected = {"STL10": 10, "CIFAR10": 10, "CIFAR100": 100, "VOC2007": 20, "GTSRB": 43,
-                "StanfordCarsWDS": 196}
+                "StanfordCarsWDS": 196, "SUN397": 397, "FER2013": 7, "Country211": 211}
     for set_id, n in expected.items():
         assert len(class_names(set_id)) == n and set_id in WDS_SET_IDS
         key = next(k for k, v in UPSTREAM_SET_ID.items() if v == set_id)
@@ -144,3 +145,10 @@ def test_tda_clean_protocol_runs_on_datasets_without_published_values():
     published = TDA(FakeCLIP(feats, text), None)
     with pytest.raises(KeyError):
         published.prepare_model_and_optimization(SimpleNamespace(test_sets="STL10", protocol="published"))
+
+
+def test_near_and_far_are_disjoint_held_out_sets():
+    from utils.feature_cache import DATASETS, EXCLUDED, FAR, NEAR, held_tier
+    assert not set(NEAR) & set(FAR) and not (set(NEAR) | set(FAR)) & (set(DATASETS) | set(EXCLUDED))
+    assert set(NEAR) | set(FAR) <= set(ALL_DATASETS)
+    assert [held_tier(d) for d in ("cars", "pcam", "voc2007", "retinopathy")] == ["near", "far", "other", "other"]

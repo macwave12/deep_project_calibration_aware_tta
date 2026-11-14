@@ -76,3 +76,20 @@ def test_incomplete_datasets_are_left_out_and_record_dece_pairs_seeds(tmp_path):
         frame = complete(fresh_records([tmp_path], [0, 1]), [0, 1])
     assert set(frame.dataset) == {"cars"}
     assert record_dece(tmp_path, "cars", [0, 1]) == pytest.approx(-5.5)
+
+
+def test_record_gaps_average_tda_and_gate_over_seeds_and_take_clip_from_seed0(tmp_path):
+    from analysis.fresh import record_gaps
+
+    def rel(conf, acc, seed, name):
+        d = tmp_path if seed == 0 else tmp_path / f"seed{seed}"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"x_{name}.json").write_text(json.dumps(
+            {"reliability": {"bin_count": [1], "bin_conf": [conf], "bin_acc": [acc]}}), encoding="utf-8")
+    rel(0.5, 0.6, 0, "clipzs")
+    for seed, (t, g) in enumerate(((0.9, 0.6), (0.7, 0.4))):
+        rel(t, 0.5, seed, "tda_eq_clean")
+        rel(g, 0.5, seed, "cal_tda_agree_clean")
+    gaps = record_gaps(tmp_path, "x", [0, 1])
+    assert gaps["clip_gap"] == pytest.approx(-10.0)
+    assert gaps["tda_gap"] == pytest.approx(30.0) and gaps["gate_gap"] == pytest.approx(0.0)

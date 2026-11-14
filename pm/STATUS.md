@@ -29,7 +29,39 @@ Updated 2026-11-11 (T16 lead session, evening). Handoff: `handoffs/2026-11-11-T1
   combined, carry almost no information about which flips are right). Report: Table 3 (ablation), section "Is there
   information beyond binary agreement?" + Fig. 2, rates figure in appendix E; abstract, contributions, conclusion
   updated (9 pages). Deck v5: 20 main + 9 backup (ablation slide in the diagnosis section, "beyond one bit" slide in
-  results; val agreement and reliability slides moved to backup; B8 rates). Not committed.
+  results; val agreement and reliability slides moved to backup; B8 rates). Committed 5a25365.
+- **2026-11-13 (Idan's paper notes, part 1):** report restructured after two reader-flow reviews: intro (CLIP, shift,
+  TTA, accuracy + ECE equation, online zero-shot TTA, TDA with its Fig. 2), Background (TDA math with c(x) as a vector,
+  calibration cost, ZAEC with its equation), Motivation (thesis, self-vote, agreement lemma; old Lemma 1 moved to the
+  appendix), Method (why argmax c vs CLIP's label), Results, "When does the gate help" (where it helps, beyond one bit,
+  limitations). Abstract in changes vs CLIP. Switch and label-free proxies moved to appendix E. Main text 7 pages.
+  Deck not yet aligned. Not committed.
+- **2026-11-14 (Idan's paper notes, part 2; T17):** new **shift tier**: 9 sets far from CLIP's web photos (FER2013,
+  PCam, SVHN, MNIST, CLEVR-count, Country211, Rendered SST2, DMLab, Retinopathy; CLIP_benchmark WDS mirror, 3000-image
+  test subsets, seed 0; `scripts/fetch_wds.py`, `scripts/replay_shift.sh` -> `replay_results/t17_shift`). There TDA adds
+  +2.77 acc and +12.16 ECE over CLIP; the gate keeps the accuracy (+2.93) and lowers ECE on 9/9 (34.52 -> 21.21, CLIP
+  22.37). ImageNet and ImageNetV2 excluded from every tier (`EXCLUDED`: TDA's P2 was searched on ImageNet val); P2 = the
+  TDA paper's single setting, P1 = the code release's per-dataset values. Gate mean ECE now below TDA's on every held-out
+  tier. Fig. 5 replaced by `no_info_gain.png` (best val-chosen threshold rule per score vs the oracle: every rule loses
+  accuracy, oracle +1.1 to +2.3); rates figure x = score value. Full suite: 395 passed, 17 skipped. Report rebuilt (7
+  main pages). Deck not aligned (still uses no_info_auc.png). Not committed.
+- **2026-11-14 (Idan): tiers are now design / near / far**, fixed by what the images are (`utils/feature_cache.py`
+  NEAR, FAR, `held_tier`): near = Caltech101, Food101, VOC2007 (ordinary photos of everyday things; STL-10 dropped as
+  ImageNet-derived); far = the 9 T17 sets + GTSRB (fine-grained labels). The other 8 held-out sets are in Appendix D only.
+  Near: TDA -0.30 acc / +0.08 ECE vs CLIP, gate -0.37 / +0.45. Far: TDA +2.80 / +10.65, gate +2.96 / -1.24 (9/10 ECE
+  wins). On near most TDA flips are wrong (right share 40%). Tests (excluding the deck): 386 passed, 17 skipped;
+  `tests/test_build_pptx.py` fails until the deck uses the new macros. Not committed.
+- **2026-11-14 (Idan), tiers revised once after first results (stated in the report):** near = Caltech101, Food101,
+  Cars (VOC2007 out: multi-object scenes); far = GTSRB, ImageNet-R, ImageNet-Sketch, FER2013, MNIST, PCam, Rendered
+  SST2, SVHN (Country211 out: label is not about the depicted object; CLEVR-count, DMLab, Retinopathy out: CLIP at or
+  below chance). Near: TDA +0.60 / -0.04 vs CLIP, gate +0.52 / +0.15. Far: TDA +3.83 / +1.85, gate +3.96 / -1.64 (6/8
+  ECE wins vs TDA; losses ImageNet-R, GTSRB). SUN397 registered (fetch_wds, class names) but abandoned: its shards are
+  class-sorted, so a partial fetch gives 37 of 397 classes; a full fetch is 41 shards. Tests (no deck): 387 passed.
+- **2026-11-14 (Idan): over- vs underconfidence.** `fresh.record_gaps` -> `results/analysis/t16/gaps.csv` (signed
+  confidence - accuracy per set; CLIP seed 0, TDA and gate mean over seeds); `report_assets.gap_numbers` macros and a
+  conf.-acc. block in Table 3. TDA raises CLIP's gap on 14/16 sets (overconfident on 13); the gate lowers TDA's on 16/16.
+  Near: CLIP -2.8, TDA +2.0, gate -2.9 (same ECE, opposite sides). Where the gate loses ECE it stays underconfident.
+  Report: intro sentence, 5.3 paragraph, limitation (i); main text 8 pages. Tests (no deck): 389 passed. Committed.
 
 ## Running (background, this machine)
 - ECALP: done (58.34 / 32.32; K49).

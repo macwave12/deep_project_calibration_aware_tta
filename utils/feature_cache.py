@@ -43,7 +43,35 @@ DEV_DATASETS = ("imagenetv2", "caltech101", "food101", "ucf101")
 # Fresh evaluation sets for the frozen method and the ban rule (T15): never looked at before.
 FRESH_DATASETS = ("imagenet", "imagenet_a", "imagenet_r", "imagenet_sketch",
                   "stl10", "cifar10", "cifar100", "voc2007", "gtsrb", "cars")
-ALL_DATASETS = DATASETS + DEV_DATASETS + FRESH_DATASETS
+# T17 sets (replay_results/t17_shift): far from CLIP's web photos (faces, medical, digits, synthetic, text,
+# geolocation). SUN397 is registered but unused (a near candidate whose download was abandoned for Cars).
+SHIFT_DATASETS = ('fer2013', 'pcam', 'svhn', 'mnist', 'clevr_count', 'country211', 'rendered_sst2', 'dmlab', 'retinopathy', 'sun397')
+ALL_DATASETS = DATASETS + DEV_DATASETS + FRESH_DATASETS + SHIFT_DATASETS
+# Left out of every evaluation tier (T17): TDA searched its hyperparameters (alpha = 2, beta = 5, our P2) on the
+# ImageNet validation set, and ImageNetV2 is a re-collection of that same distribution.
+EXCLUDED = ("imagenet", "imagenetv2")
+EVAL_DEV = tuple(d for d in DEV_DATASETS if d not in EXCLUDED)
+EVAL_FRESH = tuple(d for d in FRESH_DATASETS if d not in EXCLUDED)
+# Held-out evaluation tiers, by what the images are (Cars into near and the chance rule for far were decided
+# after a first look at the results; the report says so):
+#   near: ordinary photos of everyday objects or scenes, one named by the label, as in CLIP's web image-caption data.
+#   far: images that are not ordinary photos of the named object (medical, digits, rendered text, renditions and
+#        sketches, facial expression), or labels finer than web captions name (43 traffic-sign types); and zero-shot
+#        CLIP above chance, so its pseudo-labels carry signal to adapt from.
+# The other held-out sets are reported only in the appendix: in between (32-pixel thumbnails, ImageNet-derived photos,
+# video frames of actions, multi-object scenes reduced to one label: VOC2007), labels that are not about the depicted
+# object (Country211: where a photo was taken), or far with CLIP at or below chance (CLEVR-count, DMLab, Retinopathy).
+NEAR = ("caltech101", "food101", "cars")
+FAR = ("gtsrb", "fer2013", "pcam", "svhn", "mnist", "rendered_sst2", "imagenet_r", "imagenet_sketch")
+
+
+def held_tier(dataset: str) -> str:
+    return "near" if dataset in NEAR else "far" if dataset in FAR else "other"
+
+
+def replay_root(dataset: str, t14, fresh, shift):
+    """Replay folder holding a held-out dataset's runs (each tier of datasets was replayed into its own folder)."""
+    return shift if dataset in SHIFT_DATASETS else fresh if dataset in FRESH_DATASETS else t14
 
 # Our lowercase dataset key -> upstream `--test_sets` value (mixed case, and
 # `eurosat` stays lowercase). Same mapping as scripts/run_one.* and tests/helpers.py.
@@ -67,6 +95,16 @@ UPSTREAM_SET_ID = {
     "voc2007": "VOC2007",
     "gtsrb": "GTSRB",
     "cars": "StanfordCarsWDS",
+    "fer2013": "FER2013",
+    "pcam": "PCAM",
+    "svhn": "SVHN",
+    "mnist": "MNIST",
+    "clevr_count": "CLEVRCount",
+    "country211": "Country211",
+    "rendered_sst2": "RenderedSST2",
+    "dmlab": "DMLab",
+    "retinopathy": "Retinopathy",
+    "sun397": "SUN397",
 }
 
 # text_feats.pt is a dict with these keys:

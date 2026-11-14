@@ -119,12 +119,15 @@ WHERE_LABEL = {"clip_gap": "CLIP confidence - accuracy (pts; uses labels)",
 
 
 def fig_where(helps: pd.DataFrame, rho: pd.DataFrame, path, signal="clip_gap"):
-    fig, ax = plt.subplots(figsize=(3.4, 2.4))
-    markers = {"test": "o", "dev": "s", "fresh": "D"}
+    fig, ax = plt.subplots(figsize=(3.6, 2.6))
+    markers = {"test": "o", "near": "s", "far": "^"}
     for g, sub in helps.groupby("group"):
         ax.scatter(sub[signal], sub.d_ece, marker=markers.get(g, "o"), s=28,
-                   c=[C_GATE if v < 0 else C_TDA for v in sub.d_ece], edgecolors="black", linewidths=0.5, label=g)
+                   c=[C_GATE if v < 0 else C_TDA for v in sub.d_ece], edgecolors="black", linewidths=0.5)
+        ax.scatter([], [], marker=markers.get(g, "o"), s=28, c="white", edgecolors="black", linewidths=0.5, label=g)
     for _, r in helps.iterrows():
+        if abs(r.d_ece) < 10 and abs(r[signal]) < 10:  # the crowd near the origin stays unlabelled
+            continue
         ax.annotate(NAMES.get(r.dataset, r.dataset), (r[signal], r.d_ece), textcoords="offset points",
                     xytext=(3, 2), fontsize=5)
     r_all = rho[(rho.signal == signal) & (rho.datasets == "all")].iloc[0]

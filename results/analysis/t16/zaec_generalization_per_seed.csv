@@ -1,181 +1,157 @@
 tier,dataset,method,seed,accuracy,ece
-dev,imagenetv2,TDA,0,61.32,15.0452
-dev,imagenetv2,agreement gate,0,61.23,3.3012
-dev,imagenetv2,TDA + ZAEC,0,61.32,5.8757
-dev,imagenetv2,gate + ZAEC,0,61.23,2.6707
-dev,imagenetv2,TDA,1,61.21,15.1135
-dev,imagenetv2,agreement gate,1,61.16,3.2597
-dev,imagenetv2,TDA + ZAEC,1,61.21,6.118
-dev,imagenetv2,gate + ZAEC,1,61.16,2.4579
-dev,imagenetv2,TDA,2,61.45,15.0448
-dev,imagenetv2,agreement gate,2,61.43,3.2851
-dev,imagenetv2,TDA + ZAEC,2,61.45,5.7828
-dev,imagenetv2,gate + ZAEC,2,61.43,2.453
-dev,caltech101,TDA,0,93.4686,3.1701
-dev,caltech101,agreement gate,0,93.3063,5.2901
-dev,caltech101,TDA + ZAEC,0,93.4686,4.1397
-dev,caltech101,gate + ZAEC,0,93.3063,5.6566
-dev,caltech101,TDA,1,93.428,3.8577
-dev,caltech101,agreement gate,1,93.144,5.2508
-dev,caltech101,TDA + ZAEC,1,93.428,4.0673
-dev,caltech101,gate + ZAEC,1,93.144,5.3644
-dev,caltech101,TDA,2,93.5903,3.3796
-dev,caltech101,agreement gate,2,93.5091,5.4008
-dev,caltech101,TDA + ZAEC,2,93.5903,4.2917
-dev,caltech101,gate + ZAEC,2,93.5091,5.7629
-dev,food101,TDA,0,84.12,2.335
-dev,food101,agreement gate,0,84.17,2.5794
-dev,food101,TDA + ZAEC,0,84.12,2.3373
-dev,food101,gate + ZAEC,0,84.17,3.1269
-dev,food101,TDA,1,84.0,2.3588
-dev,food101,agreement gate,1,84.08,2.4702
-dev,food101,TDA + ZAEC,1,84.0,2.3937
-dev,food101,gate + ZAEC,1,84.08,3.3392
-dev,food101,TDA,2,83.89,2.5183
-dev,food101,agreement gate,2,83.98,2.2896
-dev,food101,TDA + ZAEC,2,83.89,2.2335
-dev,food101,gate + ZAEC,2,83.98,2.979
-dev,ucf101,TDA,0,68.3056,8.5895
-dev,ucf101,agreement gate,0,68.4642,1.9981
-dev,ucf101,TDA + ZAEC,0,68.3056,2.3043
-dev,ucf101,gate + ZAEC,0,68.4642,3.1667
-dev,ucf101,TDA,1,68.2791,8.6208
-dev,ucf101,agreement gate,1,68.4642,2.2691
-dev,ucf101,TDA + ZAEC,1,68.2791,2.4917
-dev,ucf101,gate + ZAEC,1,68.4642,3.2023
-dev,ucf101,TDA,2,68.4642,8.1274
-dev,ucf101,agreement gate,2,68.4377,2.2327
-dev,ucf101,TDA + ZAEC,2,68.4642,2.352
-dev,ucf101,gate + ZAEC,2,68.4377,3.0548
-fresh,imagenet_a,TDA,0,49.3867,14.7971
-fresh,imagenet_a,agreement gate,0,49.4267,8.0272
-fresh,imagenet_a,TDA + ZAEC,0,49.3867,8.6643
-fresh,imagenet_a,gate + ZAEC,0,49.4267,6.2527
-fresh,imagenet_a,TDA,1,49.0533,15.2313
-fresh,imagenet_a,agreement gate,1,49.1467,8.3946
-fresh,imagenet_a,TDA + ZAEC,1,49.0533,8.7951
-fresh,imagenet_a,gate + ZAEC,1,49.1467,6.2595
-fresh,imagenet_a,TDA,2,49.24,15.2504
-fresh,imagenet_a,agreement gate,2,49.2667,8.6569
-fresh,imagenet_a,TDA + ZAEC,2,49.24,8.8616
-fresh,imagenet_a,gate + ZAEC,2,49.2667,6.5758
-fresh,imagenet_r,TDA,0,75.3233,1.6049
-fresh,imagenet_r,agreement gate,0,75.3867,3.6929
-fresh,imagenet_r,TDA + ZAEC,0,75.3233,4.4618
-fresh,imagenet_r,gate + ZAEC,0,75.3867,5.3806
-fresh,imagenet_r,TDA,1,75.3233,1.5735
-fresh,imagenet_r,agreement gate,1,75.3567,3.6564
-fresh,imagenet_r,TDA + ZAEC,1,75.3233,4.4272
-fresh,imagenet_r,gate + ZAEC,1,75.3567,5.3381
-fresh,imagenet_r,TDA,2,75.1933,1.3989
-fresh,imagenet_r,agreement gate,2,75.23,3.526
-fresh,imagenet_r,TDA + ZAEC,2,75.1933,4.3217
-fresh,imagenet_r,gate + ZAEC,2,75.23,5.2146
-fresh,stl10,TDA,0,98.3125,0.9587
-fresh,stl10,agreement gate,0,98.275,2.0364
-fresh,stl10,TDA + ZAEC,0,98.3125,2.0031
-fresh,stl10,gate + ZAEC,0,98.275,2.2139
-fresh,stl10,TDA,1,98.45,1.1035
-fresh,stl10,agreement gate,1,98.4125,2.1554
-fresh,stl10,TDA + ZAEC,1,98.45,2.1499
-fresh,stl10,gate + ZAEC,1,98.4125,2.3192
-fresh,stl10,TDA,2,98.375,1.0305
-fresh,stl10,agreement gate,2,98.3,2.1067
-fresh,stl10,TDA + ZAEC,2,98.375,2.0912
-fresh,stl10,gate + ZAEC,2,98.3,2.3299
-fresh,cifar10,TDA,0,90.96,2.4453
-fresh,cifar10,agreement gate,0,91.01,5.995
-fresh,cifar10,TDA + ZAEC,0,90.96,6.045
-fresh,cifar10,gate + ZAEC,0,91.01,6.8831
-fresh,cifar10,TDA,1,90.96,2.5234
-fresh,cifar10,agreement gate,1,90.94,5.8572
-fresh,cifar10,TDA + ZAEC,1,90.96,5.9887
-fresh,cifar10,gate + ZAEC,1,90.94,6.6239
-fresh,cifar10,TDA,2,90.8,2.4395
-fresh,cifar10,agreement gate,2,90.81,5.8018
-fresh,cifar10,TDA + ZAEC,2,90.8,5.9307
-fresh,cifar10,gate + ZAEC,2,90.81,6.6768
-fresh,cifar100,TDA,0,69.42,4.9516
-fresh,cifar100,agreement gate,0,69.34,10.2048
-fresh,cifar100,TDA + ZAEC,0,69.42,12.3159
-fresh,cifar100,gate + ZAEC,0,69.34,13.5715
-fresh,cifar100,TDA,1,69.14,4.6845
-fresh,cifar100,agreement gate,1,69.13,9.9429
-fresh,cifar100,TDA + ZAEC,1,69.14,12.0882
-fresh,cifar100,gate + ZAEC,1,69.13,13.3506
-fresh,cifar100,TDA,2,69.08,4.4483
-fresh,cifar100,agreement gate,2,69.11,9.9026
-fresh,cifar100,TDA + ZAEC,2,69.08,11.9742
-fresh,cifar100,gate + ZAEC,2,69.11,13.2651
-fresh,voc2007,TDA,0,76.5558,7.6667
-fresh,voc2007,agreement gate,0,76.4223,6.8696
-fresh,voc2007,TDA + ZAEC,0,76.5558,6.7695
-fresh,voc2007,gate + ZAEC,0,76.4223,6.7235
-fresh,voc2007,TDA,1,77.0232,7.268
-fresh,voc2007,agreement gate,1,76.9565,6.5446
-fresh,voc2007,TDA + ZAEC,1,77.0232,6.504
-fresh,voc2007,gate + ZAEC,1,76.9565,6.4042
-fresh,voc2007,TDA,2,77.0566,7.4593
-fresh,voc2007,agreement gate,2,76.9631,6.6566
-fresh,voc2007,TDA + ZAEC,2,77.0566,6.4549
-fresh,voc2007,gate + ZAEC,2,76.9631,6.4756
-fresh,gtsrb,TDA,0,38.7965,6.7675
-fresh,gtsrb,agreement gate,0,38.9153,8.011
-fresh,gtsrb,TDA + ZAEC,0,38.7965,9.8113
-fresh,gtsrb,gate + ZAEC,0,38.9153,10.6833
-fresh,gtsrb,TDA,1,37.9256,8.4029
-fresh,gtsrb,agreement gate,1,37.9177,8.8926
-fresh,gtsrb,TDA + ZAEC,1,37.9256,10.0982
-fresh,gtsrb,gate + ZAEC,1,37.9177,11.1545
-fresh,gtsrb,TDA,2,38.1394,7.7989
-fresh,gtsrb,agreement gate,2,38.2898,8.5474
-fresh,gtsrb,TDA + ZAEC,2,38.1394,10.0005
-fresh,gtsrb,gate + ZAEC,2,38.2898,10.8537
-fresh,cars,TDA,0,65.0044,4.3608
-fresh,cars,agreement gate,0,64.7432,2.8317
-fresh,cars,TDA + ZAEC,0,65.0044,2.5524
-fresh,cars,gate + ZAEC,0,64.7432,4.716
-fresh,cars,TDA,1,64.5691,4.7788
-fresh,cars,agreement gate,1,64.7308,3.126
-fresh,cars,TDA + ZAEC,1,64.5691,2.1114
-fresh,cars,gate + ZAEC,1,64.7308,4.7302
-fresh,cars,TDA,2,65.2406,4.2495
-fresh,cars,agreement gate,2,64.9297,3.4302
-fresh,cars,TDA + ZAEC,2,65.2406,2.614
-fresh,cars,gate + ZAEC,2,64.9297,5.0574
-dev,mean,TDA,0,76.8035,7.285
-dev,mean,TDA,1,76.7293,7.4877
-dev,mean,TDA,2,76.8486,7.2675
-dev,mean,TDA + ZAEC,0,76.8035,3.6643
-dev,mean,TDA + ZAEC,1,76.7293,3.7677
-dev,mean,TDA + ZAEC,2,76.8486,3.665
-dev,mean,agreement gate,0,76.7926,3.2922
-dev,mean,agreement gate,1,76.712,3.3125
-dev,mean,agreement gate,2,76.8392,3.3021
-dev,mean,gate + ZAEC,0,76.7926,3.6552
-dev,mean,gate + ZAEC,1,76.712,3.591
-dev,mean,gate + ZAEC,2,76.8392,3.5624
-fresh,mean,TDA,0,70.4699,5.4441
-fresh,mean,TDA,1,70.3056,5.6957
-fresh,mean,TDA,2,70.3906,5.5094
-fresh,mean,TDA + ZAEC,0,70.4699,6.5779
-fresh,mean,TDA + ZAEC,1,70.3056,6.5203
-fresh,mean,TDA + ZAEC,2,70.3906,6.5311
-fresh,mean,agreement gate,0,70.4399,5.9586
-fresh,mean,agreement gate,1,70.3238,6.0712
-fresh,mean,agreement gate,2,70.3624,6.0785
-fresh,mean,gate + ZAEC,0,70.4399,7.0531
-fresh,mean,gate + ZAEC,1,70.3238,7.0225
-fresh,mean,gate + ZAEC,2,70.3624,7.0561
-all,mean,TDA,0,72.5811,6.0577
-all,mean,TDA,1,72.4468,6.2931
-all,mean,TDA,2,72.5433,6.0955
-all,mean,TDA + ZAEC,0,72.5811,5.6067
-all,mean,TDA + ZAEC,1,72.4468,5.6028
-all,mean,TDA + ZAEC,2,72.5433,5.5757
-all,mean,agreement gate,0,72.5575,5.0698
-all,mean,agreement gate,1,72.4532,5.1516
-all,mean,agreement gate,2,72.5214,5.153
-all,mean,gate + ZAEC,0,72.5575,5.9205
-all,mean,gate + ZAEC,1,72.4532,5.8787
-all,mean,gate + ZAEC,2,72.5214,5.8915
+near,caltech101,TDA,0,93.4686,3.1701
+near,caltech101,agreement gate,0,93.3063,5.2901
+near,caltech101,TDA + ZAEC,0,93.4686,4.1397
+near,caltech101,gate + ZAEC,0,93.3063,5.6566
+near,caltech101,TDA,1,93.428,3.8577
+near,caltech101,agreement gate,1,93.144,5.2508
+near,caltech101,TDA + ZAEC,1,93.428,4.0673
+near,caltech101,gate + ZAEC,1,93.144,5.3644
+near,caltech101,TDA,2,93.5903,3.3796
+near,caltech101,agreement gate,2,93.5091,5.4008
+near,caltech101,TDA + ZAEC,2,93.5903,4.2917
+near,caltech101,gate + ZAEC,2,93.5091,5.7629
+near,food101,TDA,0,84.12,2.335
+near,food101,agreement gate,0,84.17,2.5794
+near,food101,TDA + ZAEC,0,84.12,2.3373
+near,food101,gate + ZAEC,0,84.17,3.1269
+near,food101,TDA,1,84.0,2.3588
+near,food101,agreement gate,1,84.08,2.4702
+near,food101,TDA + ZAEC,1,84.0,2.3937
+near,food101,gate + ZAEC,1,84.08,3.3392
+near,food101,TDA,2,83.89,2.5183
+near,food101,agreement gate,2,83.98,2.2896
+near,food101,TDA + ZAEC,2,83.89,2.2335
+near,food101,gate + ZAEC,2,83.98,2.979
+near,cars,TDA,0,65.0044,4.3608
+near,cars,agreement gate,0,64.7432,2.8317
+near,cars,TDA + ZAEC,0,65.0044,2.5524
+near,cars,gate + ZAEC,0,64.7432,4.716
+near,cars,TDA,1,64.5691,4.7788
+near,cars,agreement gate,1,64.7308,3.126
+near,cars,TDA + ZAEC,1,64.5691,2.1114
+near,cars,gate + ZAEC,1,64.7308,4.7302
+near,cars,TDA,2,65.2406,4.2495
+near,cars,agreement gate,2,64.9297,3.4302
+near,cars,TDA + ZAEC,2,65.2406,2.614
+near,cars,gate + ZAEC,2,64.9297,5.0574
+far,gtsrb,TDA,0,38.7965,6.7675
+far,gtsrb,agreement gate,0,38.9153,8.011
+far,gtsrb,TDA + ZAEC,0,38.7965,9.8113
+far,gtsrb,gate + ZAEC,0,38.9153,10.6833
+far,gtsrb,TDA,1,37.9256,8.4029
+far,gtsrb,agreement gate,1,37.9177,8.8926
+far,gtsrb,TDA + ZAEC,1,37.9256,10.0982
+far,gtsrb,gate + ZAEC,1,37.9177,11.1545
+far,gtsrb,TDA,2,38.1394,7.7989
+far,gtsrb,agreement gate,2,38.2898,8.5474
+far,gtsrb,TDA + ZAEC,2,38.1394,10.0005
+far,gtsrb,gate + ZAEC,2,38.2898,10.8537
+far,fer2013,TDA,0,49.9333,4.374
+far,fer2013,agreement gate,0,50.0,4.8407
+far,fer2013,TDA + ZAEC,0,49.9333,6.1262
+far,fer2013,gate + ZAEC,0,50.0,6.5848
+far,fer2013,TDA,1,49.3,4.3342
+far,fer2013,agreement gate,1,49.8,3.3432
+far,fer2013,TDA + ZAEC,1,49.3,5.5646
+far,fer2013,gate + ZAEC,1,49.8,6.5659
+far,fer2013,TDA,2,47.9667,6.1812
+far,fer2013,agreement gate,2,48.8667,4.0931
+far,fer2013,TDA + ZAEC,2,47.9667,4.8464
+far,fer2013,gate + ZAEC,2,48.8667,5.8545
+far,pcam,TDA,0,61.6,25.021
+far,pcam,agreement gate,0,61.6,15.7364
+far,pcam,TDA + ZAEC,0,61.6,16.836
+far,pcam,gate + ZAEC,0,61.6,16.8351
+far,pcam,TDA,1,60.4333,25.1111
+far,pcam,agreement gate,1,60.4333,14.7635
+far,pcam,TDA + ZAEC,1,60.4333,15.6765
+far,pcam,gate + ZAEC,1,60.4333,15.675
+far,pcam,TDA,2,60.9333,24.8475
+far,pcam,agreement gate,2,60.9333,15.4231
+far,pcam,TDA + ZAEC,2,60.9333,16.3664
+far,pcam,gate + ZAEC,2,60.9333,16.3993
+far,svhn,TDA,0,32.5333,9.9158
+far,svhn,agreement gate,0,32.7667,5.7578
+far,svhn,TDA + ZAEC,0,32.5333,2.8092
+far,svhn,gate + ZAEC,0,32.7667,2.8913
+far,svhn,TDA,1,30.9667,11.1067
+far,svhn,agreement gate,1,31.2333,7.4434
+far,svhn,TDA + ZAEC,1,30.9667,3.3672
+far,svhn,gate + ZAEC,1,31.2333,3.0587
+far,svhn,TDA,2,32.4333,10.8461
+far,svhn,agreement gate,2,32.8,6.722
+far,svhn,TDA + ZAEC,2,32.4333,3.4207
+far,svhn,gate + ZAEC,2,32.8,3.0341
+far,mnist,TDA,0,31.7333,20.4218
+far,mnist,agreement gate,0,31.7333,14.165
+far,mnist,TDA + ZAEC,0,31.7333,7.6337
+far,mnist,gate + ZAEC,0,31.7333,6.0388
+far,mnist,TDA,1,28.4667,24.8294
+far,mnist,agreement gate,1,28.4667,17.1509
+far,mnist,TDA + ZAEC,1,28.4667,10.2203
+far,mnist,gate + ZAEC,1,28.4667,9.296
+far,mnist,TDA,2,28.9,25.6705
+far,mnist,agreement gate,2,29.0667,17.9421
+far,mnist,TDA + ZAEC,2,28.9,9.6113
+far,mnist,gate + ZAEC,2,29.0667,9.8711
+far,rendered_sst2,TDA,0,57.6606,19.5931
+far,rendered_sst2,agreement gate,0,57.6606,18.1742
+far,rendered_sst2,TDA + ZAEC,0,57.6606,18.0128
+far,rendered_sst2,gate + ZAEC,0,57.6606,18.1225
+far,rendered_sst2,TDA,1,57.0016,21.3094
+far,rendered_sst2,agreement gate,1,57.0016,19.055
+far,rendered_sst2,TDA + ZAEC,1,57.0016,18.9091
+far,rendered_sst2,gate + ZAEC,1,57.0016,19.0189
+far,rendered_sst2,TDA,2,57.2213,20.3766
+far,rendered_sst2,agreement gate,2,57.2213,18.9812
+far,rendered_sst2,TDA + ZAEC,2,57.2213,18.7187
+far,rendered_sst2,gate + ZAEC,2,57.2213,18.9383
+far,imagenet_r,TDA,0,75.3233,1.6049
+far,imagenet_r,agreement gate,0,75.3867,3.6929
+far,imagenet_r,TDA + ZAEC,0,75.3233,4.4618
+far,imagenet_r,gate + ZAEC,0,75.3867,5.3806
+far,imagenet_r,TDA,1,75.3233,1.5735
+far,imagenet_r,agreement gate,1,75.3567,3.6564
+far,imagenet_r,TDA + ZAEC,1,75.3233,4.4272
+far,imagenet_r,gate + ZAEC,1,75.3567,5.3381
+far,imagenet_r,TDA,2,75.1933,1.3989
+far,imagenet_r,agreement gate,2,75.23,3.526
+far,imagenet_r,TDA + ZAEC,2,75.1933,4.3217
+far,imagenet_r,gate + ZAEC,2,75.23,5.2146
+far,mean,TDA,0,49.6544,12.5283
+far,mean,TDA,1,48.4882,13.8096
+far,mean,TDA,2,48.6839,13.8743
+far,mean,TDA + ZAEC,0,49.6544,9.3844
+far,mean,TDA + ZAEC,1,48.4882,9.7519
+far,mean,TDA + ZAEC,2,48.6839,9.6122
+far,mean,agreement gate,0,49.7232,10.054
+far,mean,agreement gate,1,48.6013,10.615
+far,mean,agreement gate,2,48.9154,10.7478
+far,mean,gate + ZAEC,0,49.7232,9.5052
+far,mean,gate + ZAEC,1,48.6013,10.0153
+far,mean,gate + ZAEC,2,48.9154,10.0237
+near,mean,TDA,0,80.8643,3.2886
+near,mean,TDA,1,80.6657,3.6651
+near,mean,TDA,2,80.907,3.3825
+near,mean,TDA + ZAEC,0,80.8643,3.0098
+near,mean,TDA + ZAEC,1,80.6657,2.8575
+near,mean,TDA + ZAEC,2,80.907,3.0464
+near,mean,agreement gate,0,80.7398,3.5671
+near,mean,agreement gate,1,80.6516,3.6157
+near,mean,agreement gate,2,80.8063,3.7069
+near,mean,gate + ZAEC,0,80.7398,4.4998
+near,mean,gate + ZAEC,1,80.6516,4.4779
+near,mean,gate + ZAEC,2,80.8063,4.5997
+all,mean,TDA,0,59.0173,9.7564
+all,mean,TDA,1,58.1414,10.7663
+all,mean,TDA,2,58.3508,10.7267
+all,mean,TDA + ZAEC,0,59.0173,7.472
+all,mean,TDA + ZAEC,1,58.1414,7.6835
+all,mean,TDA + ZAEC,2,58.3508,7.6425
+all,mean,agreement gate,0,59.0282,8.1079
+all,mean,agreement gate,1,58.2164,8.5152
+all,mean,agreement gate,2,58.4827,8.6356
+all,mean,gate + ZAEC,0,59.0282,8.0036
+all,mean,gate + ZAEC,1,58.2164,8.3541
+all,mean,gate + ZAEC,2,58.4827,8.3965

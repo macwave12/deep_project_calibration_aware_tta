@@ -1,14 +1,14 @@
-"""T16 generalization: the fresh sets (never seen in design) and "where it helps" over every dataset.
+"""Held-out generalization (T16, T17 tiers) and "where it helps".
 
-Fresh sets: ImageNet-val (`replay_results/t15`, K46) and the nine CLIP_benchmark sets
-(`scripts/replay_fresh.sh` -> `replay_results/t16_fresh`). P2, seeds 0/1/2. Per dataset: CLIP, TDA and
-the agreement gate from their own online replays, and the paired-by-seed delta vs TDA. A dataset enters
-only when TDA and the gate both have every requested seed (replays may still be running).
+Held-out sets: the T16 fresh sets (`scripts/replay_fresh.sh` -> `replay_results/t16_fresh`) and the T17 shifted sets
+(`replay_results/t17_shift`); ImageNet and ImageNetV2 are left out (`EXCLUDED`: TDA's hyperparameter-search
+distribution). Each set is tagged near / far / other by `held_tier` (what the images are, fixed before results).
+P2, seeds 0/1/2. Per dataset: CLIP, TDA and the agreement gate from their own online replays, and the paired-by-seed
+delta vs TDA. A dataset enters only when TDA and the gate both have every requested seed.
 
-"Where it helps" (DECISIONS 2026-11-11): dECE (gate - TDA, paired run records, every tier) per dataset
-against label-free CLIP-confidence signals on the first stream samples (from full traces; 500-sample
-trace runs for ImageNet-val and ImageNet-Sketch) and against CLIP's own confidence - accuracy gap
-(label-based: an explanation, never a method input). Spearman rho over all datasets and per tier.
+"Where it helps" (DECISIONS 2026-11-11): dECE (gate - TDA, paired run records) per design-test, near and far dataset
+against label-free CLIP-confidence signals on the first stream samples (from full traces) and against CLIP's own
+confidence - accuracy gap (label-based: an explanation, never a method input). Spearman rho over all and per tier.
 
     python analysis/fresh.py  -> results/analysis/t16/fresh*.csv, where_it_helps*.csv,
                                  analysis/figures/story_where_it_helps_all.png
@@ -32,10 +32,11 @@ if str(REPO) not in sys.path:
 from analysis.adaptive_alpha import trace_path  # noqa: E402
 from analysis.seed_stats import load_seed_records, paired_stats, seed_dir  # noqa: E402
 from analysis.story import FIG, plot_where_it_helps, signal_row, spearman_rows  # noqa: E402
-from utils.feature_cache import DATASETS, DEV_DATASETS  # noqa: E402
+from utils.feature_cache import DATASETS, EVAL_DEV, EXCLUDED, NEAR, FAR, held_tier, replay_root  # noqa: E402
+
+HEAD_ONLY = ("imagenet_sketch",)  # only a 500-sample trace run (its full trace is too large); enough for head signals
 
 OUT = REPO / "results" / "analysis" / "t16"
-NO_FULL_TRACE = ("imagenet", "imagenet_sketch")
 METHODS = {"clipzs": "CLIP", "tda_eq_clean": "TDA", "cal_tda_agree_clean": "agreement gate"}
 SIGNALS = ["share", "over06", "conf", "clip_gap"]
 
@@ -112,6 +113,16 @@ def head_signals(root, dataset, seeds, name, split="test", head=500) -> dict:
     return pd.DataFrame(rows).groupby("dataset").mean().iloc[0].to_dict()
 
 
+def record_gaps(root, dataset, seeds, tda="tda_eq_clean", gate="cal_tda_agree_clean") -> dict:
+    """Signed confidence - accuracy (pts) of CLIP, TDA and the gate: TDA and gate averaged over seeds, CLIP from seed 0
+    (its output does not depend on the stream order). Positive: overconfident. Labels: a diagnostic only."""
+    out = {"clip_gap": clip_gap(seed_dir(Path(root), 0) / f"{dataset}_clipzs.json")}
+    for key, name in (("tda_gap", tda), ("gate_gap", gate)):
+        vals = [clip_gap(seed_dir(Path(root), s) / f"{dataset}_{name}.json") for s in seeds]
+        out[key] = sum(vals) / len(vals)
+    return out
+
+
 def clip_gap(record_path) -> float:
     """CLIP's mean confidence - accuracy (pts) over the whole stream, from its record's reliability bins.
 
@@ -127,9 +138,8 @@ def clip_gap(record_path) -> float:
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--t14", default="replay_results/t14")
-    ap.add_argument("--imagenet", default="replay_results/t15")
-    ap.add_argument("--imagenet-head", default="replay_results/t15_ban")
     ap.add_argument("--fresh", default="replay_results/t16_fresh")
+    ap.add_argument("--shift", default="replay_results/t17_shift")
     ap.add_argument("--test-records", default="replay_results/raw")
     ap.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2])
     ap.add_argument("--out-dir", default=str(OUT))
@@ -137,36 +147,41 @@ def main(argv=None):
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    records = complete(fresh_records([a.imagenet, a.fresh], a.seeds), a.seeds)
+    records = complete(fresh_records([a.fresh, a.shift], a.seeds), a.seeds)
+    records = records[~records.dataset.isin(EXCLUDED)]
     records.round(4).to_csv(out / "fresh_per_seed.csv", index=False)
-    table = fresh_table(records)
+    tiers = records.dataset.map(held_tier)
+    table = pd.concat([fresh_table(records[tiers == t]).assign(tier=t) for t in ("near", "far", "other")
+                       if (tiers == t).any()], ignore_index=True)
     table.round(3).to_csv(out / "fresh.csv", index=False)
 
-    groups = {**{d: "test" for d in DATASETS}, **{d: "dev" for d in DEV_DATASETS},
-              **{d: "fresh" for d in dict.fromkeys(records.dataset)}}
+    groups = {**{d: "test" for d in DATASETS}, **{d: "near" for d in NEAR}, **{d: "far" for d in FAR}}
     sig, dece = {}, {}
     for ds, g in groups.items():
-        if g == "fresh":
+        held = replay_root(ds, a.t14, a.fresh, a.shift)
+        if held != a.t14:
             dece[ds] = float(table[table.dataset == ds].iloc[0]["d_ece"])
-            root = a.imagenet if ds == "imagenet" else a.fresh
+            root = held
         else:
             root = a.test_records if g == "test" else a.t14
             dece[ds] = record_dece(root, ds, a.seeds, "tda_clean" if g == "test" else "tda_eq_clean")
         sig[ds] = {"clip_gap": clip_gap(Path(root) / f"{ds}_clipzs.json")}
-        if ds in NO_FULL_TRACE:
-            trace_root, name = (a.imagenet_head if ds == "imagenet" else a.fresh), "tda_eq_clean_head500"
-        else:
-            trace_root, name = (a.fresh if g == "fresh" else a.t14), "tda_eq_clean"
-        sig[ds].update(head_signals(trace_root, ds, a.seeds, name))
+        name = "tda_eq_clean_head500" if ds in HEAD_ONLY else "tda_eq_clean"
+        sig[ds].update(head_signals(held, ds, a.seeds, name))
+    gaps = []
+    held_out = [d for d in table.dataset if d != "mean"] + [d for d in EVAL_DEV if d not in EXCLUDED]
+    for ds, g in {**groups, **{d: held_tier(d) for d in dict.fromkeys(held_out) if d not in groups}}.items():
+        root = a.test_records if g == "test" else replay_root(ds, a.t14, a.fresh, a.shift)
+        gaps.append({"dataset": ds, "tier": g,
+                     **record_gaps(root, ds, a.seeds, "tda_clean" if g == "test" else "tda_eq_clean")})
+    pd.DataFrame(gaps).round(3).to_csv(out / "gaps.csv", index=False)
     sig = pd.DataFrame(sig).T
     helps = sig.assign(group=pd.Series(groups), d_ece=pd.Series(dece))
     helps.index.name = "dataset"
     helps.round(3).to_csv(out / "where_it_helps.csv")
-    seen = {k: v for k, v in dece.items() if groups[k] != "fresh"}
-    fresh = {k: v for k, v in dece.items() if groups[k] == "fresh"}
-    rho = pd.concat([spearman_rows(sig, dece, SIGNALS).assign(datasets="all"),
-                     spearman_rows(sig, seen, SIGNALS).assign(datasets="test+dev"),
-                     spearman_rows(sig, fresh, SIGNALS).assign(datasets="fresh")])
+    rho = pd.concat([spearman_rows(sig, dece, SIGNALS).assign(datasets="all")]
+                    + [spearman_rows(sig, {k: v for k, v in dece.items() if groups[k] == t}, SIGNALS).assign(datasets=t)
+                       for t in ("test", "near", "far")])
     rho.round(3).to_csv(out / "where_it_helps_rho.csv", index=False)
     plot_where_it_helps(sig, dece, groups, FIG / "story_where_it_helps_all.png")
     print(table.round(2).to_string(index=False))

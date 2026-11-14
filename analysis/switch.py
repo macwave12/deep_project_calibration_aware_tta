@@ -26,7 +26,7 @@ if str(REPO) not in sys.path:
 
 from analysis.adaptive_alpha import disagree_mask, load_runs, metrics, trace_path  # noqa: E402
 from analysis.comparison import zaec  # noqa: E402
-from utils.feature_cache import DATASETS, DEV_DATASETS, FRESH_DATASETS  # noqa: E402
+from utils.feature_cache import DATASETS, EVAL_DEV, FAR, NEAR, replay_root  # noqa: E402
 
 ALPHA = 2.0
 OUT = REPO / "results" / "analysis" / "t16"
@@ -103,21 +103,24 @@ def method_rows(runs, tier: str, threshold: float) -> pd.DataFrame:
 
 
 def tiers(a) -> dict:
-    return {"val": (a.trace_root, DATASETS, "val"), "test": (a.trace_root, DATASETS, "test"),
-            "dev": (a.trace_root, DEV_DATASETS, "test"), "fresh": (a.fresh_root, FRESH_DATASETS, "test")}
+    """Selection tiers (val, dev) and evaluation tiers (test, near, far). Dev is a selection set only."""
+    return {"val": (DATASETS, "val"), "dev": (EVAL_DEV, "test"), "test": (DATASETS, "test"),
+            "near": (NEAR, "test"), "far": (FAR, "test")}
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--trace-root", default="replay_results/t14")
     ap.add_argument("--fresh-root", default="replay_results/t16_fresh")
+    ap.add_argument("--shift-root", default="replay_results/t17_shift")
     ap.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2])
     ap.add_argument("--out-dir", default=str(OUT))
     a = ap.parse_args(argv)
     runs, skipped = {}, []
-    for tier, (root, datasets, split) in tiers(a).items():
+    for tier, (datasets, split) in tiers(a).items():
         runs[tier] = []
         for ds in datasets:
+            root = replay_root(ds, a.trace_root, a.fresh_root, a.shift_root)
             if all(trace_path(root, ds, s, split, "tda_eq_clean").exists() for s in a.seeds):
                 runs[tier] += load_runs(root, [ds], a.seeds, split, "tda_eq_clean")
             else:
@@ -137,8 +140,8 @@ def main(argv=None):
         threshold=threshold, plateau_lo=near.min(), plateau_hi=near.max())
     table.round(3).to_csv(out / "switch.csv", index=False)
     print(f"threshold (design: val + dev) = {threshold}; skipped (no full trace): {', '.join(skipped) or 'none'}")
-    print(means.pivot(index="method", columns="tier", values="ece")[["val", "test", "dev", "fresh"]].round(2))
-    print(means.pivot(index="method", columns="tier", values="accuracy")[["val", "test", "dev", "fresh"]].round(2))
+    print(means.pivot(index="method", columns="tier", values="ece")[["val", "dev", "test", "near", "far"]].round(2))
+    print(means.pivot(index="method", columns="tier", values="accuracy")[["val", "dev", "test", "near", "far"]].round(2))
 
 
 if __name__ == "__main__":

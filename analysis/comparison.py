@@ -30,7 +30,7 @@ if str(REPO) not in sys.path:
 from analysis.adaptive_alpha import disagree_mask, load_runs, metrics, trace_path  # noqa: E402
 from analysis.seed_stats import MEAN_ROW, METRICS, method_stats, paired_stats, seed_dir, with_dataset_mean  # noqa: E402
 from analysis.t14_results import fit_temperature  # noqa: E402
-from utils.feature_cache import DATASETS, DEV_DATASETS, FRESH_DATASETS  # noqa: E402
+from utils.feature_cache import DATASETS, FAR, NEAR, replay_root  # noqa: E402
 
 ALPHA = 2.0
 OUT = REPO / "results" / "analysis" / "t16"
@@ -133,10 +133,10 @@ def generalization_rows(runs, tier: str) -> pd.DataFrame:
 
 def run_generalization(a) -> None:
     """Dev traces (t14) and fresh traces (t16_fresh); fresh sets without full traces are skipped."""
-    tiers = {"dev": (a.trace_root, DEV_DATASETS), "fresh": (a.fresh_root, FRESH_DATASETS)}
     frames, skipped = [], []
-    for tier, (root, datasets) in tiers.items():
+    for tier, datasets in (("near", NEAR), ("far", FAR)):
         for ds in datasets:
+            root = replay_root(ds, a.trace_root, a.fresh_root, a.shift_root)
             if not all(trace_path(root, ds, s, "test", "tda_eq_clean").exists() for s in a.seeds):
                 skipped.append(ds)
                 continue
@@ -160,6 +160,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--trace-root", default="replay_results/t14")
     ap.add_argument("--fresh-root", default="replay_results/t16_fresh")
+    ap.add_argument("--shift-root", default="replay_results/t17_shift")
     ap.add_argument("--baselines", default="replay_results/t16_baselines")
     ap.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2])
     ap.add_argument("--out-dir", default=str(OUT))
