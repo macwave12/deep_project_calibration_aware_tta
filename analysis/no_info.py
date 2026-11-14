@@ -2,18 +2,19 @@
 
 1. Ablation by agreement group. TDA's positive cache is split into the samples where its top class agrees with CLIP's
    (gate closed) and those where it disagrees (gate open). Variants per tier: CLIP, + negative cache, + positive cache
-   on agreeing samples only, + positive cache on disagreeing samples only (= the gate), + both (= TDA), and the gated
-   positive cache without the negative cache. Per group: accuracy and confidence-accuracy gap without / with the
-   positive cache.
+   on agreeing samples only, + positive cache on disagreeing samples only (= the gate), + positive cache on a random
+   subset of the same size as the disagreeing one (control), + positive cache everywhere (= TDA). Per group: accuracy
+   and confidence-accuracy gap without / with the positive cache.
 2. Flip information. A flip is a sample where TDA's decision differs from CLIP's; it is right if TDA is right and
    wrong if CLIP was right. Label-free per-sample measures of CLIP's scores, the cache's scores and their relation are
    scored alone (AUC, right-flip rate by octile, the accuracy change of the best val-chosen one-threshold rule) and
-   combined (logistic regression fitted on the val flips). The
+   combined (logistic regression fitted on the val flips); per dataset, the Spearman correlation between a flip being
+   right and each score, and the right-flip share by decile of the score's within-dataset percentile. The
    combination also defines a label-free flip filter (revert to CLIP below a threshold chosen on val); its accuracy
    change is compared with the oracle filter (block every wrong flip) and the oracle pick (right one of CLIP's and the
    cache's top class).
 
-    python analysis/no_info.py  -> results/analysis/t16/no_info_*.csv, analysis/figures/no_info_{gain,rates}.png
+    python analysis/no_info.py  -> results/analysis/t16/no_info_*.csv, analysis/figures/no_info_{break_even,scores}.png
 """
 
 from __future__ import annotations
@@ -38,6 +39,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 from analysis.adaptive_alpha import disagree_mask, load_runs, metrics, trace_path  # noqa: E402
+from analysis.paper_figures import PAPER_RC  # noqa: E402
 from utils.feature_cache import DATASETS, FAR, NEAR, replay_root  # noqa: E402
 
 ALPHA = 2.0
@@ -45,10 +47,11 @@ OUT = REPO / "results" / "analysis" / "t16"
 FIG = REPO / "analysis" / "figures"
 REPORT_FIG = REPO / "report" / "figures"
 TIERS = ("val", "test", "near", "far")
-VARIANTS = ("clip", "base", "apos", "gate", "tda", "gpos")
+VARIANTS = ("clip", "base", "apos", "gate", "rand", "tda")
 LABELS = {"clip": "CLIP", "base": "+ negative cache", "apos": "+ positive cache, agreeing samples only",
-          "gate": "+ positive cache, disagreeing samples only (gate)", "tda": "+ positive cache, all samples (TDA)",
-          "gpos": "CLIP + positive cache, disagreeing only (no negative)"}
+          "gate": "+ positive cache, disagreeing samples only (gate)",
+          "rand": "+ positive cache, random samples (as many as the gate opens on)",
+          "tda": "+ positive cache, all samples (TDA)"}
 # measure -> (group, label); every measure is label-free
 MEASURES = {
     "clip_conf": ("CLIP", "confidence"),
@@ -56,22 +59,32 @@ MEASURES = {
     "clip_p_cache_class": ("CLIP", "prob. of the cache's class"),
     "cache_conf": ("cache", "confidence"),
     "cache_mass": ("cache", "mass of its top class"),
-    "cache_support": ("cache", "weight on CLIP's top-1"),
-    "rho": ("relation", "ρ(cache, CLIP) over classes"),
-    "one_minus_js": ("relation", "1 − JS(cache, CLIP)"),
-    "weight_gap": ("relation", "cache weight: CLIP top-1 − own top"),
+    "cache_support": ("cache", "share on CLIP's class"),
+    "rho": ("relation", "correlation over classes"),
+    "one_minus_js": ("relation", "1 − JS divergence"),
+    "weight_gap": ("relation", "share gap, CLIP's − own"),
     "alpha_needed": ("relation", "α needed to flip"),
 }
-TIER_COLORS = {"val": "#9ecae1", "test": "#3182bd", "near": "#31a354", "far": "#756bb1"}
+# held-out tiers by grey level, marker and line style (colour stays reserved for methods)
+TIER_LINE = {"near": ("#8c8c8c", "s", "--"), "far": ("#252525", "^", "-")}
 MIN_CLASS = 20  # flips of each kind for a per-dataset AUC
 
 
+def random_mask(n: int, share: float, seed: int) -> torch.Tensor:
+    """Exactly round(share * n) samples, drawn uniformly with a fixed generator (the control for the gate)."""
+    g = torch.Generator().manual_seed(seed)
+    mask = torch.zeros(n, dtype=torch.bool)
+    mask[torch.randperm(n, generator=g)[:round(share * n)]] = True
+    return mask
+
+
 def variant_logits(run, alpha: float = ALPHA) -> dict:
-    dis = disagree_mask(run)[:, None]
-    agree = ~dis
-    return {"clip": run.clip, "base": run.base, "apos": run.base + alpha * agree * run.cache,
-            "gate": run.base + alpha * dis * run.cache, "tda": run.base + alpha * run.cache,
-            "gpos": run.clip + alpha * dis * run.cache}
+    dis = disagree_mask(run)
+    rand = random_mask(len(dis), float(dis.double().mean()), run.seed)[:, None]
+    dis = dis[:, None]
+    return {"clip": run.clip, "base": run.base, "apos": run.base + alpha * ~dis * run.cache,
+            "gate": run.base + alpha * dis * run.cache, "rand": run.base + alpha * rand * run.cache,
+            "tda": run.base + alpha * run.cache}
 
 
 def _gap(logits, labels, mask) -> float:
@@ -270,53 +283,67 @@ def info_tables(flips: pd.DataFrame, oracle: pd.DataFrame, design: str = "val"):
     return pd.DataFrame(auc_rows), pd.DataFrame(rate_rows), pd.DataFrame(comb)
 
 
-HELD = ("test", "near", "far")  # every tier but the one the rules are chosen on
+DISCUSSED = ("clip_conf", "cache_conf", "one_minus_js")  # one score of CLIP, of the cache and of their relation
+HELD_OUT = ("near", "far")
 
 
-def fig_gain(rules: pd.DataFrame, comb: pd.DataFrame, path: Path):
-    """Accuracy change from the best val-chosen rule on each score, per held-out tier, against the oracle."""
-    keys = ["oracle"] + list(MEASURES) + ["combined"]
-    labels = (["oracle: block every wrong flip"] + [f"{MEASURES[k][0]}: {MEASURES[k][1]}" for k in MEASURES]
-              + ["all ten combined (logistic, fit on val)"])
-    c = comb.set_index("tier")
-    vals = {k: rules[rules.measure == k].set_index("tier").gain for k in MEASURES}
-    vals["combined"], vals["oracle"] = c.filter_gain, c.oracle_block
-    fig, ax = plt.subplots(figsize=(7.6, 4.6))
-    y = np.arange(len(keys))[::-1]
-    tiers = [t for t in ("val",) + HELD if t in c.index]
-    h = 0.8 / len(tiers)
-    for i, tier in enumerate(tiers):
-        ax.barh(y + (len(tiers) / 2 - i - 0.5) * h, [vals[k].get(tier, np.nan) for k in keys], height=h,
-                color=TIER_COLORS[tier], label=tier)
-    ax.axvline(0, color="k", lw=0.8)
-    ax.axhline(len(keys) - 1.5, color="#999999", lw=0.6)
-    ax.set_yticks(y, labels, fontsize=7.5)
-    ax.set_xlabel("accuracy change (points) from reverting flips to CLIP by the rule", fontsize=7.5)
-    ax.set_title("Best rule per score (chosen on val) vs. the oracle", fontsize=8)
-    ax.legend(fontsize=7, loc="lower right")
+def within_percentile(flips: pd.DataFrame, key: str) -> pd.Series:
+    """Percentile (0, 1] of each flip's score among the flips of its own dataset and seed, so that pooling datasets
+    compares flips with their neighbours rather than datasets with each other."""
+    return flips.groupby(["tier", "dataset", "seed"])[key].rank(pct=True, method="average")
+
+
+def corr_rows(flips: pd.DataFrame) -> pd.DataFrame:
+    """Spearman correlation between a flip being right (1) or wrong (0) and each score, per dataset and seed; mean
+    over seeds, then mean, min and max over datasets."""
+    rows = []
+    for (key, (group, label)) in MEASURES.items():
+        for (tier, ds, seed), d in flips.groupby(["tier", "dataset", "seed"]):
+            x, y = rankdata(d[key].replace(np.inf, np.nan).fillna(np.inf)), d.right.to_numpy(float)
+            r = np.corrcoef(x, y)[0, 1] if y.std() > 0 and x.std() > 0 else np.nan
+            rows.append({"measure": key, "tier": tier, "dataset": ds, "seed": seed, "rho": r})
+    per = pd.DataFrame(rows).groupby(["measure", "tier", "dataset"]).rho.mean().reset_index()
+    return (per.groupby(["measure", "tier"]).rho.agg(rho="mean", rho_min="min", rho_max="max").reset_index())
+
+
+def decile_rows(flips: pd.DataFrame) -> pd.DataFrame:
+    """Share of right flips by decile of each score's within-dataset percentile (flips pooled over datasets and seeds)."""
+    rows = []
+    for key in MEASURES:
+        q = within_percentile(flips, key)
+        dec = np.minimum((q * 10).apply(np.ceil).astype(int) - 1, 9).clip(lower=0)
+        for (tier, b), d in flips.assign(decile=dec).groupby(["tier", "decile"]):
+            rows.append({"measure": key, "tier": tier, "decile": b, "n": len(d), "right_pct": 100 * d.right.mean()})
+    return pd.DataFrame(rows)
+
+
+def fig_deciles(deciles: pd.DataFrame, corrs: pd.DataFrame, keys, path: Path, ncols: int, panel=(2.4, 2.3),
+                wrap_titles=False):
+    """Share of right flips by decile of each score's within-dataset percentile, on the held-out tiers, with each tier's
+    mean per-dataset correlation between a flip being right and the score. Text sizes follow the active rcParams."""
+    nrows = -(-len(keys) // ncols)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(panel[0] * ncols, panel[1] * nrows), sharey=True, squeeze=False)
+    for ax, key in zip(axes.flat, keys):
+        group, label = MEASURES[key]
+        for i, tier in enumerate(HELD_OUT):
+            color, marker, style = TIER_LINE[tier]
+            d = deciles[(deciles.measure == key) & (deciles.tier == tier)]
+            ax.plot(10 * d.decile + 5, d.right_pct, marker=marker, ls=style, color=color, ms=3.5, lw=1.4, label=tier)
+            rho = corrs[(corrs.measure == key) & (corrs.tier == tier)].rho.item()
+            ax.text(0.97, 0.08 + 0.1 * (1 - i), f"{tier}: $\\rho$ = {rho:+.2f}", ha="right", fontsize="small",
+                    color=color, transform=ax.transAxes)
+        ax.set_ylim(20, 100)
+        ax.set_xlim(0, 100)
+        ax.grid(alpha=0.3)
+        ax.set_title(f"{group}:\n{label}" if wrap_titles else f"{group}: {label}")
+        ax.set_xlabel("score percentile within its dataset", fontsize="small")
+    for ax in axes[:, 0]:
+        ax.set_ylabel("% of flips that are right")
+    for ax in axes.flat[len(keys):]:
+        ax.set_visible(False)
+    axes[0, 0].legend(loc="upper left", fontsize="small")
     fig.tight_layout()
     fig.savefig(path, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-
-
-def fig_rates(rates: pd.DataFrame, path: Path):
-    fig, axes = plt.subplots(2, 5, figsize=(13, 5.2), sharey=True)
-    for ax, (key, (group, label)) in zip(axes.flat, MEASURES.items()):
-        for tier in TIERS:
-            d = rates[(rates.measure == key) & (rates.tier == tier) & (rates.n >= 30)]
-            ax.plot((d.lo + d.hi) / 2, d.right_pct, "o-", color=TIER_COLORS[tier], ms=3, lw=1.2, label=tier)
-        ax.axhline(50, color="k", lw=0.6, ls="--")
-        ax.set_title(f"{group}: {label}", fontsize=8)
-        ax.set_xlabel("score value (bin centre)", fontsize=7)
-        ax.tick_params(labelsize=7)
-        if key == "alpha_needed":
-            ax.set_xscale("symlog")
-        ax.set_ylim(10, 100)
-    for ax in axes[:, 0]:
-        ax.set_ylabel("% right flips", fontsize=8)
-    axes.flat[0].legend(fontsize=7)
-    fig.tight_layout()
-    fig.savefig(path, dpi=200)
     plt.close(fig)
 
 
@@ -343,6 +370,7 @@ def main(argv=None):
     abl, flips, orc = pd.concat(abl, ignore_index=True), pd.concat(flips, ignore_index=True), pd.DataFrame(orc)
     aucs, rates, comb = info_tables(flips, orc)
     rules = rule_rows(flips)
+    corrs, deciles = corr_rows(flips), decile_rows(flips)
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)
     cols = [c for c in abl.columns if c not in ("tier", "dataset", "seed")]
@@ -353,11 +381,14 @@ def main(argv=None):
     rates.round(4).to_csv(out / "no_info_rates.csv", index=False)
     comb.round(4).to_csv(out / "no_info_filter.csv", index=False)
     rules.round(4).to_csv(out / "no_info_rules.csv", index=False)
+    corrs.round(4).to_csv(out / "no_info_corr.csv", index=False)
+    deciles.round(4).to_csv(out / "no_info_deciles.csv", index=False)
     FIG.mkdir(parents=True, exist_ok=True)
-    fig_gain(rules, comb, FIG / "no_info_gain.png")
-    fig_rates(rates, FIG / "no_info_rates.png")
+    with plt.rc_context(PAPER_RC):
+        fig_deciles(deciles, corrs, DISCUSSED, FIG / "no_info_break_even.png", ncols=3)
+        fig_deciles(deciles, corrs, list(MEASURES), FIG / "no_info_scores.png", ncols=5)
     REPORT_FIG.mkdir(parents=True, exist_ok=True)
-    for name in ("no_info_gain.png", "no_info_rates.png"):
+    for name in ("no_info_break_even.png", "no_info_scores.png"):
         shutil.copy(FIG / name, REPORT_FIG / name)
     print("skipped (no full trace):", ", ".join(skipped) or "none")
     print(abl_mean.set_index("tier")[[f"{k}_{m}" for k in VARIANTS for m in ("acc", "ece")]].round(2).T)
@@ -365,6 +396,7 @@ def main(argv=None):
     print(aucs.pivot(index="measure", columns="tier", values="auc")[list(TIERS)].round(3))
     print(comb.round(3))
     print(rules.pivot(index="measure", columns="tier", values="gain")[list(TIERS)].round(3))
+    print(corrs.pivot(index="measure", columns="tier", values="rho")[list(TIERS)].round(3))
 
 
 if __name__ == "__main__":

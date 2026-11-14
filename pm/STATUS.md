@@ -62,6 +62,15 @@ Updated 2026-11-11 (T16 lead session, evening). Handoff: `handoffs/2026-11-11-T1
   conf.-acc. block in Table 3. TDA raises CLIP's gap on 14/16 sets (overconfident on 13); the gate lowers TDA's on 16/16.
   Near: CLIP -2.8, TDA +2.0, gate -2.9 (same ECE, opposite sides). Where the gate loses ECE it stays underconfident.
   Report: intro sentence, 5.3 paragraph, limitation (i); main text 8 pages. Tests (no deck): 389 passed. Committed.
+- **2026-11-15 (Idan): final makeover of paper and deck.** Report rewritten shorter (9 pages: about 6 main + 2
+  appendix; was 13): only the near and far sets are reported (no tier-revision history, no other held-out sets),
+  section 6 is "Discussion", the confidence switch, earlier-attempts table and proofs appendix are gone. New: a random
+  control in the ablation (`no_info.random_mask`, variant `rand`: the cache on as many random samples as the gate opens
+  on; design test 55.85 / 7.16 vs gate 56.72 / 5.51), flip figure with near and far only and no shading
+  (`no_info_break_even.png`, all ten scores in `no_info_scores.png`), Table 1 bold = best per column, the alpha-sweep
+  sentence re-checked and reworded (TDA needs alpha ~1.8 to match the gate's accuracy, ECE 10.4). Deck v6: 17 main + 3
+  backup slides (was 20 + 9), aligned with the report; deck tests pass again. Full suite: 403 passed, 17 skipped.
+  Reviewer cycles on both. Not committed.
 
 ## Running (background, this machine)
 - ECALP: done (58.34 / 32.32; K49).

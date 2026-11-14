@@ -127,7 +127,7 @@ def test_every_evidence_slide_names_its_split(deck):
     _, texts, _, _, _ = deck
     assert sum("DIAGNOSIS · VAL" in t for t in texts) >= 2
     assert sum("RESULTS · TEST" in t for t in texts) >= 3
-    assert sum("ALL TIERS" in t for t in texts) >= 3
+    assert sum("ALL TIERS" in t or "HELD-OUT" in t for t in texts) >= 4
     for t in texts:
         if "DIAGNOSIS · VAL" in t:
             assert "(test" not in t

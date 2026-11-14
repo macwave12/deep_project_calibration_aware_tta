@@ -1,9 +1,9 @@
 import pandas as pd
 import pytest
 
-from analysis.report_assets import (REPO, f, generalization, macro, prot, switch_numbers, tab_earlier, tab_main,
-                                    tab_p1, tab_switch, tab_switch_design, no_info_numbers,
-                                    tab_ablation_groups, rule_numbers, gap_numbers)
+from analysis.report_assets import (REPO, f, far_spread_numbers, generalization, macro, prot, sweep_numbers, tab_main,
+                                    tab_p1, no_info_numbers, tab_ablation_groups, rule_numbers, gap_numbers,
+                                    corr_numbers)
 
 
 def test_format_signs_and_latex_minus():
@@ -32,46 +32,14 @@ def test_main_table_reads_the_ten_seed_records():
     assert f(prot(d, "mean", "cal_tda_agree", "ece")) in text
     assert text.count("\\\\") == 7  # header + 3 methods x 2 metrics
     assert "\\pm" in text
+    # bold marks the best method per column (6 columns x 2 metrics), not our method
+    assert text.count("\\textbf") == 12
+    pets_ece = f(prot(d, "pets", "tda", "ece"))
+    assert "\\textbf{" + pets_ece in text and pets_ece < f(prot(d, "pets", "cal_tda_agree", "ece"))
 
 
-def test_earlier_and_p1_tables_have_one_row_per_method():
-    d = _tracked()
-    assert tab_earlier(d).count("\\\\") == 1 + 6
-    assert tab_p1(d).count("\\\\") == 1 + 3
-
-
-def _switch_frame():
-    rows = []
-    for tier in ("val", "dev", "test", "near", "far"):
-        for method, e in (("TDA", 10.0), ("TDA + ZAEC", 6.0), ("agreement gate", 5.5), ("confidence switch", 5.0)):
-            rows.append({"tier": tier, "dataset": "mean", "method": method, "accuracy": 56.0, "ece": e,
-                         "switch_on_pct": None, "clip_conf": None, "threshold": 0.78, "plateau_lo": 0.7,
-                         "plateau_hi": 0.84})
-    for tier, ds, pct, conf in (("val", "pets", 99.0, 84.0), ("test", "pets", 99.0, 84.5),
-                                ("near", "cifar10", 98.0, 85.0), ("near", "cifar100", 0.0, 56.0)):
-        rows.append({"tier": tier, "dataset": ds, "method": "confidence switch", "accuracy": 1.0, "ece": 1.0,
-                     "switch_on_pct": pct, "clip_conf": conf, "clip_gap": conf - 80, "threshold": 0.78, "plateau_lo": 0.7,
-                     "plateau_hi": 0.84})
-    return pd.DataFrame(rows)
-
-
-def _sweep():
-    return pd.DataFrame({"tier": ["near"] * 4 + ["val"], "threshold": [0.6, 0.65, 0.7, 0.8, 0.6],
-                         "accuracy": 50.0, "ece": [5.4, 5.2, 5.25, 5.5, 1.0]})
-
-
-def test_switch_numbers_and_table_read_the_tier_means():
-    n = switch_numbers(_switch_frame(), _sweep())
-    assert n["swThresh"] == "0.78"
-    assert n["swSwTestEce"] == "5.00" and n["swGateNearEce"] == "5.50"
-    assert n["swDDevEce"] == r"\ensuremath{-}0.50"
-    assert n["swOnN"] == "2" and n["swHeldN"] == "3" and n["swNearOnN"] == "1"
-    assert n["swMinOnConf"] == "0.84" and n["swMaxOffConf"] == "0.56" and n["swPlateauHi"] == "0.84"
-    text = tab_switch({"switch": _switch_frame()})
-    assert text.count("\\\\") == 5 and "5.00 (56.0)" in text
-    assert n["swNearBestEce"] == "5.20" and n["swNearBestLo"] == "0.65" and n["swNearBestHi"] == "0.70"
-    design = tab_switch_design({"switch": _switch_frame()})
-    assert design.count("\\\\") == 1 + 1 and "\\ensuremath{-}4.0 & yes" in design  # header + val pets only
+def test_p1_table_has_one_row_per_method():
+    assert tab_p1(_tracked()).count("\\\\") == 2 + 3  # two header rows
 
 
 def test_generalization_tags_near_far_other_drops_excluded_and_computes_deltas():
@@ -93,7 +61,7 @@ def test_generalization_tags_near_far_other_drops_excluded_and_computes_deltas()
 def _ni_frames():
     tiers = ("val", "test", "near", "far")
     abl = pd.DataFrame([{"tier": t, "agree_share": 60.0, "disagree_share": 40.0,
-                         **{f"{k}_{m}": 50.0 + i for i, k in enumerate(("clip", "base", "apos", "gate", "tda", "gpos"))
+                         **{f"{k}_{m}": 50.0 + i for i, k in enumerate(("clip", "base", "apos", "gate", "rand", "tda"))
                             for m in ("acc", "ece")},
                          "base_acc_agree": 80.0, "tda_acc_agree": 80.1, "base_gap_agree": -2.0, "tda_gap_agree": 10.0,
                          "base_acc_disagree": 40.0, "tda_acc_disagree": 45.0, "base_gap_disagree": 8.0,
@@ -111,7 +79,7 @@ def test_no_info_numbers_and_ablation_table():
     assert n["niFilterFar"] == "+0.00" and n["niAgreeTdaGapVal"] == "+10.0"
     assert n["niHeldAucLo"] == "0.48" and n["niAposMaxDAcc"] == "1.00" and n["niAgreeMaxDAcc"] == "0.10"
     text = tab_ablation_groups({"ni_abl": abl})
-    assert text.count("\\\\") == 1 + 6 + 6 and r"80.0 $\to$ 80.1" in text
+    assert text.count("\\\\") == 1 + 6 + 1 and "40\\%" in text  # header, six variants, the gate's share
 
 
 def test_rule_numbers_split_val_from_held_out_tiers():
@@ -132,3 +100,47 @@ def test_gap_numbers_count_directions_and_split_ece_losses_by_clip_sign():
     assert n["gapN"] == "3" and n["gapTdaUpN"] == "3" and n["gapGateDownN"] == "3" and n["gapTdaOverN"] == "2"
     assert n["gapTestTda"] == "+8.0" and n["gapFarGate"] == "+0.0"
     assert n["gapLoseUnderNames"] == "Pets" and n["gapLoseOtherNames"] == "GTSRB"
+    assert n["gapLoseN"] == "2" and n["gapLoseUnderN"] == "1" and n["gapLoseGateMax"] == "+0.0"
+
+
+def test_corr_numbers_use_held_out_tiers_and_the_three_discussed_scores():
+    corrs = pd.DataFrame([{"measure": m, "tier": t, "rho": r, "rho_min": r - 0.1, "rho_max": r + 0.3}
+                          for m, r in (("clip_conf", -0.1), ("cache_conf", 0.05), ("one_minus_js", 0.2), ("rho", 0.9))
+                          for t in ("val", "near", "far")])
+    deciles = pd.DataFrame([{"measure": m, "tier": t, "decile": 0, "right_pct": p}
+                            for m, p in (("clip_conf", 55.0), ("rho", 10.0)) for t in ("val", "near", "far")]
+                           + [{"measure": "cache_conf", "tier": "far", "decile": 1, "right_pct": 52.4},
+                              {"measure": "cache_conf", "tier": "val", "decile": 1, "right_pct": 30.0}])
+    n = corr_numbers(corrs, deciles)
+    assert n["niCorrClipNear"] == r"\ensuremath{-}0.10" and n["niCorrJsFar"] == "+0.20"
+    assert n["niCorrMaxAbs"] == "0.20" and n["niCorrDsMaxAbs"] == "0.50"  # the "rho" score is not discussed
+    assert n["niDecileMinNear"] == "55" and n["niDecileMinFar"] == "52"
+    assert n["niDecileAllMinNear"] == "10"  # every score counts here
+
+
+def test_sweep_numbers_interpolate_where_tda_reaches_the_gates_accuracy():
+    matched = pd.DataFrame({"dataset": ["mean"], "method": ["agreement gate (ours)"], "acc": [56.5]})
+    curve = pd.DataFrame({"dataset": "mean", "alpha": [0.0, 1.0, 2.0, 3.0], "acc": [54.0, 56.0, 57.0, 56.9],
+                          "ece": [4.0, 8.0, 12.0, 14.0]})
+    n = sweep_numbers(matched, curve)
+    assert n["sweepZeroAcc"] == "54.0" and n["sweepZeroEce"] == "4.0" and n["sweepMatchAlpha"] == "1.5"
+    assert n["matchedTdaEce"] == "10.0"
+    with pytest.raises(ValueError):
+        sweep_numbers(matched.assign(acc=60.0), curve)
+
+
+def test_far_spread_names_the_three_largest_reductions_and_the_range_of_the_rest():
+    g = pd.DataFrame({"dataset": ["mnist", "pcam", "svhn", "gtsrb", "imagenet_r", "caltech101"],
+                      "tier": ["far", "far", "far", "far", "far", "near"], "d_ece": [-7.2, -9.7, -4.0, 0.8, 2.1, -20.0]})
+    n = far_spread_numbers(g)
+    assert n["farBigNames"] == "PCam, MNIST and SVHN" and n["farBigLo"] == "4.0" and n["farBigHi"] == "9.7"
+    assert n["farRestLo"] == "+0.8" and n["farRestHi"] == "+2.1" and n["farRestN"] == "2"
+
+
+def test_comparison_mean_is_taken_over_the_five_datasets_not_the_rounded_mean_row():
+    from analysis.report_assets import comp
+    rows = [{"dataset": ds, "method": "CLIP", "ece_mean": v}
+            for ds, v in zip(("a", "b", "c", "d", "e"), (5.458, 8.238, 7.314, 2.905, 4.358))]
+    d = {"comp": pd.DataFrame(rows + [{"dataset": "mean", "method": "CLIP", "ece_mean": 5.655}])}
+    assert f(comp(d, "CLIP", "ece")) == "5.65"  # the CSV's mean row would print 5.66
+    assert comp(d, "CLIP", "ece", "b") == 8.238

@@ -19,22 +19,22 @@ cache_mass,cache,mass of its top class,far,0.5693,0.397,0.7328
 cache_mass,cache,mass of its top class,near,0.4702,0.3205,0.4816
 cache_mass,cache,mass of its top class,test,0.5131,0.4303,0.6157
 cache_mass,cache,mass of its top class,val,0.5764,0.4745,0.6637
-cache_support,cache,weight on CLIP's top-1,far,0.5597,0.428,0.5328
-cache_support,cache,weight on CLIP's top-1,near,0.4779,0.2611,0.4734
-cache_support,cache,weight on CLIP's top-1,test,0.5937,0.3655,0.5631
-cache_support,cache,weight on CLIP's top-1,val,0.5695,0.3348,0.5655
-rho,relation,"ρ(cache, CLIP) over classes",far,0.5015,0.4605,0.5498
-rho,relation,"ρ(cache, CLIP) over classes",near,0.4868,0.3333,0.5052
-rho,relation,"ρ(cache, CLIP) over classes",test,0.4811,0.472,0.5927
-rho,relation,"ρ(cache, CLIP) over classes",val,0.4911,0.4568,0.6475
-one_minus_js,relation,"1 − JS(cache, CLIP)",far,0.5677,0.4342,0.6324
-one_minus_js,relation,"1 − JS(cache, CLIP)",near,0.5322,0.5224,0.7494
-one_minus_js,relation,"1 − JS(cache, CLIP)",test,0.6322,0.4469,0.5263
-one_minus_js,relation,"1 − JS(cache, CLIP)",val,0.6378,0.394,0.5308
-weight_gap,relation,cache weight: CLIP top-1 − own top,far,0.4462,0.3817,0.7806
-weight_gap,relation,cache weight: CLIP top-1 − own top,near,0.4981,0.4009,0.5079
-weight_gap,relation,cache weight: CLIP top-1 − own top,test,0.3007,0.3492,0.5084
-weight_gap,relation,cache weight: CLIP top-1 − own top,val,0.3044,0.3522,0.4998
+cache_support,cache,share on CLIP's class,far,0.5597,0.428,0.5328
+cache_support,cache,share on CLIP's class,near,0.4779,0.2611,0.4734
+cache_support,cache,share on CLIP's class,test,0.5937,0.3655,0.5631
+cache_support,cache,share on CLIP's class,val,0.5695,0.3348,0.5655
+rho,relation,correlation over classes,far,0.5015,0.4605,0.5498
+rho,relation,correlation over classes,near,0.4868,0.3333,0.5052
+rho,relation,correlation over classes,test,0.4811,0.472,0.5927
+rho,relation,correlation over classes,val,0.4911,0.4568,0.6475
+one_minus_js,relation,1 − JS divergence,far,0.5677,0.4342,0.6324
+one_minus_js,relation,1 − JS divergence,near,0.5322,0.5224,0.7494
+one_minus_js,relation,1 − JS divergence,test,0.6322,0.4469,0.5263
+one_minus_js,relation,1 − JS divergence,val,0.6378,0.394,0.5308
+weight_gap,relation,"share gap, CLIP's − own",far,0.4462,0.3817,0.7806
+weight_gap,relation,"share gap, CLIP's − own",near,0.4981,0.4009,0.5079
+weight_gap,relation,"share gap, CLIP's − own",test,0.3007,0.3492,0.5084
+weight_gap,relation,"share gap, CLIP's − own",val,0.3044,0.3522,0.4998
 alpha_needed,relation,α needed to flip,far,0.4156,0.3394,0.5286
 alpha_needed,relation,α needed to flip,near,0.4875,0.4834,0.5256
 alpha_needed,relation,α needed to flip,test,0.4404,0.2703,0.4752
