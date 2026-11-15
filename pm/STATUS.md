@@ -70,7 +70,14 @@ Updated 2026-11-11 (T16 lead session, evening). Handoff: `handoffs/2026-11-11-T1
   (`no_info_break_even.png`, all ten scores in `no_info_scores.png`), Table 1 bold = best per column, the alpha-sweep
   sentence re-checked and reworded (TDA needs alpha ~1.8 to match the gate's accuracy, ECE 10.4). Deck v6: 17 main + 3
   backup slides (was 20 + 9), aligned with the report; deck tests pass again. Full suite: 403 passed, 17 skipped.
-  Reviewer cycles on both. Not committed.
+  Reviewer cycles on both. Committed 3d387e1.
+- **2026-11-15, second review round (paper and deck), applied:** section 3 and Fig. 2b now use the actual read-first
+  TDA runs (`results/analysis/t16/read_first_val_test.csv`: val ECE 11.19 -> 8.30, acc 56.29 -> 56.03; the old 7.52
+  was the self-vote subtraction approximation); threshold rules reported per held-out tier (near +0.00, far -0.03);
+  App. A means over datasets (CLIP ECE 5.65); protocol paragraph names which analyses use logged runs; ZAEC authors.
+  Deck: bold marks only the best values, ablation numbers labelled with their 3 orders, symbols g/b no longer reused,
+  titles no stronger than the evidence. Full suite: 405 passed, 17 skipped. Plan for the clean final branch (macwave):
+  `pm/handoffs/2026-11-15-clean-branch-plan.md`.
 
 ## Running (background, this machine)
 - ECALP: done (58.34 / 32.32; K49).

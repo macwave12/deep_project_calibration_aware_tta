@@ -291,7 +291,7 @@ def add_picture(slide, path, left, top, max_width, max_height, *, align="center"
 def add_table(slide, header, rows, left, top, width, *, col_widths=None, font_size=TABLE,
               row_height=Inches(0.4), highlight_rows=(), first_col_align=PP_ALIGN.LEFT,
               align=PP_ALIGN.RIGHT, bold_first_col=False, cell_colors=None, aligns=None, strong_rows=(),
-              bold_cells=()):
+              bold_cells=(), tint_rows=()):
     """Text columns can be left-aligned via `aligns` ("L"/"R" per column). `highlight_rows`: the gate (teal tint,
     bold); `strong_rows`: mean rows (neutral tint, bold); `bold_cells`: (row, col) pairs, e.g. the best per column."""
     def column_align(col):
@@ -330,7 +330,8 @@ def add_table(slide, header, rows, left, top, width, *, col_widths=None, font_si
             cell = table.cell(r_index, col)
             cell.text = ""
             cell.fill.solid()
-            cell.fill.fore_color.rgb = TINT_GATE if emphasised else TINT_NEUTRAL if strong else SURFACE
+            tinted = emphasised or (r_index - 1) in tint_rows
+            cell.fill.fore_color.rgb = TINT_GATE if tinted else TINT_NEUTRAL if strong else SURFACE
             cell.vertical_anchor = MSO_ANCHOR.MIDDLE
             cell.margin_left = cell.margin_right = Inches(0.07)
             cell.margin_top = cell.margin_bottom = Inches(0.03)
@@ -482,7 +483,7 @@ def slide_title(prs, r):
              [("The cache that echoes CLIP: agreement-gated test-time adaptation", 40, True, light)])
     add_text(slide, Inches(1.1), Inches(4.25), Inches(11.2), Inches(1.6), [
         ("Gal Machlin   ·   Idan Yehuda", 22, False, light),
-        ("Why TDA's accuracy gain makes CLIP overconfident, where exactly it happens, "
+        ("Why TDA makes CLIP overconfident while raising its accuracy, where exactly it happens, "
          "and a fix that adds no parameters.", 20, False, soft),
     ], spacing=14)
     set_notes(slide, f"""
@@ -504,13 +505,13 @@ def slide_task(prs, r):
              fill=TINT_CLIP, border=CLIPBLUE)
     flow_box(slide, MARGIN, top2, Inches(2.3), h, "class name k", fill=SURFACE)
     arrow(slide, MARGIN + Inches(2.38), top2 + Inches(0.32), Inches(0.5), Inches(0.32))
-    flow_box(slide, MARGIN + Inches(2.95), top2, Inches(3.3), h, "text encoder g", "frozen",
+    flow_box(slide, MARGIN + Inches(2.95), top2, Inches(3.3), h, "text encoder h", "frozen",
              fill=TINT_CLIP, border=CLIPBLUE)
     add_text(slide, MARGIN, top2 + h + Inches(0.08), Inches(6.3), Inches(0.4),
              [("prompt:  “a photo of a {class}.”", SUB, True, ACCENT)])
     arrow(slide, MARGIN + Inches(6.35), top1 + Inches(0.95), Inches(0.5), Inches(0.4))
     add_panel(slide, MARGIN + Inches(7.0), top1, Inches(5.1), Inches(2.6), fill=SURFACE)
-    add_equation(slide, r"z_k = s\,\cos\left(f(x),\,g(t_k)\right)", MARGIN + Inches(7.1), top1 + Inches(0.2),
+    add_equation(slide, r"z_k = s\,\cos\left(f(x),\,h(t_k)\right)", MARGIN + Inches(7.1), top1 + Inches(0.2),
                  size=24, center_width=Inches(4.9))
     add_equation(slide, r"p = \mathrm{softmax}(z),\quad \hat{y}_0 = \arg\max_k\, z_k",
                  MARGIN + Inches(7.1), top1 + Inches(1.0), size=24, center_width=Inches(4.9))
@@ -626,7 +627,7 @@ def render_calibration_figure(out_path: Path) -> Path:
     ax.set_ylabel("accuracy in the bin", fontsize=14)
     ax.tick_params(labelsize=12)
     ax.grid(alpha=0.25)
-    ax.legend(loc="upper left", fontsize=12, frameon=True, framealpha=0.95, edgecolor="#D8D5D0")
+    ax.legend(loc="lower right", fontsize=12, frameon=True, framealpha=0.95, edgecolor="#D8D5D0")
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=200)
@@ -637,7 +638,7 @@ def render_calibration_figure(out_path: Path) -> Path:
 def slide_calibration(prs, r):
     slide = new_slide(prs, "Calibration: confidence should equal accuracy", kicker="2 · TDA's catch")
     add_panel(slide, MARGIN, Inches(1.65), Inches(7.0), Inches(1.4))
-    add_equation(slide, r"\mathrm{ECE} = \sum_{b} \frac{|B_b|}{N}\,\left|\,\mathrm{acc}(B_b) - \mathrm{conf}(B_b)\,\right|",
+    add_equation(slide, r"\mathrm{ECE} = \sum_{m} \frac{|B_m|}{N}\,\left|\,\mathrm{acc}(B_m) - \mathrm{conf}(B_m)\,\right|",
                  MARGIN, Inches(1.85), size=26, center_width=Inches(7.0))
     add_bullets(slide, [
         "Bin predictions by confidence; ECE averages |accuracy − confidence| over the bins. Lower is better.",
@@ -674,8 +675,8 @@ def slide_tda_overconfident(prs, r):
     add_bullets(slide, [
         f"Accuracy up on every dataset; ECE up on {r.num(up, 0)} of {r.num(len(CORE), 0)}, sharply on DTD, Flowers "
         "and Aircraft.",
-        f"Which cache? Mean ECE: CLIP {r.num(a.clip_ece, 1)} → + negative cache {r.num(a.base_ece, 1)} → "
-        f"+ positive cache (TDA) {r.num(a.tda_ece, 1)}.",
+        f"Which cache? Mean ECE over {r.num(r.d['ni_abl_seed'].seed.nunique(), 0)} orders: CLIP {r.num(a.clip_ece, 1)} "
+        f"→ with the negative cache {r.num(a.base_ece, 1)} → with both caches (TDA) {r.num(a.tda_ece, 1)}.",
         "The positive cache brings the overconfidence. Why?",
     ], left=Inches(8.4), top=Inches(1.8), width=Inches(4.3), spacing=14, size=SUB)
     seeds = r.num(r.pair("cal_tda_agree", "ece").n, 0)
@@ -684,7 +685,7 @@ Per dataset, on the test splits with {seeds} stream orders. TDA gains accuracy e
 on three of the five datasets, sharply on DTD, from {r.num(r.main('clipzs', 'ece', 'dtd'))} to {r.num(r.main('tda', 'ece', 'dtd'))}. Pets and EuroSAT are the
 exceptions; on Pets CLIP is underconfident, and TDA's extra confidence happens to correct it, so keep Pets
 in mind. Which of the two caches is responsible? The negative cache alone lowers ECE; adding the positive
-cache takes it to {r.num(a.tda_ece, 1)}. So the problem sits in the positive cache. Why?
+cache takes it to {r.num(a.tda_ece, 1)} over three orders. So the problem sits in the positive cache. Why?
 """)
     return slide
 
@@ -694,15 +695,16 @@ def slide_selfvote(prs, r):
     slide = new_slide(prs, "Symptom: each new cache entry votes for itself", kicker="3 · Diagnosis · val")
     v = r.d["val"][r.d["val"].dataset != "mean"]
     lo, hi = r.num(v.self_vote_share.min(), 0), r.num(v.self_vote_share.max(), 0)
-    path = slide_figure("selfvote", lambda p: pf.fig_selfvote(r.d["val"], p, figsize=(12.0, 3.4), letters=False))
+    path = slide_figure("selfvote", lambda p: pf.fig_selfvote(r.d["val"], r.d["read_first"], p, figsize=(12.0, 3.4),
+                                                              letters=False))
     add_picture(slide, path, MARGIN, Inches(1.5), CONTENT_W, Inches(3.5))
     add_bullets(slide, [
         "Written before read: a new cache entry votes for itself with weight exp(0) = 1.",
         f"Frequent: {lo}–{hi}% of samples. Self-voters agree with CLIP {r.num(v.p_agree_given_self.min(), 0)}–"
         f"{r.num(v.p_agree_given_self.max(), 0)}% of the time, the others {r.num(v.p_agree_given_no_self.min(), 0)}–"
         f"{r.num(v.p_agree_given_no_self.max(), 0)}% (left).",
-        f"Read-first TDA: ECE {r.num(r.val('tda_ece'))} → {r.num(r.val('noself_ece'))}, still above CLIP's "
-        f"{r.num(r.val('clip_ece'))} (right).",
+        f"Read-first TDA: ECE {r.num(r.val('tda_ece'))} → {r.num(ra.read_first(r.d, 'val', 'ece'))}, still above "
+        f"CLIP's {r.num(r.val('clip_ece'))} (right).",
     ], top=Inches(5.1), spacing=6, size=SUB)
     set_notes(slide, f"""
 The first symptom. Because each image is written before it is read, an image that enters the cache votes
@@ -764,8 +766,8 @@ The method follows directly. We keep everything in TDA and switch the positive c
 its top class agrees with CLIP's pseudo-label, because there it can only inflate confidence. Where it
 disagrees, the cache is used exactly as in TDA. Why CLIP's label and not b's top class, as in the lemma?
 Because CLIP's label is what the cache is filled with, so agreement with it is the echo; the two differ on
-only {r.num(r.val('agree_neg_moved'), 1)} percent of agreeing samples. The rule adds no parameter and needs no label, and it was frozen on the
-validation splits before any test or held-out result.
+only {r.num(r.val('agree_neg_moved'), 1)} percent of agreeing samples. The rule adds no parameter and needs no label, and it was fixed on the
+validation splits before any of its own test or held-out results were computed.
 """)
     return slide
 
@@ -784,14 +786,15 @@ def slide_main(prs, r):
             bold |= {(i, 1 + 3 * j + k) for k, v in enumerate(vals) if v == best}
     add_table(slide, ["dataset", "CLIP acc.", "TDA acc.", "gate acc.", "CLIP ECE", "TDA ECE", "gate ECE"], rows, MARGIN,
               Inches(1.75), Inches(8.2), col_widths=[1.6, 1, 1, 1, 1, 1, 1], row_height=Inches(0.46), font_size=16,
-              strong_rows=(5,), bold_cells=bold)
+              bold_cells=bold)
     add_text(slide, MARGIN, Inches(5.1), Inches(8.2), Inches(0.4),
-             [("Bold: best in each column.", SMALL, False, MUTED)])
+             [("Bold: best of the three methods per dataset, for accuracy and for ECE.", SMALL, False, MUTED)])
     pa, pe = r.pair("cal_tda_agree", "accuracy"), r.pair("cal_tda_agree", "ece")
     n = r.num(pe.n, 0)
+    level = next(int(c[2:-3]) for c in pa.index if c.startswith("ci") and c.endswith("_lo"))  # from "ci90_lo"
     gain = r.main("tda", "accuracy") - r.main("clipzs", "accuracy")
     add_text(slide, Inches(9.1), Inches(1.8), Inches(3.6), Inches(4.6), [
-        (f"Gate − TDA, {n} stream orders [confidence interval]", SUB, True, ACCENT),
+        (f"Gate − TDA, {n} stream orders [{r.num(level, 0)}% CI]", SUB, True, ACCENT),
         (f"accuracy {r.num(pa.mean_diff, sign=True)} [{r.num(pa.ci90_lo, sign=True)}, {r.num(pa.ci90_hi, sign=True)}]",
          SUB, False, INK),
         (f"(TDA vs CLIP: {r.num(gain, sign=True)})", SUB, False, MUTED),
@@ -828,7 +831,7 @@ def slide_comparison(prs, r):
         f"Read-first TDA removes {r.num(100 * (tda - rf) / (tda - clip), 0)}% of TDA's ECE above CLIP's: the "
         "self-vote is only part of the echo.",
         "On the mean the gate beats a single temperature fitted with labels and the label-free ZAEC (the temperature "
-        "wins on DTD and Aircraft; B1).",
+        "wins on DTD and Aircraft, ZAEC on Flowers; B1).",
         "The gate and ZAEC act at different points: gate + ZAEC is the lowest.",
         f"DMN-weak and ECALP: higher ECE than TDA; ECALP is the most accurate ({r.num(r.comp('ECALP', 'accuracy'))}%).",
     ], left=Inches(8.6), top=Inches(1.75), width=Inches(4.1), spacing=12, size=SUB)
@@ -863,7 +866,8 @@ def slide_heldout(prs, r):
     add_bullets(slide, [
         "Near (" + ", ".join(NAMES.get(x, x) for x in g[g.tier == "near"].dataset)
         + "): ordinary photos; CLIP is already accurate and calibrated, and little changes.",
-        "Far: medical scans, digits, rendered text, sketches, faces, traffic signs. TDA adapts, and adds ECE.",
+        "Far: medical scans, digits, rendered text, sketches and renditions, facial expressions, traffic signs. "
+        "TDA adapts, and adds ECE.",
         f"ECE vs TDA on far: {r.num(big.d_ece.min(), 1, sign=True)} to {r.num(big.d_ece.max(), 1, sign=True)} on "
         + ", ".join(NAMES.get(x, x) for x in big.dataset) + f"; {r.num(rest.d_ece.min(), 1, sign=True)} to "
         f"{r.num(rest.d_ece.max(), 1, sign=True)} on the other {r.num(len(rest), 0)}.",
@@ -872,8 +876,8 @@ def slide_heldout(prs, r):
     set_notes(slide, f"""
 Now data that played no part in the design, in two tiers defined by what the images are. Near sets are
 ordinary photos like CLIP's training data: CLIP is already accurate and calibrated, and neither method
-changes much. Far sets are medical scans, digits, rendered text, sketches, facial expressions and traffic
-signs: TDA adds accuracy there, and ECE. The gate keeps TDA's accuracy on every held-out set, and on far its
+changes much. Far sets are medical scans, digits, rendered text, sketches and renditions, facial expressions
+and traffic signs: TDA adds accuracy there, and ECE. The gate keeps TDA's accuracy on every held-out set, and on far its
 mean ECE, {r.num(far.gate_ece.mean())}, ends below CLIP's {r.num(far.clip_ece.mean())}. The gain is uneven: large on PCam, ImageNet-Sketch and MNIST,
 small on the others, and TDA stays better calibrated on ImageNet-R and GTSRB.
 """)
@@ -908,14 +912,14 @@ The ablation tests the diagnosis on the design test sets and both held-out tiers
 ImageNet-Sketch, of which we logged only the first samples, so it differs a little from the previous slide.
 Adding TDA's positive cache only on the agreeing samples barely moves accuracy but doubles the ECE on the
 design sets: only confidence. Is the gate just using less cache? No. Adding the cache on as many random
-samples is worse in both accuracy and ECE, {r.num(a.loc['test', 'rand_ece'], 1)} against the gate's {r.num(a.loc['test', 'gate_ece'], 1)} on the design sets, and turning down
+samples is worse in both accuracy and ECE on the design and far sets, {r.num(a.loc['test', 'rand_ece'], 1)} against the gate's {r.num(a.loc['test', 'gate_ece'], 1)} on design, and turning down
 TDA's alpha until it matches the gate's accuracy leaves its ECE at {r.num(sw['ece'], 1)}. Which samples matters.
 """)
     return slide
 
 
 def slide_where(prs, r):
-    slide = new_slide(prs, "When does it help? Where CLIP is not underconfident", kicker="5 · Discussion · all tiers")
+    slide = new_slide(prs, "When does it help? Mostly where CLIP is not underconfident", kicker="5 · Discussion · all tiers")
     rg, rc = r.rho("clip_gap"), r.rho("conf")
     path = slide_figure("where", lambda p: pf.fig_where(r.d["helps"], r.d["rho"], p, figsize=(6.6, 4.9),
                                                        offset_scale=1.5, label_size="x-small"))
@@ -925,7 +929,8 @@ def slide_where(prs, r):
     add_bullets(slide, [
         f"The more overconfident CLIP is, the more the gate lowers ECE: ρ = {r.num(rg.rho, sign=True)} over "
         f"{r.num(rg.n, 0)} sets. That gap needs labels; CLIP's mean confidence on the first "
-        f"{r.num(SIGNAL_HEAD, 0)} images gives only ρ = {r.num(rc.rho, sign=True)}.",
+        f"{r.num(SIGNAL_HEAD, 0)} images is related only weakly (ρ = {r.num(rc.rho, sign=True)}; "
+        f"{r.num(r.rho('conf', 'far').rho, sign=True)} within far).",
         f"TDA raises CLIP's gap on {r.num((g.tda_gap > g.clip_gap).sum(), 0)} of {r.num(len(g), 0)} sets; the gate "
         f"lowers TDA's gap on all {r.num((g.gate_gap < g.tda_gap).sum(), 0)}.",
         "Where TDA's ECE is lower (named sets above zero), the gate is underconfident or calibrated in the mean: "
@@ -944,7 +949,7 @@ calibrated in the mean, the safer side.
 
 
 def slide_flips(prs, r):
-    slide = new_slide(prs, "No label-free score tells TDA's right flips from wrong ones",
+    slide = new_slide(prs, "No score of CLIP or the cache tells TDA's right flips from wrong ones",
                       kicker="5 · Discussion · held-out")
     path = slide_figure("flips", lambda p: ni.fig_deciles(r.d["ni_deciles"], r.d["ni_corr"], ni.DISCUSSED, p, ncols=3,
                                                          panel=(4.1, 3.4)))
@@ -980,12 +985,15 @@ def slide_conclusion(prs, r):
         (f"The gate keeps TDA's accuracy at CLIP-level ECE on the design sets ({r.num(r.main('tda', 'ece'))} → "
          f"{r.num(r.main('cal_tda_agree', 'ece'))}) and lowers ECE on {r.num((g.d_ece < 0).sum(), 0)} of "
          f"{r.num(len(g), 0)} far sets. No new parameter, no label.", BODY, False, INK),
-        ("Beyond agreement, no label-free score tells right flips from wrong.", BODY, False, INK),
+        ("Beyond agreement, no score of CLIP or the cache tells right flips from wrong.", BODY, False, INK),
     ], spacing=18)
+    gaps, helps = r.d["gaps"], r.d["helps"]
+    sets = gaps[gaps.tier.isin(("test", "near", "far"))].merge(helps[["dataset", "d_ece"]], on="dataset")
     add_text(slide, MARGIN, Inches(4.9), CONTENT_W, Inches(1.8), [
-        ("Limits: worse than TDA in ECE where CLIP is underconfident (Pets, Caltech101, Food101, ImageNet-R), on the "
-         "safer side; open-gate outputs stay overconfident on hard sets (DTD; ZAEC helps); one backbone and one cache "
-         "method, though the argument should carry to any cache of the model's own pseudo-labels (e.g. DMN).",
+        (f"Limits: worse than TDA in ECE on {r.num((sets.d_ece > 0).sum(), 0)} of {r.num(len(sets), 0)} sets, where "
+         "CLIP is underconfident (Pets, Caltech101, Food101, ImageNet-R) and on GTSRB, always underconfident or "
+         "calibrated in the mean; open-gate outputs stay overconfident on hard sets (DTD; ZAEC helps); one backbone "
+         "and one cache method, though the argument should carry to any cache of the model's own pseudo-labels.",
          SUB, False, MUTED)])
     set_notes(slide, """
 To close. TDA's positive cache mostly repeats CLIP's own decision, and where it does, it cannot change the
@@ -1008,7 +1016,7 @@ def slide_b_per_dataset(prs, r):
         vals = [round(r.comp(m, "ece", ds), 2) for m, _ in COMPARISON]
         bold |= {(i, 1 + j) for i, v in enumerate(vals) if v == min(vals)}
     add_table(slide, ["ECE (3 stream orders)"] + [NAMES[d] for d in CORE], rows, MARGIN, Inches(1.7), CONTENT_W,
-              col_widths=[3.4, 1, 1, 1, 1, 1], row_height=Inches(0.4), font_size=15, highlight_rows=(2,),
+              col_widths=[3.4, 1, 1, 1, 1, 1], row_height=Inches(0.4), font_size=15, tint_rows=(2,),
               bold_cells=bold)
     add_text(slide, MARGIN, Inches(6.2), CONTENT_W, Inches(0.4), [("Bold: lowest ECE per dataset.", SMALL, False, MUTED)])
     set_notes(slide, """
@@ -1022,23 +1030,21 @@ on the mean.
 
 def slide_b_reproduction(prs, r):
     slide = new_slide(prs, "Backup: reproduction and TDA's per-dataset setting", kicker="Backup")
-    p = r.d["p1"][r.d["p1"].dataset == "mean"]
     rows = []
     for m, label in (("clipzs", "CLIP"), ("tda", "TDA"), ("cal_tda_agree", "agreement gate")):
-        a = p[(p.method == m) & (p.metric == "accuracy")].iloc[0]
-        e = p[(p.method == m) & (p.metric == "ece")].iloc[0]
-        rows.append([label, r.num(a.mean_P1), r.num(a.mean_P2), r.num(e.mean_P1), r.num(e.mean_P2)])
-    add_table(slide, ["mean of 5 design test sets", "acc. (per-set α, β)", "acc. (single)", "ECE (per-set)",
+        rows.append([label] + [r.num(ra.p1_mean(r.d, m, metric, col)) for metric in ("accuracy", "ece")
+                               for col in ("mean_P1", "mean_P2")])
+    add_table(slide, ["5 design test sets, 3 orders, direct replay", "acc. (per-set α, β)", "acc. (single)", "ECE (per-set)",
                       "ECE (single)"], rows, MARGIN, Inches(1.8), Inches(11.0), col_widths=[3.0, 2.0, 1.6, 1.8, 1.6],
               row_height=Inches(0.5), font_size=17)
     repro = r.d["repro"].delta_gpu_vs_benchmark.abs().max()
-    diff = max(abs(p[(p.method == m) & (p.metric == metric)].mean_P2.item() - r.comp(cm, metric))
+    diff = max(abs(ra.p1_mean(r.d, m, metric, "mean_P2") - r.comp(cm, metric))
                for m, cm in (("tda", "TDA"), ("cal_tda_agree", "agreement gate")) for metric in ("accuracy", "ece"))
     add_bullets(slide, [
         f"Our GPU runs reproduce the benchmark's CLIP and TDA accuracies within {r.num(repro)} points per dataset.",
         "TDA's code release ships per-dataset α, β; they do not do better than the paper's single setting.",
-        f"This table replays TDA's own code; the comparison slide re-evaluates logged runs of an equivalent "
-        f"implementation (within {r.num(diff)} points).",
+        f"This table replays TDA's own code; the comparison, ablation and discussion slides re-evaluate logged runs "
+        f"of an equivalent implementation (within {r.num(diff)} points).",
     ], top=Inches(4.0), spacing=10, size=SUB)
     set_notes(slide, f"""
 For completeness, the per-dataset alpha and beta that TDA's code release ships, against the single setting from
@@ -1057,16 +1063,16 @@ def slide_b_scores(prs, r):
                                                           ncols=5, panel=(2.45, 2.3), wrap_titles=True), rc=small)
     add_picture(slide, path, MARGIN, Inches(1.45), CONTENT_W, Inches(4.5))
     rules, flt = r.d["ni_rules"], r.d["ni_filter"].set_index("tier")
-    held = rules[rules.tier != "val"]
+    best = {t: rules[rules.tier == t].gain.max() for t in ("near", "far")}
     add_bullets(slide, [
-        f"Best one-threshold rule per score, chosen on validation flips: at most {r.num(held.gain.max())} accuracy "
-        "points on a held-out tier.",
+        f"Best one-threshold rule per score, chosen on validation flips: {r.num(best['near'], sign=True)} accuracy "
+        f"points on near, {r.num(best['far'], sign=True)} on far.",
         f"All ten in a logistic regression: {r.num(flt.loc['far', 'filter_gain'], sign=True)} points on far.",
     ], top=Inches(6.0), spacing=6, size=SUB)
     set_notes(slide, f"""
 The same view for all ten label-free scores: three of CLIP, three of the cache and four of their relation. None
 separates right from wrong flips on the held-out tiers. The best threshold rule per score, chosen on the
-validation flips, gains at most {r.num(held.gain.max())} points on a held-out tier, and all ten combined in a logistic
+validation flips, gains nothing on the held-out tiers, {r.num(best['near'], sign=True)} points on near and {r.num(best['far'], sign=True)} on far, and all ten combined in a logistic
 regression change accuracy by {r.num(flt.loc['far', 'filter_gain'], sign=True)} points on the far tier.
 """)
     return slide

@@ -45,7 +45,7 @@ Calibration means that the confidence a model reports matches how often it is ri
 
 ## 7. TDA's catch: more accuracy, worse calibration
 
-Per dataset, on the test splits with 10 stream orders. TDA gains accuracy everywhere, but its ECE grows on three of the five datasets, sharply on DTD, from 8.24 to 17.51. Pets and EuroSAT are the exceptions; on Pets CLIP is underconfident, and TDA's extra confidence happens to correct it, so keep Pets in mind. Which of the two caches is responsible? The negative cache alone lowers ECE; adding the positive cache takes it to 10.9. So the problem sits in the positive cache. Why?
+Per dataset, on the test splits with 10 stream orders. TDA gains accuracy everywhere, but its ECE grows on three of the five datasets, sharply on DTD, from 8.24 to 17.51. Pets and EuroSAT are the exceptions; on Pets CLIP is underconfident, and TDA's extra confidence happens to correct it, so keep Pets in mind. Which of the two caches is responsible? The negative cache alone lowers ECE; adding the positive cache takes it to 10.9 over three orders. So the problem sits in the positive cache. Why?
 
 ---
 
@@ -63,7 +63,7 @@ Now the general mechanism, with a short proof. Let b be CLIP after the negative 
 
 ## 10. The agreement gate: use the cache only where it disagrees
 
-The method follows directly. We keep everything in TDA and switch the positive cache off on samples where its top class agrees with CLIP's pseudo-label, because there it can only inflate confidence. Where it disagrees, the cache is used exactly as in TDA. Why CLIP's label and not b's top class, as in the lemma? Because CLIP's label is what the cache is filled with, so agreement with it is the echo; the two differ on only 6.6 percent of agreeing samples. The rule adds no parameter and needs no label, and it was frozen on the validation splits before any test or held-out result.
+The method follows directly. We keep everything in TDA and switch the positive cache off on samples where its top class agrees with CLIP's pseudo-label, because there it can only inflate confidence. Where it disagrees, the cache is used exactly as in TDA. Why CLIP's label and not b's top class, as in the lemma? Because CLIP's label is what the cache is filled with, so agreement with it is the echo; the two differ on only 6.6 percent of agreeing samples. The rule adds no parameter and needs no label, and it was fixed on the validation splits before any of its own test or held-out results were computed.
 
 ---
 
@@ -81,23 +81,23 @@ Here we compare with the closest alternatives, paired to TDA on the same stream 
 
 ## 13. Held-out: same accuracy; lower ECE on 6 of 8 far sets
 
-Now data that played no part in the design, in two tiers defined by what the images are. Near sets are ordinary photos like CLIP's training data: CLIP is already accurate and calibrated, and neither method changes much. Far sets are medical scans, digits, rendered text, sketches, facial expressions and traffic signs: TDA adds accuracy there, and ECE. The gate keeps TDA's accuracy on every held-out set, and on far its mean ECE, 9.74, ends below CLIP's 11.38. The gain is uneven: large on PCam, ImageNet-Sketch and MNIST, small on the others, and TDA stays better calibrated on ImageNet-R and GTSRB.
+Now data that played no part in the design, in two tiers defined by what the images are. Near sets are ordinary photos like CLIP's training data: CLIP is already accurate and calibrated, and neither method changes much. Far sets are medical scans, digits, rendered text, sketches and renditions, facial expressions and traffic signs: TDA adds accuracy there, and ECE. The gate keeps TDA's accuracy on every held-out set, and on far its mean ECE, 9.74, ends below CLIP's 11.38. The gain is uneven: large on PCam, ImageNet-Sketch and MNIST, small on the others, and TDA stays better calibrated on ImageNet-R and GTSRB.
 
 ---
 
 ## 14. Ablation: agreement picks the right samples
 
-The ablation tests the diagnosis on the design test sets and both held-out tiers; the far column leaves out ImageNet-Sketch, of which we logged only the first samples, so it differs a little from the previous slide. Adding TDA's positive cache only on the agreeing samples barely moves accuracy but doubles the ECE on the design sets: only confidence. Is the gate just using less cache? No. Adding the cache on as many random samples is worse in both accuracy and ECE, 7.2 against the gate's 5.5 on the design sets, and turning down TDA's alpha until it matches the gate's accuracy leaves its ECE at 10.4. Which samples matters.
+The ablation tests the diagnosis on the design test sets and both held-out tiers; the far column leaves out ImageNet-Sketch, of which we logged only the first samples, so it differs a little from the previous slide. Adding TDA's positive cache only on the agreeing samples barely moves accuracy but doubles the ECE on the design sets: only confidence. Is the gate just using less cache? No. Adding the cache on as many random samples is worse in both accuracy and ECE on the design and far sets, 7.2 against the gate's 5.5 on design, and turning down TDA's alpha until it matches the gate's accuracy leaves its ECE at 10.4. Which samples matters.
 
 ---
 
-## 15. When does it help? Where CLIP is not underconfident
+## 15. When does it help? Mostly where CLIP is not underconfident
 
 When does the gate help? On agreeing samples the echo only adds confidence, so removing it should help where CLIP is calibrated or overconfident, and hurt where CLIP is underconfident, where the added confidence happens to correct it. That is the tendency we see: the more overconfident CLIP is, the more the gate lowers ECE, with a rank correlation of −0.76. That gap needs labels, so it explains the result but cannot drive a switch. The signed gap also shows the direction of the errors: TDA pushes toward overconfidence almost everywhere, and on the sets where TDA wins in ECE, Pets, Caltech101, Food101, ImageNet-R and GTSRB, the gate is underconfident or calibrated in the mean, the safer side.
 
 ---
 
-## 16. No label-free score tells TDA's right flips from wrong ones
+## 16. No score of CLIP or the cache tells TDA's right flips from wrong ones
 
 The gate reads one bit, agreement. Could a finer use of the scores do better? TDA's accuracy gain comes from flips, samples where its decision differs from CLIP's and one of the two is right. An oracle that reverted exactly the wrong flips would add up to 2.3 points, so there is room. We test one score of each kind on the held-out flips: CLIP's confidence, the cache's confidence, and their similarity. Their correlation with a flip being right is at most 0.18 in size, and for the cache's confidence it even changes sign between near and far. In every decile about half or more of the flips are right, so no range is worth reverting. Seven more scores and a regression on all ten do no better.
 
@@ -123,4 +123,4 @@ For completeness, the per-dataset alpha and beta that TDA's code release ships, 
 
 ## 20. Backup: all ten label-free scores
 
-The same view for all ten label-free scores: three of CLIP, three of the cache and four of their relation. None separates right from wrong flips on the held-out tiers. The best threshold rule per score, chosen on the validation flips, gains at most 0.03 points on a held-out tier, and all ten combined in a logistic regression change accuracy by −0.57 points on the far tier.
+The same view for all ten label-free scores: three of CLIP, three of the cache and four of their relation. None separates right from wrong flips on the held-out tiers. The best threshold rule per score, chosen on the validation flips, gains nothing on the held-out tiers, +0.00 points on near and −0.03 on far, and all ten combined in a logistic regression change accuracy by −0.57 points on the far tier.

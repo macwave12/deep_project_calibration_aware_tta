@@ -19,7 +19,9 @@ def _summary():
 
 def test_figures_draw_from_their_tables(tmp_path):
     s = _summary()
-    fig_selfvote(s, tmp_path / "a.png")
+    read_first = pd.DataFrame({"split": "val", "method": "TDA read first (no self-vote)", "dataset": ["dtd", "pets"],
+                               "ece": [12.0, 3.0]})
+    fig_selfvote(s, read_first, tmp_path / "a.png")
     fig_agreement(s, tmp_path / "b.png")
     helps = pd.DataFrame({"dataset": ["dtd", "cars", "pets"], "group": ["test", "near", "far"],
                           "conf": [50.0, 60.0, 85.0], "clip_gap": [8.0, -1.0, -3.0],

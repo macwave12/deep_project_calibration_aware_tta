@@ -67,6 +67,8 @@ def load(root: Path = REPO) -> dict:
         "p1": pd.read_csv(an / "p1_appendix_p1_vs_p2.csv"),
         "repro": pd.read_csv(an / "p1_appendix_reproduction.csv"),
         "ni_abl": pd.read_csv(an / "t16" / "no_info_ablation.csv"),
+        "ni_abl_seed": pd.read_csv(an / "t16" / "no_info_ablation_per_seed.csv"),
+        "read_first": pd.read_csv(an / "t16" / "read_first_val_test.csv"),
         "ni_auc": pd.read_csv(an / "t16" / "no_info_auc.csv"),
         "ni_filter": pd.read_csv(an / "t16" / "no_info_filter.csv"),
         "ni_rates": pd.read_csv(an / "t16" / "no_info_rates.csv"),
@@ -74,6 +76,25 @@ def load(root: Path = REPO) -> dict:
         "ni_corr": pd.read_csv(an / "t16" / "no_info_corr.csv"),
         "ni_deciles": pd.read_csv(an / "t16" / "no_info_deciles.csv"),
     }
+
+
+READ_FIRST = "TDA read first (no self-vote)"
+
+
+def read_first(d, split: str, metric: str, dataset="mean") -> float:
+    """Actual read-before-write TDA runs (3 seeds). The mean is over the five design sets."""
+    t = d["read_first"]
+    t = t[(t.split == split) & (t.method == READ_FIRST)]
+    return float(t[metric].mean() if dataset == "mean" else t[t.dataset == dataset][metric].item())
+
+
+def p1_mean(d, method: str, metric: str, col: str) -> float:
+    """Protocol table (direct replay, 3 seeds), mean over the five design sets' rows (not the rounded mean row)."""
+    p = d["p1"]
+    rows = p[(p.dataset != "mean") & (p.method == method) & (p.metric == metric)]
+    if len(rows) != 5:
+        raise KeyError((method, metric))
+    return float(rows[col].mean())
 
 
 def prot(d, dataset, method, metric, col="mean", protocol="P2"):
@@ -167,8 +188,7 @@ def numbers(d) -> dict:
         except KeyError:
             n[f"cmp{key}Acc"] = n[f"cmp{key}Ece"] = "n/a"
     excess = comp(d, "TDA", "ece") - comp(d, "CLIP", "ece")
-    p1 = d["p1"][d["p1"].dataset == "mean"]
-    n["replayDiffMax"] = f(max(abs(p1[(p1.method == m) & (p1.metric == metric)].mean_P2.item() - comp(d, cm, metric))
+    n["replayDiffMax"] = f(max(abs(p1_mean(d, m, metric, "mean_P2") - comp(d, cm, metric))
                                for m, cm in (("tda", "TDA"), ("cal_tda_agree", "agreement gate"))
                                for metric in ("accuracy", "ece")))
     n["readFirstExcessShare"] = f(100 * (comp(d, "TDA", "ece") - comp(d, "read-first TDA", "ece")) / excess, 0)
@@ -180,8 +200,8 @@ def numbers(d) -> dict:
     n["valSelfMin"], n["valSelfMax"] = f(v.self_vote_share.min(), 0), f(v.self_vote_share.max(), 0)
     n["valAgreeSelfMin"], n["valAgreeSelfMax"] = f(v.p_agree_given_self.min(), 0), f(v.p_agree_given_self.max(), 0)
     n["valAgreeNoSelfMin"], n["valAgreeNoSelfMax"] = f(v.p_agree_given_no_self.min(), 0), f(v.p_agree_given_no_self.max(), 0)
-    n["valTdaEce"], n["valNoSelfEce"], n["valClipEce"] = f(vm.tda_ece), f(vm.noself_ece), f(vm.clip_ece)
-    n["valTdaAcc"], n["valNoSelfAcc"] = f(vm.tda_acc), f(vm.noself_acc)
+    n["valTdaEce"], n["valClipEce"], n["valTdaAcc"] = f(vm.tda_ece), f(vm.clip_ece), f(vm.tda_acc)
+    n["valNoSelfEce"], n["valNoSelfAcc"] = f(read_first(d, "val", "ece")), f(read_first(d, "val", "acc"))
     n["valAgreeShare"] = f(vm.agree_share, 0)
     n["valAgreeNegMoved"] = f(vm.agree_neg_moved, 1)
     n["valAgreeTdaFlips"] = f(vm.agree_tda_flips, 1)
@@ -234,6 +254,7 @@ def numbers(d) -> dict:
     n["rhoN"] = str(int(rho[(rho.datasets == "all")].iloc[0].n))
     n.update(no_info_numbers(d["ni_abl"], d["ni_auc"], d["ni_filter"]))
     n.update(rule_numbers(d["ni_rules"], d["ni_filter"]))
+    n.update(agree_range_numbers(d["ni_abl_seed"]))
     n.update(corr_numbers(d["ni_corr"], d["ni_deciles"]))
     n.update(gap_numbers(d["gaps"], d["helps"]))
     return n
@@ -300,17 +321,25 @@ def gap_numbers(gaps: pd.DataFrame, helps: pd.DataFrame) -> dict:
     n["gapLoseUnderNames"] = ", ".join(NAMES.get(x, x) for x in lose[lose.clip_gap < 0].dataset)
     n["gapLoseOtherNames"] = ", ".join(NAMES.get(x, x) for x in lose[lose.clip_gap >= 0].dataset)
     n["gapLoseN"], n["gapLoseUnderN"] = str(len(lose)), str(int((lose.clip_gap < 0).sum()))
+    n["gapUnderN"] = str(int((g.clip_gap < 0).sum()))
     n["gapLoseGateMax"] = f(lose.gate_gap.max(), 1, sign=True)  # the gate's largest gap where it loses in ECE
     return n
 
 
 def rule_numbers(rules: pd.DataFrame, filt: pd.DataFrame) -> dict:
-    """Best gain of any val-chosen one-score rule, on val and on the held-out tiers, against the oracle's range."""
-    held = rules[rules.tier != "val"]
+    """Best gain of any val-chosen one-score rule on val and on each held-out tier, and the oracle's range over the
+    tiers other than val."""
     orc = filt[filt.tier != "val"].oracle_block
-    return {"niRuleBestVal": f(rules[rules.tier == "val"].gain.max(), 2, sign=True),
-            "niRuleBestHeld": f(held.gain.max(), 2, sign=True), "niRuleBestHeldU": f(held.gain.max(), 2),
-            "niOracleBlockLo": f(orc.min(), 1), "niOracleBlockHi": f(orc.max(), 1)}
+    n = {f"niRuleBest{t.capitalize()}": f(rules[rules.tier == t].gain.max(), 2, sign=True)
+         for t in ("val", "near", "far")}
+    n["niOracleBlockLo"], n["niOracleBlockHi"] = f(orc.min(), 1), f(orc.max(), 1)
+    return n
+
+
+def agree_range_numbers(abl_seed: pd.DataFrame) -> dict:
+    """Range over datasets (every tier) of the share of samples whose cache agrees with CLIP, mean over seeds."""
+    per = abl_seed.groupby(["tier", "dataset"]).agree_share.mean()
+    return {"niAgreeDsLo": f(per.min(), 0), "niAgreeDsHi": f(per.max(), 0)}
 
 
 CORR_SCORES = (("clip_conf", "Clip"), ("cache_conf", "Cache"), ("one_minus_js", "Js"))
@@ -464,15 +493,13 @@ def tab_generalization(d, tiers=GEN_TIERS) -> str:
 
 
 def tab_p1(d) -> str:
-    p = d["p1"][d["p1"].dataset == "mean"]
     lines = ["\\begin{tabular}{lrrrr}", "\\toprule",
              " & \\multicolumn{2}{c}{accuracy} & \\multicolumn{2}{c}{ECE} \\\\",
              "\\cmidrule(lr){2-3}\\cmidrule(lr){4-5}",
              "method & per-dataset & single & per-dataset & single \\\\", "\\midrule"]
     for m, label in (("clipzs", "CLIP"), ("tda", "TDA"), ("cal_tda_agree", "agreement gate")):
-        a = p[(p.method == m) & (p.metric == "accuracy")].iloc[0]
-        e = p[(p.method == m) & (p.metric == "ece")].iloc[0]
-        lines.append(f"{label} & {f(a.mean_P1)} & {f(a.mean_P2)} & {f(e.mean_P1)} & {f(e.mean_P2)} \\\\")
+        cells = [f(p1_mean(d, m, metric, col)) for metric in ("accuracy", "ece") for col in ("mean_P1", "mean_P2")]
+        lines.append(f"{label} & " + " & ".join(cells) + " \\\\")
     lines += ["\\bottomrule", "\\end{tabular}"]
     return "\n".join(lines)
 

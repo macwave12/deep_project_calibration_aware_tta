@@ -67,9 +67,10 @@ positive and a negative cache, which are filled with CLIP's own pseudo-labels as
 \label{fig:tda}
 \end{figure}
 
-\textbf{Contributions.} (1) A \emph{diagnosis} (\S\ref{sec:motivation}): on \niAgreeShareLo--\niAgreeShareHi\% of the
-samples, depending on the data, TDA's cache agrees with CLIP. There it cannot change the decision and can only raise
-confidence, which we prove; empirically, on these samples it turns a slight underconfidence into strong overconfidence.
+\textbf{Contributions.} (1) A \emph{diagnosis} (\S\ref{sec:motivation}): TDA's cache agrees with CLIP on
+\niAgreeShareLo--\niAgreeShareHi\% of the samples on average per tier (\niAgreeDsLo--\niAgreeDsHi\% per dataset). There
+it cannot change the decision and can only raise confidence, which we prove; empirically, on the design sets it turns a
+slight underconfidence on these samples into strong overconfidence.
 (2) The \emph{agreement gate} (\S\ref{sec:method}): use the cache only where it disagrees with CLIP. (3) Evidence on
 \totalDatasets{} datasets, \genAllN{} of them held out from the design, against TDA, post-hoc calibration and two other
 training-free methods, with an ablation and a random control (\S\ref{sec:results}). (4) Its limits
@@ -118,11 +119,11 @@ numbers in it come from the validation splits of the five design sets.
 
 \textbf{The self-vote.} Because a sample is written before it is read, a sample that enters the cache finds itself
 there: it adds exactly $1$ to $c_{\hat y_0}(x)$, more than any other cached sample can add. This vote adds nothing to
-CLIP's own prediction, and it is frequent: \valSelfMin--\valSelfMax\% of the samples vote for themselves. Samples that
-do agree with CLIP's top class in the cache on \valAgreeSelfMin--\valAgreeSelfMax\% of cases, the others on
-\valAgreeNoSelfMin--\valAgreeNoSelfMax\% (Fig.~\ref{fig:diag}a). Removing the vote by reading the cache before writing
-to it (\emph{read-first TDA}) lowers TDA's ECE from \valTdaEce{} to \valNoSelfEce{} (Fig.~\ref{fig:diag}b), at a small
-accuracy cost (\valTdaAcc\% $\to$ \valNoSelfAcc\%).
+CLIP's own prediction, and it is frequent: \valSelfMin--\valSelfMax\% of the samples vote for themselves. Among samples
+that vote for themselves, the cache's top class is CLIP's in \valAgreeSelfMin--\valAgreeSelfMax\% of cases; among the
+others, in \valAgreeNoSelfMin--\valAgreeNoSelfMax\% (Fig.~\ref{fig:diag}a). Reading the cache before writing to it
+(\emph{read-first TDA}) removes the vote and lowers TDA's ECE from \valTdaEce{} to \valNoSelfEce{}
+(Fig.~\ref{fig:diag}b), at a small accuracy cost (\valTdaAcc\% $\to$ \valNoSelfAcc\%).
 
 \textbf{Agreement in general.} Cached neighbors pseudo-labeled with CLIP's class make the cache agree with CLIP as well.
 Call a sample \emph{agreeing} if the cache's top class is CLIP's, $\arg\max_k c_k(x) = \hat y_0(x)$, and
@@ -181,10 +182,11 @@ depends on the order in which the test samples arrive. We run every method on th
 (seeds: \mainSeeds{} for Table~\ref{tab:main}, 3 elsewhere) and report the mean. For Table~\ref{tab:main} we also give
 90\% confidence intervals over seeds for the gate's differences from TDA: an interval that excludes zero means the
 difference is unlikely to be due to the sample order (it says nothing about other datasets). CLIP features are extracted
-once on a GPU, and TDA's stream is replayed on CPU from them (Appendix~\ref{app:p1}). Tables~\ref{tab:comparison}
-and~\ref{tab:abl} and \S\ref{sec:limits} re-evaluate logged runs of an equivalent implementation, whose design-set means
-agree with the direct replay within \replayDiffMax{} points; they leave out ImageNet-Sketch, of which we logged only the
-first 500 samples.
+once on a GPU, and TDA's stream is replayed on CPU from them (Appendix~\ref{app:p1}). Section~\ref{sec:motivation},
+Tables~\ref{tab:comparison} and~\ref{tab:abl}, the $\alpha$ sweep of \S\ref{sec:abl} and the flip analysis of
+\S\ref{sec:limits} re-evaluate logged runs of an equivalent implementation, whose design-set means agree with the
+direct replay within \replayDiffMax{} points; Table~\ref{tab:abl} and the flip analysis leave out ImageNet-Sketch, of
+which we logged only the first 500 samples.
 
 \begin{table}[t]
 \centering\small
@@ -196,8 +198,8 @@ order). Bold: best in each column. Gate $-$ TDA: accuracy \mainDAcc{} [\mainDAcc
 \end{table}
 
 \subsection{Main result}\label{sec:main}
-On the mean over the five design test sets (Table~\ref{tab:main}), the gate lowers TDA's ECE from \mainTdaEce{} to
-\mainGateEce{} on every seed, slightly below CLIP's \mainClipEce. Its accuracy changes by \mainDAcc{} points (90\% CI
+On the mean over the five design test sets (Table~\ref{tab:main}), the gate lowers TDA's mean ECE from \mainTdaEce{} to
+\mainGateEce{} (lower on all \mainSeeds{} seeds), slightly below CLIP's \mainClipEce. Its accuracy changes by \mainDAcc{} points (90\% CI
 [\mainDAccLo, \mainDAccHi]), small next to TDA's gain of \mainTdaGainAcc{} points over CLIP. Per dataset, the gate is
 much better calibrated than TDA on DTD, Flowers, EuroSAT and Aircraft, and worse on Pets (\S\ref{sec:limits}).
 
@@ -241,8 +243,8 @@ positive when overconfident (\S\ref{sec:limits}).}
 On every held-out set the gate keeps TDA's accuracy: it is never more than \genWorstDropAcc{} points below TDA's
 (\genWorstDropName; Table~\ref{tab:gen}).
 
-\textbf{Near: little to adapt.} CLIP is already accurate (\genNearMeanClipAcc\%) and calibrated (ECE
-\genNearMeanClipEce) on these photos, and neither method moves it much: on average TDA changes accuracy by
+\textbf{Near: little to adapt.} On these photos CLIP is already accurate (\genNearMeanClipAcc\%) and has a low ECE
+(\genNearMeanClipEce), though it is slightly underconfident (gap \gapNearClip), and neither method moves it much: on average TDA changes accuracy by
 \genNearTdaOverClipAcc{} points and ECE by \genNearTdaOverClipEce, the gate by \genNearGateOverClipAcc{} and
 \genNearGateOverClipEce. The gate lowers TDA's ECE on Cars, is worse on Caltech101 and about equal on Food101
 (\S\ref{sec:limits}).
@@ -297,8 +299,9 @@ happens to correct it. Across the \rhoN{} design, near and far sets, the more ov
 lowers ECE (Fig.~\ref{fig:where}; Spearman $\rho = \rhoGapAll$; \rhoGapTest{} within the design sets and \rhoGapFar{}
 within far, while near has only three sets). It is a tendency, not a rule: GTSRB loses a little although CLIP is not
 underconfident there, and Cars gains although CLIP is mildly underconfident there. The gap needs labels, so it explains
-the gate's behavior but cannot drive it; a label-free proxy, CLIP's mean confidence on the first \signalHead{} samples of
-the stream, follows the gate's ECE change only weakly ($\rho = \rhoConfAll$).
+the gate's behavior but cannot drive it; a label-free signal, CLIP's mean confidence on the first \signalHead{} samples
+of the stream, is related to it only weakly and inconsistently ($\rho = \rhoConfAll$ over all \rhoN{} sets,
+\rhoConfFar{} within far).
 
 \textbf{Over- or underconfident?} The gap shows the direction of each error. TDA errs toward overconfidence: over the
 \gapN{} design, near and far sets it raises CLIP's gap on \gapTdaUpN{} and is overconfident on \gapTdaOverN, while the
@@ -320,9 +323,9 @@ control of the cache could still gain, if a label-free score told right flips fr
 
 We test one score of each kind on the held-out flips: CLIP's confidence, the cache's confidence (the largest share of
 $c(x)$), and their similarity ($1 -$ the Jensen--Shannon divergence between their class distributions). Within a
-dataset, the Spearman correlation between a flip being right and the score is small: its mean over a tier's datasets is
-at most \niCorrMaxAbs{} in magnitude for any of the three (\niCorrDsMaxAbs{} on a single dataset), and for the cache's
-confidence it even changes sign between tiers (\niCorrCacheNear{} on near, \niCorrCacheFar{} on far). The share of right
+dataset, the Spearman correlation between a flip being right and the score is small on average: its mean over a tier's
+datasets is at most \niCorrMaxAbs{} in magnitude for any of the three (though \niCorrDsMaxAbs{} on one dataset), and for
+the cache's confidence it is \niCorrCacheNear{} on near but \niCorrCacheFar{} on far. The share of right
 flips stays at about one half or more in every decile of every score (Fig.~\ref{fig:noinfo}; lowest
 \niDecileMinNear\% on near and \niDecileMinFar\% on far), so reverting the flips in any range of a score cannot raise
 accuracy by much. Seven further scores, threshold rules chosen on validation flips, and a regression combining all ten
@@ -332,7 +335,8 @@ do no better (Appendix~\ref{app:flips}).
 \centering
 \includegraphics[width=\linewidth]{no_info_break_even.png}
 \caption{Share of TDA's flips that are right, by decile of a score's percentile within its dataset (held-out tiers,
-3 seeds, flips pooled over datasets and seeds; flips on which both TDA and CLIP are wrong are left out). $\rho$: Spearman
+3 seeds, flips pooled over datasets and seeds; far: the seven sets other than ImageNet-Sketch; flips on which both TDA
+and CLIP are wrong are left out). $\rho$: Spearman
 correlation between a flip being right and the score, computed per dataset and averaged over the tier's datasets.}
 \label{fig:noinfo}
 \end{figure}
@@ -341,7 +345,8 @@ CLIP and the cache, as they are, seem to have given what they can: the cache hel
 which of its flips are right is not visible in the scores of either. Choosing which flips to keep likely needs another
 source of information, such as augmented views or a second model.
 
-\textbf{Limitations.} (i) Where CLIP is underconfident, the gate loses to TDA in ECE, though on the safer side. (ii) Where
+\textbf{Limitations.} (i) Where CLIP is underconfident, the gate usually loses to TDA in ECE (on \gapLoseUnderN{} of the \gapUnderN{} such
+sets; not on Cars), though on the safer side. (ii) Where
 the gate is open, predictions stay overconfident on the hardest sets (e.g.\ DTD); ZAEC on top lowers ECE further
 (Table~\ref{tab:comparison}). (iii) One backbone (ViT-B/16), and the gate applied to one cache method; the argument
 applies to any cache filled with the model's own pseudo-labels, such as DMN's. (iv) Before the diagnosis we evaluated
@@ -381,14 +386,15 @@ its share on CLIP's class) and four of their relation (the correlation of $c(x)$
 Jensen--Shannon divergence; the cache's share on CLIP's class minus that on its own top class; the $\alpha$ at which the
 cache would flip CLIP's decision). Fig.~\ref{fig:scores} shows the share of right flips along each, on the held-out
 tiers. On near a few deciles dip just below one half (lowest \niDecileAllMinNear\%), on far none does (lowest
-\niDecileAllMinFar\%). For each score, the best rule ``revert the flips below (or above) a threshold'', with side and
-threshold chosen on the validation flips, loses accuracy even on validation (at best \niRuleBestVal{} points) and gains
-at most \niRuleBestHeldU{} points on a held-out tier. All ten combined in a logistic regression fitted on the validation
+\niDecileAllMinFar\%). For each score, the best rule ``revert the flips below (or above) a threshold'', with the side and
+the threshold (between the 5th and 95th percentile of the validation scores, so that some flips are reverted) chosen on
+the validation flips, loses accuracy even on validation (at best \niRuleBestVal{} points) and gains nothing on the
+held-out tiers (at best \niRuleBestNear{} on near and \niRuleBestFar{} on far). All ten combined in a logistic regression fitted on the validation
 flips (reverting a flip when its predicted probability of being right is below \niThresh) gains \niFilterUVal{} points
 on validation and loses up to \niFilterMax{} on far. Its AUC (the probability that a random right flip scores above a
 random wrong one) is \niCombAucVal{} on the validation flips it was fitted on and \niCombAucTest{} on the design test
-splits (same datasets), but \niCombAucNear{} on near and \niCombAucFar{} on far: it learns which datasets flip well, not
-which flips are right.
+splits (same datasets), but \niCombAucNear{} on near and \niCombAucFar{} on far: it learns something specific to the
+design datasets, not which flips are right.
 
 \begin{figure}[h]
 \centering

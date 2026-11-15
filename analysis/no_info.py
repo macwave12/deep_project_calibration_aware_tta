@@ -341,7 +341,7 @@ def fig_deciles(deciles: pd.DataFrame, corrs: pd.DataFrame, keys, path: Path, nc
         ax.set_ylabel("% of flips that are right")
     for ax in axes.flat[len(keys):]:
         ax.set_visible(False)
-    axes[0, 0].legend(loc="upper left", fontsize="small")
+    axes[0, 0].legend(loc="lower left", fontsize="small")
     fig.tight_layout()
     fig.savefig(path, dpi=200, bbox_inches="tight")
     plt.close(fig)

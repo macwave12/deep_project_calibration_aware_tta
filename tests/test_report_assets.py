@@ -87,7 +87,8 @@ def test_rule_numbers_split_val_from_held_out_tiers():
                           "gain": [-0.1, -0.5, -0.2, 0.24]})
     filt = pd.DataFrame({"tier": ["val", "near", "far"], "oracle_block": [9.0, 1.42, 2.37]})
     n = rule_numbers(rules, filt)
-    assert n["niRuleBestVal"] == r"\ensuremath{-}0.10" and n["niRuleBestHeld"] == "+0.24"
+    assert n["niRuleBestVal"] == r"\ensuremath{-}0.10" and n["niRuleBestNear"] == "+0.24"
+    assert n["niRuleBestFar"] == r"\ensuremath{-}0.50"  # held-out tiers are reported one by one
     assert n["niOracleBlockLo"] == "1.4" and n["niOracleBlockHi"] == "2.4"
 
 
@@ -144,3 +145,17 @@ def test_comparison_mean_is_taken_over_the_five_datasets_not_the_rounded_mean_ro
     d = {"comp": pd.DataFrame(rows + [{"dataset": "mean", "method": "CLIP", "ece_mean": 5.655}])}
     assert f(comp(d, "CLIP", "ece")) == "5.65"  # the CSV's mean row would print 5.66
     assert comp(d, "CLIP", "ece", "b") == 8.238
+
+
+def test_read_first_and_agree_range_use_the_actual_runs_and_every_dataset():
+    from analysis.report_assets import agree_range_numbers, read_first
+    rf = pd.DataFrame({"split": ["val", "val", "val", "test"],
+                       "method": ["TDA read first (no self-vote)", "TDA read first (no self-vote)", "TDA (write first)",
+                                  "TDA read first (no self-vote)"],
+                       "dataset": ["dtd", "pets", "dtd", "dtd"], "ece": [12.0, 4.0, 19.0, 1.0], "acc": [46.0, 86.0, 45.0, 1.0]})
+    d = {"read_first": rf}
+    assert read_first(d, "val", "ece") == 8.0 and read_first(d, "val", "acc", "pets") == 86.0
+    seed = pd.DataFrame({"tier": ["far", "far", "near", "near"], "dataset": ["svhn", "svhn", "caltech101", "caltech101"],
+                         "seed": [0, 1, 0, 1], "agree_share": [20.0, 28.0, 92.0, 94.0]})
+    n = agree_range_numbers(seed)
+    assert n["niAgreeDsLo"] == "24" and n["niAgreeDsHi"] == "93"

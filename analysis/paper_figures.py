@@ -1,7 +1,7 @@
 """Compact figures for the course report and the deck, drawn only from tracked CSVs.
 
 Val (diagnosis and design) and test (results) are kept apart: every figure says its split.
-  fig_selfvote   (val)  results/analysis/story/summary_val.csv
+  fig_selfvote   (val)  results/analysis/story/summary_val.csv, results/analysis/t16/read_first_val_test.csv
   fig_agreement  (val)  results/analysis/story/summary_val.csv
   fig_where      (design test, near, far)  results/analysis/t16/where_it_helps.csv, where_it_helps_rho.csv
 
@@ -55,8 +55,11 @@ def _legend_above(ax, ncol):
               handlelength=1.0, columnspacing=0.8)
 
 
-def fig_selfvote(summary: pd.DataFrame, path, figsize=(3.6, 2.0), letters=True):
+def fig_selfvote(summary: pd.DataFrame, read_first: pd.DataFrame, path, figsize=(3.6, 2.0), letters=True):
+    """(a) agreement with and without a self-vote; (b) ECE of CLIP, TDA and the actual read-first TDA runs."""
     t, labels = _datasets(summary)
+    rf = read_first[(read_first.split == "val") & (read_first.method == "TDA read first (no self-vote)")]
+    t = t.assign(read_first_ece=t.dataset.map(rf.set_index("dataset").ece))
     x = np.arange(len(t))
     fig, ax = plt.subplots(1, 2, figsize=figsize)
     w = 0.38
@@ -66,7 +69,7 @@ def fig_selfvote(summary: pd.DataFrame, path, figsize=(3.6, 2.0), letters=True):
     _legend_above(ax[0], 2)
     w = 0.27
     for i, (k, c, lab) in enumerate((("clip", C_CLIP, "CLIP"), ("tda", C_TDA, "TDA"),
-                                     ("noself", C_READ_FIRST, "read-first TDA"))):
+                                     ("read_first", C_READ_FIRST, "read-first TDA"))):
         ax[1].bar(x + (i - 1) * w, t[f"{k}_ece"], w, color=c, label=lab)
     ax[1].set_ylabel("ECE (%)")
     ax[1].set_title(("(b) " if letters else "") + "ECE", pad=16 if letters else 30)
@@ -104,7 +107,8 @@ def fig_agreement(summary: pd.DataFrame, path, figsize=(3.6, 2.2), letters=True)
 
 
 # the sets the discussion names, with label offsets (points) that keep the crowd near the origin readable
-WHERE_NAMED = {"pets": (-8, 6), "caltech101": (-14, -9), "food101": (-28, -9), "cars": (4, -6), "imagenet_r": (7, -3),
+WHERE_Z = {"test": 4, "near": 3, "far": 2}  # design circles on top: Pets sits under ImageNet-R
+WHERE_NAMED = {"pets": (-8, 6), "caltech101": (-22, -16), "food101": (-28, -9), "cars": (4, -6), "imagenet_r": (7, -3),
                "gtsrb": (4, 2)}
 WHERE_LABEL = {"clip_gap": "CLIP confidence - accuracy (pts; uses labels)",
                "conf": "CLIP mean confidence, first 500 samples (%)"}
@@ -118,7 +122,7 @@ def fig_where(helps: pd.DataFrame, rho: pd.DataFrame, path, signal="clip_gap", f
         sub = helps[helps.group == g]
         color, marker, label = TIER_STYLE[g]
         ax.scatter(sub[signal], sub.d_ece, marker=marker, s=size, color=color, edgecolors="black", linewidths=0.6,
-                   label=label)
+                   label=label, zorder=WHERE_Z[g])
     for _, r in helps[helps.dataset.isin(WHERE_NAMED)].iterrows():
         dx, dy = WHERE_NAMED[r.dataset]
         ax.annotate(NAMES.get(r.dataset, r.dataset), (r[signal], r.d_ece), textcoords="offset points",
@@ -131,7 +135,7 @@ def fig_where(helps: pd.DataFrame, rho: pd.DataFrame, path, signal="clip_gap", f
     ax.set_ylabel("ECE(gate) - ECE(TDA) (pts)\nbelow 0: the gate is better")
     ax.set_title(f"Spearman rho = {r_all.rho:+.2f} over {int(r_all.n)} datasets")
     ax.legend(loc="upper right", fontsize="small")
-    ax.margins(y=0.14)
+    ax.margins(x=0.06, y=0.14)
     ax.grid(alpha=0.3)
     fig.tight_layout()
     fig.savefig(path, dpi=200)
@@ -140,8 +144,9 @@ def fig_where(helps: pd.DataFrame, rho: pd.DataFrame, path, signal="clip_gap", f
 
 def main():
     val = pd.read_csv(STORY / "summary_val.csv")
+    read_first = pd.read_csv(T16 / "read_first_val_test.csv")
     out = {
-        "paper_selfvote_val.png": lambda p: fig_selfvote(val, p),
+        "paper_selfvote_val.png": lambda p: fig_selfvote(val, read_first, p),
         "paper_agreement_val.png": lambda p: fig_agreement(val, p),
         "paper_where_all.png": lambda p: fig_where(pd.read_csv(T16 / "where_it_helps.csv"),
                                                    pd.read_csv(T16 / "where_it_helps_rho.csv"), p),
